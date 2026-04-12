@@ -141,6 +141,13 @@ function renderHubStats(agg) {
   setText("camp-hub-conv", agg.totalConversions.toLocaleString("es"));
 }
 
+function excerptText(s, maxLen) {
+  const t = typeof s === "string" ? s.trim() : "";
+  if (!t) return "";
+  if (t.length <= maxLen) return t;
+  return `${t.slice(0, Math.max(0, maxLen - 1)).trim()}…`;
+}
+
 function renderLiveCampaignCard(row) {
   const title =
     (typeof row.title === "string" && row.title.trim()) || "Campaña sin título";
@@ -153,9 +160,15 @@ function renderLiveCampaignCard(row) {
   const leadsN = Number(row.estimatedLeads);
   const leadsStr = Number.isFinite(leadsN) && leadsN >= 0 ? String(Math.round(leadsN)) : "—";
   const startStr = formatShortDate(row.createdAt);
+  const hookLine = typeof row.hook === "string" ? row.hook.trim() : "";
+  const ctaLine = typeof row.cta === "string" ? row.cta.trim() : "";
+  const bodyPreview = excerptText(
+    typeof row.adDescription === "string" ? row.adDescription : "",
+    155,
+  );
 
   const article = document.createElement("article");
-  article.className = "camp-live-card";
+  article.className = isGenerator ? "camp-live-card camp-live-card--from-ia" : "camp-live-card";
   article.setAttribute("data-campaign-doc-id", row.id);
 
   const top = document.createElement("div");
@@ -179,7 +192,23 @@ function renderLiveCampaignCard(row) {
   platEl.className = `camp-live-platform ${platformClass(row.platform)}`;
   platEl.textContent = plat;
 
-  titles.append(h3, platEl);
+  titles.append(h3);
+
+  if (isGenerator && hookLine) {
+    const hookEl = document.createElement("p");
+    hookEl.className = "camp-live-card-hook";
+    hookEl.textContent = hookLine;
+    titles.appendChild(hookEl);
+  }
+
+  if (isGenerator && bodyPreview) {
+    const prev = document.createElement("p");
+    prev.className = "camp-live-card-preview";
+    prev.textContent = bodyPreview;
+    titles.appendChild(prev);
+  }
+
+  titles.appendChild(platEl);
 
   const badge = document.createElement("span");
   badge.className = `camp-live-badge camp-live-badge--${status.mod}`;
@@ -202,6 +231,9 @@ function renderLiveCampaignCard(row) {
   };
 
   addRow("Presupuesto", budgetStr);
+  if (isGenerator && ctaLine) {
+    addRow("CTA sugerido", ctaLine);
+  }
   addRow("Alcance estimado", reachN.toLocaleString("es"));
   addRow("Leads generados (est.)", leadsStr);
   addRow("Inicio", startStr);
@@ -584,6 +616,12 @@ function wireCampaignGenerator() {
             "Borrador generado (simulación). Conecta OpenAI más adelante para textos a medida.";
         }
         if (saveBtn) saveBtn.disabled = false;
+        const resultCard = document.getElementById("camp-gen-result-card");
+        if (resultCard) {
+          window.requestAnimationFrame(() => {
+            resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          });
+        }
       } catch (e) {
         console.error(LOG_PREFIX, "Generator mock failed:", e);
         if (note) note.textContent = "No se pudo generar. Inténtalo de nuevo.";

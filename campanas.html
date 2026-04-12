@@ -262,50 +262,56 @@
                 </button>
               </div>
               <div id="camp-gen-output" class="camp-gen-output" hidden>
-                <div class="camp-gen-output-head">
-                  <h3 class="camp-gen-output-title">Resultado generado</h3>
-                  <p class="camp-gen-output-note" id="camp-gen-output-note" role="status"></p>
-                </div>
-                <div class="camp-gen-output-blocks">
-                  <div class="camp-gen-block">
-                    <span class="camp-gen-block-label">Titular / Gancho</span>
-                    <p class="camp-gen-block-text" id="camp-gen-out-headline"></p>
-                    <p class="camp-gen-block-sub" id="camp-gen-out-hook"></p>
-                  </div>
-                  <div class="camp-gen-block">
-                    <span class="camp-gen-block-label">Descripción del anuncio</span>
-                    <p class="camp-gen-block-text camp-gen-block-text--body" id="camp-gen-out-body"></p>
-                  </div>
-                  <div class="camp-gen-output-row">
-                    <div class="camp-gen-block camp-gen-block--compact">
-                      <span class="camp-gen-block-label">CTA sugerido</span>
-                      <p class="camp-gen-block-text" id="camp-gen-out-cta"></p>
+                <div class="camp-gen-result-card" id="camp-gen-result-card">
+                  <header class="camp-gen-result-header">
+                    <span class="camp-gen-result-badge" aria-hidden="true">IA</span>
+                    <h3 class="camp-gen-result-title">Campaña generada</h3>
+                    <p class="camp-gen-result-lead" id="camp-gen-output-note" role="status"></p>
+                  </header>
+                  <div class="camp-gen-result-body">
+                    <section class="camp-gen-result-section">
+                      <h4 class="camp-gen-result-h4">Título / Hook</h4>
+                      <p class="camp-gen-result-emphasis" id="camp-gen-out-headline"></p>
+                      <p class="camp-gen-result-secondary" id="camp-gen-out-hook"></p>
+                    </section>
+                    <section class="camp-gen-result-section camp-gen-result-section--body">
+                      <h4 class="camp-gen-result-h4">Texto del anuncio</h4>
+                      <p class="camp-gen-result-bodytext" id="camp-gen-out-body"></p>
+                    </section>
+                    <div class="camp-gen-result-grid">
+                      <section class="camp-gen-result-tile">
+                        <h4 class="camp-gen-result-h4">CTA sugerido</h4>
+                        <p class="camp-gen-result-tile-value" id="camp-gen-out-cta"></p>
+                      </section>
+                      <section class="camp-gen-result-tile">
+                        <h4 class="camp-gen-result-h4">Plataforma recomendada</h4>
+                        <p class="camp-gen-result-tile-value camp-gen-result-platform" id="camp-gen-out-platform"></p>
+                      </section>
+                      <section class="camp-gen-result-tile">
+                        <h4 class="camp-gen-result-h4">Presupuesto sugerido</h4>
+                        <p class="camp-gen-result-tile-value" id="camp-gen-out-budget"></p>
+                      </section>
+                      <section class="camp-gen-result-tile">
+                        <h4 class="camp-gen-result-h4">Leads estimados / sem.</h4>
+                        <p class="camp-gen-result-tile-value" id="camp-gen-out-leads"></p>
+                      </section>
                     </div>
-                    <div class="camp-gen-block camp-gen-block--compact">
-                      <span class="camp-gen-block-label">Plataforma recomendada</span>
-                      <p class="camp-gen-block-text" id="camp-gen-out-platform"></p>
-                    </div>
+                    <section class="camp-gen-result-section camp-gen-result-section--creative">
+                      <h4 class="camp-gen-result-h4">Idea visual recomendada</h4>
+                      <p class="camp-gen-result-bodytext" id="camp-gen-out-creative"></p>
+                    </section>
                   </div>
-                  <div class="camp-gen-output-row">
-                    <div class="camp-gen-block camp-gen-block--compact">
-                      <span class="camp-gen-block-label">Presupuesto sugerido (sem.)</span>
-                      <p class="camp-gen-block-text" id="camp-gen-out-budget"></p>
-                    </div>
-                    <div class="camp-gen-block camp-gen-block--compact">
-                      <span class="camp-gen-block-label">Leads estimados (sem.)</span>
-                      <p class="camp-gen-block-text" id="camp-gen-out-leads"></p>
-                    </div>
-                  </div>
-                  <div class="camp-gen-block">
-                    <span class="camp-gen-block-label">Idea creativa (foto / vídeo)</span>
-                    <p class="camp-gen-block-text" id="camp-gen-out-creative"></p>
-                  </div>
-                </div>
-                <div class="camp-gen-save-wrap">
-                  <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="camp-gen-save-btn" disabled>
-                    Guardar campaña
-                  </button>
-                  <span class="camp-gen-save-hint" id="camp-gen-save-hint" aria-live="polite"></span>
+                  <footer class="camp-gen-result-footer">
+                    <button
+                      type="button"
+                      class="dash-quick-btn dash-quick-btn--primary camp-gen-save-primary"
+                      id="camp-gen-save-btn"
+                      disabled
+                    >
+                      Guardar campaña
+                    </button>
+                    <span class="camp-gen-save-hint" id="camp-gen-save-hint" aria-live="polite"></span>
+                  </footer>
                 </div>
               </div>
             </section>
