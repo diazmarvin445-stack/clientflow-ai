@@ -12,6 +12,7 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { generateCampaignRecommendations, formatUsd } from "./campanas-campaign-sim.js";
+import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
 
@@ -31,51 +32,6 @@ function logProfileDebug(business) {
   } catch (e) {
     console.log(LOG_PREFIX, "Profile snapshot (object):", data);
   }
-}
-
-function initSidebar() {
-  const sidebar = document.getElementById("dash-sidebar");
-  const overlay = document.getElementById("dash-sidebar-overlay");
-  const menuBtn = document.getElementById("dash-menu-btn");
-
-  function openMenu() {
-    if (!sidebar || !menuBtn) return;
-    sidebar.classList.add("is-open");
-    if (overlay) overlay.hidden = false;
-    menuBtn.setAttribute("aria-expanded", "true");
-    document.body.classList.add("dash-menu-open");
-  }
-
-  function closeMenu() {
-    if (!sidebar || !menuBtn) return;
-    sidebar.classList.remove("is-open");
-    if (overlay) overlay.hidden = true;
-    menuBtn.setAttribute("aria-expanded", "false");
-    document.body.classList.remove("dash-menu-open");
-  }
-
-  function toggleMenu() {
-    if (sidebar && sidebar.classList.contains("is-open")) closeMenu();
-    else openMenu();
-  }
-
-  if (menuBtn) menuBtn.addEventListener("click", toggleMenu);
-  if (overlay) overlay.addEventListener("click", closeMenu);
-
-  sidebar &&
-    sidebar.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        if (window.matchMedia("(max-width: 1024px)").matches) closeMenu();
-      });
-    });
-
-  window.addEventListener("resize", () => {
-    if (window.matchMedia("(min-width: 1025px)").matches) closeMenu();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeMenu();
-  });
 }
 
 function setText(id, text) {
@@ -274,6 +230,12 @@ function renderCampaignCard(c, businessId, launchedIds) {
   btnEdit.type = "button";
   btnEdit.className = "dash-quick-btn camp-ai-btn-edit";
   btnEdit.textContent = "Editar";
+  btnEdit.addEventListener("click", () => {
+    openComingSoon(
+      "Editor de campaña",
+      "Aquí podrás ajustar creatividades, segmentación y presupuesto antes de publicar. Lo activaremos en la siguiente iteración.",
+    );
+  });
 
   actions.append(btnLaunch, btnEdit);
   article.append(top, dl, actions);
@@ -424,7 +386,7 @@ async function loadCampanasForUser(user) {
 }
 
 function boot() {
-  initSidebar();
+  initDashShell({ auth });
 
   onAuthStateChanged(auth, (user) => {
     if (!user) {

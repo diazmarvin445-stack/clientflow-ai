@@ -5,55 +5,9 @@ import {
   fetchDashboardMetrics,
   formatBusinessMeta,
   initialsFromName,
-  leadStatusPresentation,
-  formatShortDate,
-  SERVICE_LABELS,
+  renderLeadsTbody,
 } from "./dashboard-data.js";
-
-function initSidebar() {
-  const sidebar = document.getElementById("dash-sidebar");
-  const overlay = document.getElementById("dash-sidebar-overlay");
-  const menuBtn = document.getElementById("dash-menu-btn");
-
-  function openMenu() {
-    if (!sidebar || !menuBtn) return;
-    sidebar.classList.add("is-open");
-    if (overlay) overlay.hidden = false;
-    menuBtn.setAttribute("aria-expanded", "true");
-    document.body.classList.add("dash-menu-open");
-  }
-
-  function closeMenu() {
-    if (!sidebar || !menuBtn) return;
-    sidebar.classList.remove("is-open");
-    if (overlay) overlay.hidden = true;
-    menuBtn.setAttribute("aria-expanded", "false");
-    document.body.classList.remove("dash-menu-open");
-  }
-
-  function toggleMenu() {
-    if (sidebar && sidebar.classList.contains("is-open")) closeMenu();
-    else openMenu();
-  }
-
-  if (menuBtn) menuBtn.addEventListener("click", toggleMenu);
-  if (overlay) overlay.addEventListener("click", closeMenu);
-
-  sidebar &&
-    sidebar.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        if (window.matchMedia("(max-width: 1024px)").matches) closeMenu();
-      });
-    });
-
-  window.addEventListener("resize", () => {
-    if (window.matchMedia("(min-width: 1025px)").matches) closeMenu();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeMenu();
-  });
-}
+import { initDashShell } from "./dash-shell.js";
 
 function formatUsd(n) {
   const v = Number(n) || 0;
@@ -101,53 +55,7 @@ function renderMetrics(metrics) {
 
 function renderLeadsTable(leads) {
   const tbody = document.getElementById("dash-leads-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  if (!leads.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 4;
-    td.className = "dash-table-muted";
-    td.textContent = "Sin solicitudes aún";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
-  }
-
-  leads.forEach((lead) => {
-    const tr = document.createElement("tr");
-    const client =
-      lead.customerName || lead.clientName || lead.name || lead.contactName || "—";
-    const rawSvc = lead.service || lead.serviceLabel || lead.serviceType || "";
-    const service = rawSvc
-      ? SERVICE_LABELS[rawSvc] || rawSvc
-      : "—";
-    const pres = leadStatusPresentation(lead.status);
-    const dateStr = formatShortDate(lead.createdAt);
-
-    const tdClient = document.createElement("td");
-    tdClient.textContent = client;
-
-    const tdService = document.createElement("td");
-    tdService.textContent = service;
-
-    const tdState = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = `dash-badge ${pres.className}`;
-    badge.textContent = pres.label;
-    tdState.appendChild(badge);
-
-    const tdDate = document.createElement("td");
-    tdDate.className = "dash-table-muted";
-    tdDate.textContent = dateStr;
-
-    tr.appendChild(tdClient);
-    tr.appendChild(tdService);
-    tr.appendChild(tdState);
-    tr.appendChild(tdDate);
-    tbody.appendChild(tr);
-  });
+  renderLeadsTbody(tbody, leads);
 }
 
 async function loadDashboardForUser(user) {
@@ -171,7 +79,7 @@ async function loadDashboardForUser(user) {
 }
 
 function boot() {
-  initSidebar();
+  initDashShell({ auth });
 
   let tabWasHidden = false;
   document.addEventListener("visibilitychange", () => {

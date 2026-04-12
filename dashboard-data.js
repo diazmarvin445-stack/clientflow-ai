@@ -217,3 +217,56 @@ export function formatShortDate(value, locale = "es") {
   if (!d || Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
 }
+
+/**
+ * Renders lead rows into a `<tbody>`. Clears existing rows.
+ * @param {HTMLTableSectionElement | null} tbody
+ * @param {Array<Record<string, unknown> & { id?: string }>} leads
+ */
+export function renderLeadsTbody(tbody, leads) {
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  if (!leads.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 4;
+    td.className = "dash-table-muted";
+    td.textContent = "Sin solicitudes aún";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  leads.forEach((lead) => {
+    const tr = document.createElement("tr");
+    const client =
+      lead.customerName || lead.clientName || lead.name || lead.contactName || "—";
+    const rawSvc = lead.service || lead.serviceLabel || lead.serviceType || "";
+    const service = rawSvc ? SERVICE_LABELS[rawSvc] || rawSvc : "—";
+    const pres = leadStatusPresentation(lead.status);
+    const dateStr = formatShortDate(lead.createdAt);
+
+    const tdClient = document.createElement("td");
+    tdClient.textContent = client;
+
+    const tdService = document.createElement("td");
+    tdService.textContent = service;
+
+    const tdState = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = `dash-badge ${pres.className}`;
+    badge.textContent = pres.label;
+    tdState.appendChild(badge);
+
+    const tdDate = document.createElement("td");
+    tdDate.className = "dash-table-muted";
+    tdDate.textContent = dateStr;
+
+    tr.appendChild(tdClient);
+    tr.appendChild(tdService);
+    tr.appendChild(tdState);
+    tr.appendChild(tdDate);
+    tbody.appendChild(tr);
+  });
+}

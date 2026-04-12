@@ -27,7 +27,7 @@
           <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
           Dashboard
         </a>
-        <a href="solicitar.html" class="dash-nav-link">
+        <a href="solicitudes.html" class="dash-nav-link">
           <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
           Solicitudes
         </a>
@@ -35,19 +35,19 @@
           <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
           Campañas IA
         </a>
-        <a href="#" class="dash-nav-link">
+        <a href="#" class="dash-nav-link" data-cf-soon="Calendario">
           <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
           Calendario
         </a>
-        <a href="#" class="dash-nav-link">
+        <a href="#" class="dash-nav-link" data-cf-soon="Clientes">
           <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
           Clientes
         </a>
-        <a href="#" class="dash-nav-link">
+        <a href="#" class="dash-nav-link" data-cf-soon="Equipo">
           <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
           Equipo
         </a>
-        <a href="#" class="dash-nav-link">
+        <a href="settings.html" class="dash-nav-link">
           <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
           Configuración
         </a>
@@ -56,7 +56,13 @@
         <div class="dash-sidebar-card">
           <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
           <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
-          <a href="#" class="dash-sidebar-card-link">Centro de ayuda</a>
+          <a
+            href="#"
+            class="dash-sidebar-card-link"
+            data-cf-soon="Centro de ayuda"
+            data-cf-soon-desc="Documentación, tutoriales en vídeo y chat con soporte llegarán en la próxima versión."
+            >Centro de ayuda</a
+          >
         </div>
       </div>
     </aside>
@@ -81,7 +87,13 @@
           <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
             <span class="dash-notify-dot" aria-hidden="true"></span>
           </button>
-          <button type="button" class="dash-avatar" aria-label="Perfil de usuario">
+          <button
+            type="button"
+            class="dash-avatar"
+            aria-label="Menú de cuenta"
+            aria-expanded="false"
+            aria-haspopup="true"
+          >
             <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
           </button>
         </div>
