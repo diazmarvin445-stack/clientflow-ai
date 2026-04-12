@@ -15,8 +15,9 @@ service cloud.firestore {
     }
 
     match /businesses/{businessId} {
+      /* Crear: dueño explícito (hasAll sobre keys fallaba en algunos payloads con FieldValue). */
       allow create: if request.auth != null
-        && request.resource.data.keys().hasAll(['ownerUid'])
+        && 'ownerUid' in request.resource.data
         && request.resource.data.ownerUid == request.auth.uid;
 
       allow read: if request.auth != null && (

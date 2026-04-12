@@ -2,11 +2,31 @@ import { db, auth } from "./firebase.js";
 import {
   collection,
   addDoc,
+  doc,
+  getDocFromServer,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 const form = document.getElementById("onboarding-form");
 const successEl = document.getElementById("onboarding-success");
+const saveErrorEl = document.getElementById("onboarding-save-error");
+
+function showSaveError(message) {
+  if (!saveErrorEl) {
+    console.error("[ClientFlow onboarding] save error (no banner):", message);
+    return;
+  }
+  saveErrorEl.textContent = message;
+  saveErrorEl.hidden = false;
+  saveErrorEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function hideSaveError() {
+  if (saveErrorEl) {
+    saveErrorEl.textContent = "";
+    saveErrorEl.hidden = true;
+  }
+}
 const otherCheck = document.getElementById("service-other-check");
 const otherField = document.getElementById("service-other-field");
 const dropzone = document.getElementById("photo-dropzone");
@@ -229,13 +249,19 @@ if (form && successEl) {
       submitBtn.disabled = true;
       submitBtn.setAttribute("aria-busy", "true");
     }
+    hideSaveError();
 
     try {
       if (typeof auth.authStateReady === "function") {
         await auth.authStateReady();
       }
       const u = auth.currentUser;
+      console.log("[ClientFlow onboarding] auth.currentUser:", u ? { uid: u.uid, isAnonymous: u.isAnonymous } : null);
       if (!u || u.isAnonymous) {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
+        }
         window.location.href = `login.html?next=${encodeURIComponent("onboarding.html")}`;
         return;
       }
@@ -249,11 +275,51 @@ if (form && successEl) {
         updatedAt: serverTimestamp(),
       };
 
+      const payloadForLog = {
+        ...raw,
+        ownerUid: uid,
+        source: "onboarding",
+        createdAt: "[serverTimestamp]",
+        updatedAt: "[serverTimestamp]",
+      };
+      console.log("[ClientFlow onboarding] target write: collection=businesses (auto id)");
+      console.log("[ClientFlow onboarding] payload (serializable):", payloadForLog);
+
       const businessRef = await addDoc(collection(db, "businesses"), docData);
-      console.log("[ClientFlow onboarding] Negocio creado.", {
+      const path = `businesses/${businessRef.id}`;
+      console.log("[ClientFlow onboarding] addDoc success:", { path, id: businessRef.id });
+
+      const verifyRef = doc(db, "businesses", businessRef.id);
+      const verified = await getDocFromServer(verifyRef);
+      if (!verified.exists) {
+        const msg = "El documento se creó pero no se pudo leer desde el servidor. Revisa reglas de Firestore y vuelve a intentar.";
+        console.error("[ClientFlow onboarding] verify failed: document missing after create", { path });
+        showSaveError(msg);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
+        }
+        return;
+      }
+      const vData = verified.data();
+      const ou = vData && vData.ownerUid;
+      console.log("[ClientFlow onboarding] verify read success:", { path, ownerUidInDoc: ou, matchesAuth: ou === uid });
+      if (ou !== uid) {
+        const msg =
+          "El perfil no quedó vinculado a tu cuenta correctamente. Cierra sesión, vuelve a entrar e inténtalo de nuevo. Si persiste, revisa la consola (F12).";
+        console.error("[ClientFlow onboarding] verify failed: ownerUid mismatch", { expected: uid, got: ou, path });
+        showSaveError(msg);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.removeAttribute("aria-busy");
+        }
+        return;
+      }
+
+      console.log("[ClientFlow onboarding] Negocio creado y verificado.", {
         businessId: businessRef.id,
         ownerUid: uid,
-        path: `businesses/${businessRef.id}`,
+        path,
       });
       console.log(
         "[ClientFlow onboarding] Enlace público de solicitudes:",
@@ -268,10 +334,17 @@ if (form && successEl) {
 
       window.location.assign("dashboard.html");
     } catch (err) {
-      console.error(err);
-      alert(
-        "No se pudo guardar el negocio. Comprueba la conexión, que Authentication esté activo y las reglas de Firestore para la colección «businesses».",
-      );
+      const code = err && err.code;
+      const message = err && err.message;
+      console.error("[ClientFlow onboarding] Firestore write/read failed:", {
+        code,
+        message,
+        name: err && err.name,
+        stack: err && err.stack,
+      });
+      const friendly =
+        "No se pudo guardar el negocio. Comprueba la conexión y que las reglas de Firestore permitan crear en «businesses» con tu usuario. Detalle en consola (F12).";
+      showSaveError(friendly);
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.removeAttribute("aria-busy");
