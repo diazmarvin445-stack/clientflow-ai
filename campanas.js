@@ -6,9 +6,12 @@ import {
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
+  campaignPlatformDisplayName,
   fetchBusinessForOwner,
+  fetchCampaignsListAndStats,
   fetchLaunchedRecommendationIds,
   formatBusinessMeta,
+  formatShortDate,
   initialsFromName,
 } from "./dashboard-data.js";
 import { generateCampaignRecommendations, formatUsd } from "./campanas-campaign-sim.js";
@@ -107,6 +110,116 @@ function hideCampaignSaveError() {
   if (box) box.hidden = true;
 }
 
+function liveCampaignStatusPresentation(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "paused") return { label: "Pausada", mod: "paused" };
+  if (s === "completed" || s === "ended" || s === "finalizada" || s === "finished") {
+    return { label: "Finalizada", mod: "ended" };
+  }
+  return { label: "Activa", mod: "active" };
+}
+
+function reachForCampaignRow(row) {
+  const el = Number(row.estimatedLeads);
+  const leadsPart = Number.isFinite(el) && el >= 0 ? Math.round(el) : 0;
+  const er = Number(row.estimatedReach);
+  if (Number.isFinite(er) && er > 0) return Math.round(er);
+  return Math.max(160, Math.round(leadsPart * 36));
+}
+
+function renderHubStats(agg) {
+  setText("camp-hub-active", String(agg.activeCount));
+  setText("camp-hub-leads", agg.totalLeads.toLocaleString("es"));
+  setText("camp-hub-reach", agg.totalReach.toLocaleString("es"));
+  setText("camp-hub-conv", agg.totalConversions.toLocaleString("es"));
+}
+
+function renderLiveCampaignCard(row) {
+  const title =
+    (typeof row.title === "string" && row.title.trim()) || "Campaña sin título";
+  const plat = campaignPlatformDisplayName(row.platform);
+  const status = liveCampaignStatusPresentation(row.status);
+  const budget = Number(row.recommendedBudget);
+  const budgetStr = Number.isFinite(budget) && budget >= 0 ? `${formatUsd(budget)} / sem` : "—";
+  const reachN = reachForCampaignRow(row);
+  const leadsN = Number(row.estimatedLeads);
+  const leadsStr = Number.isFinite(leadsN) && leadsN >= 0 ? String(Math.round(leadsN)) : "—";
+  const startStr = formatShortDate(row.createdAt);
+
+  const article = document.createElement("article");
+  article.className = "camp-live-card";
+  article.setAttribute("data-campaign-doc-id", row.id);
+
+  const top = document.createElement("div");
+  top.className = "camp-live-card-top";
+
+  const titles = document.createElement("div");
+  titles.className = "camp-live-card-titles";
+
+  const h3 = document.createElement("h3");
+  h3.className = "camp-live-card-title";
+  h3.textContent = title;
+
+  const platEl = document.createElement("span");
+  platEl.className = `camp-live-platform ${platformClass(row.platform)}`;
+  platEl.textContent = plat;
+
+  titles.append(h3, platEl);
+
+  const badge = document.createElement("span");
+  badge.className = `camp-live-badge camp-live-badge--${status.mod}`;
+  badge.textContent = status.label;
+
+  top.append(titles, badge);
+
+  const grid = document.createElement("dl");
+  grid.className = "camp-live-meta";
+
+  const addRow = (dtText, ddText) => {
+    const wrap = document.createElement("div");
+    wrap.className = "camp-live-meta-row";
+    const dt = document.createElement("dt");
+    dt.textContent = dtText;
+    const dd = document.createElement("dd");
+    dd.textContent = ddText;
+    wrap.append(dt, dd);
+    grid.appendChild(wrap);
+  };
+
+  addRow("Presupuesto", budgetStr);
+  addRow("Alcance estimado", reachN.toLocaleString("es"));
+  addRow("Leads generados (est.)", leadsStr);
+  addRow("Inicio", startStr);
+
+  article.append(top, grid);
+  return article;
+}
+
+function renderLiveCampaigns(campaigns) {
+  const listEl = document.getElementById("camp-live-list");
+  const emptyEl = document.getElementById("camp-live-empty");
+  if (!listEl || !emptyEl) return;
+
+  listEl.replaceChildren();
+
+  if (!campaigns.length) {
+    emptyEl.hidden = false;
+    return;
+  }
+
+  emptyEl.hidden = true;
+  campaigns.forEach((row) => {
+    listEl.appendChild(renderLiveCampaignCard(row));
+  });
+}
+
+async function refreshCampaignsHub(businessId) {
+  const agg = await fetchCampaignsListAndStats(db, businessId);
+  renderHubStats(agg);
+  renderLiveCampaigns(agg.campaigns);
+  return agg;
+}
+
 async function saveCampaignFromRecommendation(businessId, c, btn) {
   if (btn.disabled || btn.dataset.saving === "1") return;
 
@@ -130,13 +243,12 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
   console.log("Launching campaign...", { businessId, path: `businesses/${businessId}/campaigns`, payload });
 
   try {
-    const docRef = await addDoc(campaignsCol, payload);
-    console.log("Campaign saved successfully", docRef.id);
+    await addDoc(campaignsCol, payload);
     markLaunchButtonLaunched(btn);
     showCampLaunchSuccessToast();
+    await refreshCampaignsHub(businessId);
   } catch (err) {
     console.error("Campaign save failed", err);
-    console.error(err);
     btn.removeAttribute("aria-busy");
     delete btn.dataset.saving;
     const msg =
@@ -243,15 +355,12 @@ function renderCampaignCard(c, businessId, launchedIds) {
   return article;
 }
 
-function renderSummary(summary) {
-  setText("camp-summary-count", String(summary.campaignsSuggested));
-  setText("camp-summary-budget", formatUsd(summary.totalBudgetWeekly));
-  setText("camp-summary-leads", String(summary.estimatedLeadsWeekly));
-  setText("camp-summary-platform", summary.bestPlatformLabel);
-  setText("camp-summary-platform-trend", summary.bestPlatformTrend);
-  setText("camp-summary-budget-trend", "Por semana (simulación)");
-  setText("camp-summary-leads-trend", "Por semana (simulación)");
-  setText("camp-summary-count-trend", "Según tu perfil");
+function renderRecommendationSummary(summary) {
+  if (!summary) return;
+  setText(
+    "camp-reco-summary-line",
+    `${summary.campaignsSuggested} propuestas · ${formatUsd(summary.totalBudgetWeekly)}/sem combinado · ~${summary.estimatedLeadsWeekly} leads/semana estimados · foco ${summary.bestPlatformLabel}`,
+  );
 }
 
 function setLoadingVisible(show) {
@@ -259,11 +368,9 @@ function setLoadingVisible(show) {
   if (loading) loading.hidden = !show;
 }
 
-function setUiLoading(isLoading) {
-  const stats = document.getElementById("camp-summary-stats");
-  if (stats) {
-    stats.setAttribute("aria-busy", isLoading ? "true" : "false");
-  }
+function setHubLoading(isLoading) {
+  const stats = document.getElementById("camp-hub-stats");
+  if (stats) stats.setAttribute("aria-busy", isLoading ? "true" : "false");
 }
 
 function showFirestoreError(message) {
@@ -278,10 +385,14 @@ function hideFirestoreError() {
   if (box) box.hidden = true;
 }
 
+function setHubVisible(show) {
+  const root = document.getElementById("camp-hub-root");
+  if (root) root.hidden = !show;
+}
+
 async function renderCampaignsPage(business) {
   const listEl = document.getElementById("ai-campaign-recommendations");
   const emptyEl = document.getElementById("camp-empty-state");
-  const statsEl = document.getElementById("camp-summary-stats");
   const noteEl = document.querySelector(".camp-demo-note");
 
   if (!listEl) return;
@@ -291,24 +402,36 @@ async function renderCampaignsPage(business) {
     listEl.innerHTML = "";
     listEl.setAttribute("data-campaign-source", "none");
     if (emptyEl) emptyEl.hidden = false;
-    if (statsEl) statsEl.hidden = true;
+    setHubVisible(false);
+    setText("camp-reco-summary-line", "");
     if (noteEl) {
       noteEl.textContent =
-        "Completa el onboarding para guardar tu negocio en Firestore y generar recomendaciones aquí.";
+        "Completa el onboarding para guardar tu negocio en Firestore y generar campañas aquí.";
     }
-    setText("camp-summary-count", "—");
-    setText("camp-summary-budget", "—");
-    setText("camp-summary-leads", "—");
-    setText("camp-summary-platform", "—");
-    setText("camp-summary-platform-trend", "—");
-    setText("camp-summary-budget-trend", "—");
-    setText("camp-summary-leads-trend", "—");
-    setText("camp-summary-count-trend", "—");
     return;
   }
 
   if (emptyEl) emptyEl.hidden = true;
-  if (statsEl) statsEl.hidden = false;
+  setHubVisible(true);
+
+  try {
+    setHubLoading(true);
+    await refreshCampaignsHub(business.id);
+  } catch (e) {
+    console.warn(LOG_PREFIX, "Could not load campaign hub stats:", e);
+    renderHubStats({
+      activeCount: 0,
+      totalLeads: 0,
+      totalReach: 0,
+      totalConversions: 0,
+      campaigns: [],
+    });
+    renderLiveCampaigns([]);
+    const liveEmpty = document.getElementById("camp-live-empty");
+    if (liveEmpty) liveEmpty.hidden = false;
+  } finally {
+    setHubLoading(false);
+  }
 
   const { data } = business;
   let result;
@@ -321,7 +444,7 @@ async function renderCampaignsPage(business) {
     );
     listEl.hidden = true;
     listEl.innerHTML = "";
-    if (statsEl) statsEl.hidden = true;
+    setText("camp-reco-summary-line", "");
     return;
   }
 
@@ -341,19 +464,30 @@ async function renderCampaignsPage(business) {
     listEl.appendChild(renderCampaignCard(c, business.id, launchedIds));
   });
 
-  renderSummary(result.summary);
+  renderRecommendationSummary(result.summary);
 
   if (noteEl) {
     noteEl.textContent =
-      "Cifras simuladas a partir de tu perfil (Firestore): nombre, servicios, zona y descripción. " +
-      "Próximamente con modelo de IA.";
+      "Las tarjetas superiores usan tus campañas guardadas. Las recomendaciones inferiores se calculan desde tu perfil (simulación orientativa).";
   }
+}
+
+function wireNewCampaignCta() {
+  const btn = document.getElementById("camp-new-campaign-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const target = document.getElementById("ai-campaign-recommendations");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("camp-reco-highlight");
+      window.setTimeout(() => target.classList.remove("camp-reco-highlight"), 1600);
+    }
+  });
 }
 
 async function loadCampanasForUser(user) {
   console.log(LOG_PREFIX, "Loading for uid:", user.uid);
 
-  setUiLoading(true);
   setLoadingVisible(true);
   renderHeader(null, { loading: true });
 
@@ -377,9 +511,8 @@ async function loadCampanasForUser(user) {
         ? `Error al leer tu negocio: ${err.message}. Comprueba reglas de Firestore y la consola.`
         : "Error al leer tu negocio en Firestore. Comprueba reglas, red y la consola.",
     );
-    renderCampaignsPage(null);
+    await renderCampaignsPage(null);
   } finally {
-    setUiLoading(false);
     setLoadingVisible(false);
     console.log(LOG_PREFIX, "Load finished (loading UI cleared).");
   }
@@ -387,17 +520,17 @@ async function loadCampanasForUser(user) {
 
 function boot() {
   initDashShell({ auth });
+  wireNewCampaignCta();
 
   onAuthStateChanged(auth, (user) => {
     if (!user) {
-      console.log(LOG_PREFIX, "No user — redirect to onboarding.");
+      console.log(LOG_PREFIX, "No user — redirect to login.");
       window.location.replace("login.html");
       return;
     }
 
     loadCampanasForUser(user).catch((err) => {
       console.error(LOG_PREFIX, "Unhandled loadCampanasForUser:", err);
-      setUiLoading(false);
       setLoadingVisible(false);
       showFirestoreError("Error inesperado al cargar la página. Recarga e inténtalo de nuevo.");
       renderCampaignsPage(null);

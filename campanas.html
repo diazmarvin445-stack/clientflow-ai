@@ -100,67 +100,132 @@
       </header>
 
       <main class="dash-main" id="dash-main">
-        <div class="camp-workspace">
-          <header class="camp-hero">
-            <div class="camp-hero-badge" aria-hidden="true">
-              <span class="camp-hero-badge-ico"></span>
-              IA
+        <div class="camp-workspace camp-workspace--hub">
+          <header class="camp-hub-hero">
+            <div class="camp-hub-hero-badge" aria-hidden="true">
+              <span class="camp-hub-hero-badge-ico"></span>
+              Motor de marketing IA
             </div>
-            <h2 class="camp-hero-title">Campañas IA</h2>
-            <p class="camp-hero-subtitle">
-              Nuestra inteligencia artificial analiza tu negocio y recomienda campañas para ayudarte a
-              conseguir más clientes.
+            <h2 class="camp-hub-hero-title">Centro de Campañas IA</h2>
+            <p class="camp-hub-hero-subtitle">
+              Controla el rendimiento de tus anuncios, lanza nuevas ideas con IA y mantén el crecimiento
+              de tu negocio local desde un solo lugar.
             </p>
           </header>
 
-          <section
-            class="dash-stats camp-summary-stats"
-            id="camp-summary-stats"
-            aria-label="Resumen de recomendaciones"
-            aria-busy="true"
-          >
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Campañas sugeridas</span>
-                <span class="dash-stat-ico camp-stat-ico camp-stat-ico--suggested" aria-hidden="true"></span>
+          <div id="camp-hub-root" class="camp-hub-root" hidden>
+            <section
+              class="dash-stats camp-hub-stats"
+              id="camp-hub-stats"
+              aria-label="Rendimiento de campañas"
+              aria-busy="false"
+            >
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Campañas activas</span>
+                  <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="camp-hub-active">0</p>
+                <div class="dash-stat-foot">
+                  <span class="dash-stat-trend-note camp-hub-stat-hint">En ejecución ahora</span>
+                </div>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Leads generados</span>
+                  <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="camp-hub-leads">0</p>
+                <div class="dash-stat-foot">
+                  <span class="dash-stat-trend-note camp-hub-stat-hint" id="camp-hub-leads-hint"
+                    >Estimado según tus campañas</span
+                  >
+                </div>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Alcance estimado</span>
+                  <span class="dash-stat-ico camp-stat-ico camp-stat-ico--reach" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="camp-hub-reach">0</p>
+                <div class="dash-stat-foot">
+                  <span class="dash-stat-trend-note camp-hub-stat-hint" id="camp-hub-reach-hint"
+                    >Impresiones / personas</span
+                  >
+                </div>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Conversiones</span>
+                  <span class="dash-stat-ico camp-stat-ico camp-stat-ico--conv" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="camp-hub-conv">0</p>
+                <div class="dash-stat-foot">
+                  <span class="dash-stat-trend-note camp-hub-stat-hint" id="camp-hub-conv-hint"
+                    >Clics o metas según datos</span
+                  >
+                </div>
+              </article>
+            </section>
+
+            <div class="camp-hub-cta">
+              <button type="button" class="camp-cta-principal" id="camp-new-campaign-btn">
+                <span class="camp-cta-principal-plus" aria-hidden="true">+</span>
+                Nueva Campaña IA
+              </button>
+              <p class="camp-hub-cta-hint">
+                Te llevamos a las recomendaciones generadas para tu perfil para lanzar en segundos.
+              </p>
+            </div>
+
+            <section class="camp-live-block" aria-labelledby="camp-live-title">
+              <div class="camp-section-head">
+                <h2 class="camp-section-title" id="camp-live-title">Tus campañas</h2>
+                <p class="camp-section-sub">Presupuesto, alcance y rendimiento por campaña</p>
               </div>
-              <p class="dash-stat-value" id="camp-summary-count">—</p>
-              <span class="dash-stat-trend" id="camp-summary-count-trend">Cargando…</span>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Presupuesto total recomendado</span>
-                <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
+
+              <div
+                id="camp-live-empty"
+                class="camp-live-empty dash-panel"
+                hidden
+              >
+                <div class="camp-live-empty-inner">
+                  <div class="camp-live-empty-icon" aria-hidden="true"></div>
+                  <p class="camp-live-empty-title">Aún no tienes campañas creadas.</p>
+                  <p class="camp-live-empty-text">
+                    Crea tu primera campaña con IA para empezar a atraer clientes.
+                  </p>
+                </div>
               </div>
-              <p class="dash-stat-value" id="camp-summary-budget">—</p>
-              <span class="dash-stat-trend" id="camp-summary-budget-trend">—</span>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Leads estimados</span>
-                <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
+
+              <div id="camp-live-list" class="camp-live-list"></div>
+            </section>
+
+            <section class="camp-builder-card" id="camp-ai-builder" aria-labelledby="camp-builder-title">
+              <div class="camp-builder-card-inner">
+                <div class="camp-builder-kicker">IA · ClientFlow</div>
+                <h2 class="camp-builder-title" id="camp-builder-title">Constructor de campañas con IA</h2>
+                <p class="camp-builder-lead">
+                  Nuestra IA te ayuda a generar campañas listas para publicar, copy de anuncios, ideas de
+                  segmentación y recomendaciones de optimización para que inviertas mejor cada dólar.
+                </p>
+                <ul class="camp-builder-list">
+                  <li>Propuestas de creatividades y mensajes alineados con tu servicio</li>
+                  <li>Sugerencias de audiencia y zona según tu perfil guardado</li>
+                  <li>Indicadores estimados de alcance y leads antes de lanzar</li>
+                </ul>
               </div>
-              <p class="dash-stat-value" id="camp-summary-leads">—</p>
-              <span class="dash-stat-trend" id="camp-summary-leads-trend">—</span>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Mejor plataforma</span>
-                <span class="dash-stat-ico camp-stat-ico camp-stat-ico--platform" aria-hidden="true"></span>
-              </div>
-              <p class="dash-stat-value camp-stat-value-platform" id="camp-summary-platform">—</p>
-              <span class="dash-stat-trend" id="camp-summary-platform-trend">—</span>
-            </article>
-          </section>
+            </section>
+          </div>
 
           <div class="camp-ai-list-wrap">
-            <p
-              id="camp-loading"
-              class="camp-loading"
-              role="status"
-              aria-live="polite"
-            >
-              Analizando tu perfil de negocio…
+            <div class="camp-reco-head">
+              <h2 class="camp-section-title" id="camp-reco-title">Recomendaciones para tu negocio</h2>
+              <p class="camp-reco-line" id="camp-reco-summary-line"></p>
+            </div>
+
+            <p id="camp-loading" class="camp-loading" role="status" aria-live="polite">
+              Preparando recomendaciones…
             </p>
 
             <div id="camp-firestore-error" class="camp-firestore-error" hidden role="alert">
@@ -171,11 +236,7 @@
               <p id="camp-campaign-save-error-text" class="camp-campaign-save-error-text"></p>
             </div>
 
-            <div
-              id="camp-empty-state"
-              class="camp-empty-state dash-panel"
-              hidden
-            >
+            <div id="camp-empty-state" class="camp-empty-state dash-panel" hidden>
               <p class="camp-empty-state-title">No encontramos un perfil de negocio</p>
               <p class="camp-empty-state-text" id="camp-empty-state-text">
                 No hay ningún documento en «businesses» con tu usuario como propietario (<code>ownerUid</code>).
@@ -187,15 +248,15 @@
             <section
               class="camp-ai-list"
               id="ai-campaign-recommendations"
-              aria-label="Campañas recomendadas"
+              aria-label="Campañas recomendadas por IA"
               data-campaign-source="pending"
               hidden
             ></section>
           </div>
 
           <p class="camp-demo-note" role="note">
-            Las recomendaciones se generan a partir de tu perfil guardado en Firestore (simulación, sin
-            modelo externo aún).
+            Las métricas superiores reflejan tus campañas guardadas en Firestore. Las recomendaciones usan
+            tu perfil (simulación orientativa hasta conectar el modelo de IA).
           </p>
         </div>
       </main>

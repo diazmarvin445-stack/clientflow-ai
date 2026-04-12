@@ -242,6 +242,67 @@ export async function fetchClientsForBusiness(db, businessId) {
 }
 
 /**
+ * Display label for campaign `platform` (Facebook / Instagram / Google Ads).
+ */
+export function campaignPlatformDisplayName(raw) {
+  const p = typeof raw === "string" ? raw.toLowerCase() : "";
+  if (p === "instagram") return "Instagram";
+  if (p === "google") return "Google Ads";
+  return "Facebook";
+}
+
+/**
+ * All campaigns under `businesses/{businessId}/campaigns` plus aggregate KPIs for the hub.
+ */
+export async function fetchCampaignsListAndStats(db, businessId) {
+  const snap = await getDocs(collection(db, "businesses", businessId, "campaigns"));
+  const list = [];
+  snap.forEach((d) => {
+    list.push({ id: d.id, ...d.data() });
+  });
+  list.sort((a, b) => {
+    const ta = toDate(a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+
+  let activeCount = 0;
+  let totalLeads = 0;
+  let totalReach = 0;
+  let totalConv = 0;
+
+  for (const row of list) {
+    const st = String(row.status || "").toLowerCase();
+    if (st === "active") activeCount += 1;
+
+    const el = Number(row.estimatedLeads);
+    const leadsPart = Number.isFinite(el) && el >= 0 ? Math.round(el) : 0;
+    totalLeads += leadsPart;
+
+    const er = Number(row.estimatedReach);
+    if (Number.isFinite(er) && er > 0) totalReach += Math.round(er);
+    else totalReach += Math.max(160, Math.round(leadsPart * 36));
+
+    const conv = Number(row.conversions);
+    const clk = Number(row.clicks);
+    if (Number.isFinite(conv) && conv >= 0) totalConv += Math.round(conv);
+    else if (Number.isFinite(clk) && clk >= 0) totalConv += Math.round(clk);
+  }
+
+  if (totalConv === 0 && totalLeads > 0) {
+    totalConv = Math.max(1, Math.round(totalLeads * 0.1));
+  }
+
+  return {
+    activeCount,
+    totalLeads,
+    totalReach,
+    totalConversions: totalConv,
+    campaigns: list,
+  };
+}
+
+/**
  * Fields for `addDoc` to `clients` when converting a lead (timestamps added by caller).
  */
 export function buildClientPayloadFromLead(lead) {
