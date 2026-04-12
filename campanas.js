@@ -19,6 +19,8 @@ import { mockGenerateCampaignFromInputs } from "./campanas-ai-generator.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
+/** Set false to silence temporary generator wiring logs. */
+const DEBUG_CAMPAIGN_GENERATOR = true;
 
 /** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number }} */
 const genState = {
@@ -529,6 +531,32 @@ function genFormVal(id) {
   return el && "value" in el ? String(el.value).trim() : "";
 }
 
+/**
+ * Lee el formulario del generador en el DOM (única fuente de verdad al generar).
+ * @returns {{ goal: string, offer: string, location: string, budget: string, audience: string, platformPref: string }}
+ */
+function readGeneratorInputsFromDom() {
+  return {
+    goal: genFormVal("camp-gen-goal"),
+    offer: genFormVal("camp-gen-offer"),
+    location: genFormVal("camp-gen-location"),
+    budget: genFormVal("camp-gen-budget"),
+    audience: genFormVal("camp-gen-audience"),
+    platformPref: (() => {
+      const el = document.getElementById("camp-gen-platform");
+      return el && "value" in el ? String(el.value) : "auto";
+    })(),
+  };
+}
+
+function hashStringForDebug(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return String(Math.abs(h));
+}
+
 function resetGeneratorUI() {
   genState.last = null;
   genState.genVariation = 0;
@@ -590,17 +618,17 @@ function runCampaignGenerator() {
   const hint = document.getElementById("camp-gen-save-hint");
   const note = document.getElementById("camp-gen-output-note");
   const outWrap = document.getElementById("camp-gen-output");
-  const inputs = {
-    goal: genFormVal("camp-gen-goal"),
-    offer: genFormVal("camp-gen-offer"),
-    location: genFormVal("camp-gen-location"),
-    budget: genFormVal("camp-gen-budget"),
-    audience: genFormVal("camp-gen-audience"),
-    platformPref: (() => {
-      const el = document.getElementById("camp-gen-platform");
-      return el && "value" in el ? String(el.value) : "auto";
-    })(),
-  };
+  const inputsAtEvent = readGeneratorInputsFromDom();
+  if (DEBUG_CAMPAIGN_GENERATOR) {
+    console.log(`${LOG_PREFIX} [gen] DOM inputs at click (runCampaignGenerator)`, {
+      goal: inputsAtEvent.goal,
+      offer: inputsAtEvent.offer,
+      location: inputsAtEvent.location,
+      budget: inputsAtEvent.budget,
+      audience: inputsAtEvent.audience,
+      platformPref: inputsAtEvent.platformPref,
+    });
+  }
 
   const displayName =
     (typeof b.data.businessName === "string" && b.data.businessName.trim()) || "Tu negocio";
@@ -618,9 +646,40 @@ function runCampaignGenerator() {
 
   window.setTimeout(() => {
     try {
+      const inputs = readGeneratorInputsFromDom();
+      if (DEBUG_CAMPAIGN_GENERATOR) {
+        const diverged = JSON.stringify(inputs) !== JSON.stringify(inputsAtEvent);
+        console.log(`${LOG_PREFIX} [gen] inputs passed to mockGenerateCampaignFromInputs`, {
+          goal: inputs.goal,
+          offer: inputs.offer,
+          location: inputs.location,
+          budget: inputs.budget,
+          audience: inputs.audience,
+          platformPref: inputs.platformPref,
+          reReadMatchesClick: !diverged,
+        });
+        if (diverged) {
+          console.warn(`${LOG_PREFIX} [gen] inputs at click vs pre-mock differ (IME/autofill?)`, {
+            atClick: inputsAtEvent,
+            preMock: inputs,
+          });
+        }
+      }
       genState.genVariation += 1;
       const output = mockGenerateCampaignFromInputs(inputs, displayName, genState.genVariation);
       genState.last = { inputs, output };
+      if (DEBUG_CAMPAIGN_GENERATOR) {
+        console.log(`${LOG_PREFIX} [gen] mock result digest`, {
+          headline: output.headline,
+          hookPreview: output.hook.slice(0, 120),
+          cta: output.cta,
+          platform: output.platform,
+          platformDisplayLabel: output.platformDisplayLabel,
+          suggestedBudgetWeekly: output.suggestedBudgetWeekly,
+          estimatedLeadsWeekly: output.estimatedLeadsWeekly,
+          inputFingerprint: hashStringForDebug(JSON.stringify(inputs)),
+        });
+      }
       fillGeneratorOutput(output);
       if (note) {
         note.textContent =
@@ -701,6 +760,8 @@ function wireGeneratorScrollCta() {
       target.classList.add("camp-reco-highlight");
       window.setTimeout(() => target.classList.remove("camp-reco-highlight"), 1600);
     }
+    // Misma acción que «Generar campaña con IA»: lee el formulario actual y ejecuta el mock.
+    runCampaignGenerator();
   });
 }
 
