@@ -20,10 +20,11 @@ import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
 
-/** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null }} */
+/** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number }} */
 const genState = {
   business: null,
   last: null,
+  genVariation: 0,
 };
 
 function logProfileDebug(business) {
@@ -530,6 +531,7 @@ function genFormVal(id) {
 
 function resetGeneratorUI() {
   genState.last = null;
+  genState.genVariation = 0;
   const out = document.getElementById("camp-gen-output");
   const saveBtn = document.getElementById("camp-gen-save-btn");
   const hint = document.getElementById("camp-gen-save-hint");
@@ -545,7 +547,12 @@ function fillGeneratorOutput(data) {
   setText("camp-gen-out-hook", data.hook);
   setText("camp-gen-out-body", data.bodyText);
   setText("camp-gen-out-cta", data.cta);
-  setText("camp-gen-out-platform", campaignPlatformDisplayName(data.platform));
+  setText(
+    "camp-gen-out-platform",
+    typeof data.platformDisplayLabel === "string" && data.platformDisplayLabel.trim()
+      ? data.platformDisplayLabel
+      : campaignPlatformDisplayName(data.platform),
+  );
   setText("camp-gen-out-budget", `${formatUsd(data.suggestedBudgetWeekly)} / semana`);
   setText("camp-gen-out-leads", String(data.estimatedLeadsWeekly));
   setText("camp-gen-out-creative", data.creativeIdea);
@@ -611,7 +618,8 @@ function runCampaignGenerator() {
 
   window.setTimeout(() => {
     try {
-      const output = mockGenerateCampaignFromInputs(inputs, displayName);
+      genState.genVariation += 1;
+      const output = mockGenerateCampaignFromInputs(inputs, displayName, genState.genVariation);
       genState.last = { inputs, output };
       fillGeneratorOutput(output);
       if (note) {
