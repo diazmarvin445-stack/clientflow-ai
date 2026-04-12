@@ -107,8 +107,13 @@ export async function fetchDashboardMetrics(db, businessId) {
 
   const todayStart = startOfLocalDay();
   const todayEnd = endOfLocalDay();
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const yesterdayEnd = new Date(todayStart);
+  yesterdayEnd.setMilliseconds(-1);
 
   let leadsToday = 0;
+  let leadsYesterday = 0;
   const recentLeadDocs = [];
 
   /** Solicitudes públicas (`solicitar.html`) → `businesses/{businessId}/leads` (customerName, service, status, createdAt, …) */
@@ -117,6 +122,9 @@ export async function fetchDashboardMetrics(db, businessId) {
     const created = toDate(row.createdAt);
     if (created && created >= todayStart && created <= todayEnd) {
       leadsToday += 1;
+    }
+    if (created && created >= yesterdayStart && created <= yesterdayEnd) {
+      leadsYesterday += 1;
     }
     recentLeadDocs.push({ ...row, id: doc.id });
   });
@@ -146,6 +154,7 @@ export async function fetchDashboardMetrics(db, businessId) {
 
   return {
     leadsToday,
+    leadsYesterday,
     jobsConfirmed,
     revenueSum,
     campaignsActive,
@@ -222,8 +231,9 @@ export function formatShortDate(value, locale = "es") {
  * Renders lead rows into a `<tbody>`. Clears existing rows.
  * @param {HTMLTableSectionElement | null} tbody
  * @param {Array<Record<string, unknown> & { id?: string }>} leads
+ * @param {{ emptyState?: 'simple' | 'dashboard' }} [opts]
  */
-export function renderLeadsTbody(tbody, leads) {
+export function renderLeadsTbody(tbody, leads, opts = {}) {
   if (!tbody) return;
   tbody.innerHTML = "";
 
@@ -231,8 +241,19 @@ export function renderLeadsTbody(tbody, leads) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 4;
-    td.className = "dash-table-muted";
-    td.textContent = "Sin solicitudes aún";
+    if (opts.emptyState === "dashboard") {
+      td.className = "dash-leads-empty-cell";
+      const wrap = document.createElement("div");
+      wrap.className = "dash-leads-empty";
+      wrap.innerHTML =
+        '<div class="dash-leads-empty-icon" aria-hidden="true"></div>' +
+        '<p class="dash-leads-empty-title">Aún no tienes solicitudes.</p>' +
+        '<p class="dash-leads-empty-text">Cuando lleguen nuevos leads aparecerán aquí.</p>';
+      td.appendChild(wrap);
+    } else {
+      td.className = "dash-table-muted";
+      td.textContent = "Sin solicitudes aún";
+    }
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;

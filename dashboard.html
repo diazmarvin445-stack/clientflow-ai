@@ -100,16 +100,22 @@
       </header>
 
       <main class="dash-main" id="dash-main">
-        <div class="dash-workspace">
-          <div class="dash-workspace-primary">
+        <div class="dash-page">
+          <section class="dash-welcome" aria-labelledby="dash-welcome-greet">
+            <p class="dash-welcome-greet" id="dash-welcome-greet">Buenos días 👋</p>
+            <p class="dash-welcome-lead" id="dash-welcome-lead">Este es el resumen de tu negocio hoy.</p>
+          </section>
+
+          <div class="dash-workspace">
+            <div class="dash-workspace-primary">
             <section class="dash-stats" aria-label="Resumen">
               <a href="solicitudes.html" class="dash-stat-card dash-stat-card--link">
                 <div class="dash-stat-head">
-                  <span class="dash-stat-label">Leads Hoy</span>
+                  <span class="dash-stat-label">Leads nuevos hoy</span>
                   <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
                 </div>
                 <p class="dash-stat-value" id="dash-metric-leads">0</p>
-                <span class="dash-stat-trend" id="dash-trend-leads">—</span>
+                <div class="dash-stat-foot" id="dash-trend-leads"></div>
               </a>
               <a
                 href="#"
@@ -118,11 +124,11 @@
                 data-cf-soon-desc="Vista detallada de trabajos confirmados, asignación a equipo y seguimiento de ingresos por trabajo."
               >
                 <div class="dash-stat-head">
-                  <span class="dash-stat-label">Trabajos Confirmados</span>
+                  <span class="dash-stat-label">Trabajos programados</span>
                   <span class="dash-stat-ico dash-stat-ico--check" aria-hidden="true"></span>
                 </div>
                 <p class="dash-stat-value" id="dash-metric-jobs">0</p>
-                <span class="dash-stat-trend" id="dash-trend-jobs">—</span>
+                <div class="dash-stat-foot" id="dash-trend-jobs"></div>
               </a>
               <a
                 href="#"
@@ -131,19 +137,19 @@
                 data-cf-soon-desc="Gráficos de facturación, comparativas por servicio y exportación contable estarán disponibles pronto."
               >
                 <div class="dash-stat-head">
-                  <span class="dash-stat-label">Ingresos Estimados</span>
+                  <span class="dash-stat-label">Ingresos proyectados</span>
                   <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
                 </div>
                 <p class="dash-stat-value" id="dash-metric-revenue">$0</p>
-                <span class="dash-stat-trend" id="dash-trend-revenue">—</span>
+                <div class="dash-stat-foot" id="dash-trend-revenue"></div>
               </a>
               <a href="campanas.html" class="dash-stat-card dash-stat-card--link">
                 <div class="dash-stat-head">
-                  <span class="dash-stat-label">Campañas Activas</span>
+                  <span class="dash-stat-label">Campañas IA activas</span>
                   <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
                 </div>
                 <p class="dash-stat-value" id="dash-metric-campaigns">0</p>
-                <span class="dash-stat-trend" id="dash-trend-campaigns">—</span>
+                <div class="dash-stat-foot" id="dash-trend-campaigns"></div>
               </a>
             </section>
 
@@ -166,9 +172,9 @@
                 </table>
               </div>
             </section>
-          </div>
+            </div>
 
-          <aside class="dash-workspace-aside" aria-label="Calendario y citas">
+            <aside class="dash-workspace-aside" aria-label="Calendario y citas">
             <section class="dash-panel dash-panel--widget">
               <h2 class="dash-widget-title">Calendario semanal</h2>
               <p class="dash-widget-sub">Semana del 7–13 abril 2026</p>
@@ -233,14 +239,40 @@
 
             <section class="dash-panel dash-panel--widget dash-panel--quick" aria-label="Acciones rápidas">
               <h2 class="dash-widget-title">Acciones rápidas</h2>
-              <p class="dash-widget-sub dash-widget-sub--tight">Atajos para gestionar tu operación</p>
-              <div class="dash-quick-actions">
-                <a href="campanas.html" class="dash-quick-btn dash-quick-btn--primary">Nueva campaña</a>
-                <a href="solicitudes.html" class="dash-quick-btn">Ver solicitudes</a>
-                <a href="onboarding.html" class="dash-quick-btn">Actualizar negocio</a>
+              <p class="dash-widget-sub dash-widget-sub--tight">Lo que más usan los equipos en un día típico</p>
+              <div class="dash-quick-grid">
+                <a href="campanas.html" class="dash-quick-tile dash-quick-tile--accent">
+                  <span class="dash-quick-tile-ico dash-quick-tile-ico--spark" aria-hidden="true"></span>
+                  <span class="dash-quick-tile-text">
+                    <span class="dash-quick-tile-label">Crear campaña IA</span>
+                    <span class="dash-quick-tile-hint">Lanzar o revisar recomendaciones</span>
+                  </span>
+                </a>
+                <button type="button" class="dash-quick-tile" data-cf-soon="Agendar cita">
+                  <span class="dash-quick-tile-ico dash-quick-tile-ico--cal" aria-hidden="true"></span>
+                  <span class="dash-quick-tile-text">
+                    <span class="dash-quick-tile-label">Agendar cita</span>
+                    <span class="dash-quick-tile-hint">Calendario y recordatorios</span>
+                  </span>
+                </button>
+                <button type="button" class="dash-quick-tile" data-cf-soon="Nuevo cliente">
+                  <span class="dash-quick-tile-ico dash-quick-tile-ico--user" aria-hidden="true"></span>
+                  <span class="dash-quick-tile-text">
+                    <span class="dash-quick-tile-label">Nuevo cliente</span>
+                    <span class="dash-quick-tile-hint">Ficha y contacto</span>
+                  </span>
+                </button>
+                <a href="solicitudes.html" class="dash-quick-tile">
+                  <span class="dash-quick-tile-ico dash-quick-tile-ico--inbox" aria-hidden="true"></span>
+                  <span class="dash-quick-tile-text">
+                    <span class="dash-quick-tile-label">Nueva solicitud</span>
+                    <span class="dash-quick-tile-hint">Ver bandeja de entrada</span>
+                  </span>
+                </a>
               </div>
             </section>
-          </aside>
+            </aside>
+          </div>
         </div>
       </main>
     </div>
