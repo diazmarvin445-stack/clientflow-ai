@@ -1,6 +1,6 @@
 /**
  * ClientFlow AI — Firebase (modular SDK)
- * Ensure Firestore rules allow authenticated writes to `businesses`, and enable Anonymous auth if used.
+ * Ensure Firestore rules allow authenticated writes to `businesses`. Onboarding usa cuenta con correo (mismo uid que el panel).
  */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";

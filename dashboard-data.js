@@ -5,6 +5,7 @@
 import {
   collection,
   getDocs,
+  getDocsFromServer,
   query,
   where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -166,7 +167,17 @@ function toDate(value) {
  */
 export async function fetchBusinessForOwner(db, ownerUid) {
   const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid));
-  const snap = await getDocs(q);
+  /** Prefer servidor para ver documentos recién creados (evita caché local vacía tras onboarding). */
+  let snap;
+  try {
+    snap = await getDocsFromServer(q);
+  } catch (e) {
+    console.warn(
+      "[ClientFlow] fetchBusinessForOwner: getDocsFromServer falló; se usa lectura con caché.",
+      e,
+    );
+    snap = await getDocs(q);
+  }
   if (snap.empty) return null;
   const rows = snap.docs.map((d) => ({ id: d.id, raw: d.data() }));
   rows.sort((a, b) => {

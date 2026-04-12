@@ -4,7 +4,6 @@ import {
   addDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { signInAnonymously } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
 const form = document.getElementById("onboarding-form");
 const successEl = document.getElementById("onboarding-success");
@@ -229,13 +228,15 @@ if (form && successEl) {
     }
 
     try {
-      let uid;
-      if (auth.currentUser) {
-        uid = auth.currentUser.uid;
-      } else {
-        const cred = await signInAnonymously(auth);
-        uid = cred.user.uid;
+      if (typeof auth.authStateReady === "function") {
+        await auth.authStateReady();
       }
+      const u = auth.currentUser;
+      if (!u || u.isAnonymous) {
+        window.location.href = `login.html?next=${encodeURIComponent("onboarding.html")}`;
+        return;
+      }
+      const uid = u.uid;
 
       const docData = {
         ...raw,
@@ -246,8 +247,13 @@ if (form && successEl) {
       };
 
       const businessRef = await addDoc(collection(db, "businesses"), docData);
+      console.log("[ClientFlow onboarding] Negocio creado.", {
+        businessId: businessRef.id,
+        ownerUid: uid,
+        path: `businesses/${businessRef.id}`,
+      });
       console.log(
-        "[ClientFlow onboarding] Negocio creado. Enlace público de solicitudes (misma ruta que Solicitudes):",
+        "[ClientFlow onboarding] Enlace público de solicitudes:",
         `solicitar.html?businessId=${businessRef.id}`,
       );
 
@@ -261,7 +267,7 @@ if (form && successEl) {
     } catch (err) {
       console.error(err);
       alert(
-        "No se pudo guardar el negocio. Comprueba la conexión, que Authentication (Anónimo) esté activo y las reglas de Firestore para la colección «businesses»."
+        "No se pudo guardar el negocio. Comprueba la conexión, que Authentication esté activo y las reglas de Firestore para la colección «businesses».",
       );
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -270,3 +276,15 @@ if (form && successEl) {
     }
   });
 }
+
+/** Misma cuenta que el resto del panel: sin sesión de correo no guardamos (evita ownerUid anónimo ≠ usuario tras login). */
+(async function requireAccountForOnboarding() {
+  if (!form) return;
+  if (typeof auth.authStateReady === "function") {
+    await auth.authStateReady();
+  }
+  const u = auth.currentUser;
+  if (!u || u.isAnonymous) {
+    window.location.replace(`login.html?next=${encodeURIComponent("onboarding.html")}`);
+  }
+})();

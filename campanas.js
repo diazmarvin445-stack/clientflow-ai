@@ -462,7 +462,7 @@ async function renderCampaignsPage(business) {
     setText("camp-reco-summary-line", "");
     if (noteEl) {
       noteEl.textContent =
-        "Completa el onboarding para guardar tu negocio en Firestore y usar el generador aquí.";
+        "Inicia sesión con la misma cuenta con la que guardaste el negocio y completa el onboarding si aún no lo has hecho.";
     }
     return;
   }
@@ -805,7 +805,8 @@ function wireCampaignGenerator() {
 }
 
 async function loadCampanasForUser(user) {
-  console.log(LOG_PREFIX, "Loading for uid:", user.uid);
+  const queryUid = user.uid;
+  console.log(LOG_PREFIX, "[biz-link] auth uid:", queryUid, "isAnonymous:", user.isAnonymous);
 
   setLoadingVisible(true);
   renderHeader(null, { loading: true });
@@ -815,7 +816,18 @@ async function loadCampanasForUser(user) {
       await auth.authStateReady();
     }
 
-    const business = await fetchBusinessForOwner(db, user.uid);
+    const business = await fetchBusinessForOwner(db, queryUid);
+    if (business) {
+      const ou = business.data && business.data.ownerUid;
+      console.log(LOG_PREFIX, "[biz-link] negocio encontrado", {
+        businessId: business.id,
+        ownerUidEnDocumento: ou,
+        consultaPorOwnerUid: queryUid,
+        coinciden: ou === queryUid,
+      });
+    } else {
+      console.warn(LOG_PREFIX, "[biz-link] ningún documento en businesses con ownerUid ==", queryUid);
+    }
     logProfileDebug(business);
 
     hideFirestoreError();

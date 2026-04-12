@@ -21,8 +21,17 @@ function showError(el, msg) {
   el.hidden = !msg;
 }
 
-function goDashboard() {
-  window.location.replace("dashboard.html");
+/** Solo rutas relativas *.html del mismo sitio (evita open redirect). */
+function getSafeNextPath() {
+  const raw = new URLSearchParams(window.location.search).get("next") || "";
+  if (!raw || raw.includes("..") || raw.includes("/") || raw.includes("\\")) return null;
+  if (!/^[a-z0-9_.-]+\.html$/i.test(raw)) return null;
+  return raw;
+}
+
+function goAfterAuth() {
+  const next = getSafeNextPath();
+  window.location.replace(next || "dashboard.html");
 }
 
 function hasSignedInAccount(user) {
@@ -30,12 +39,12 @@ function hasSignedInAccount(user) {
 }
 
 onAuthStateChanged(auth, (user) => {
-  if (hasSignedInAccount(user)) goDashboard();
+  if (hasSignedInAccount(user)) goAfterAuth();
 });
 
 if (typeof auth.authStateReady === "function") {
   auth.authStateReady().then(() => {
-    if (hasSignedInAccount(auth.currentUser)) goDashboard();
+    if (hasSignedInAccount(auth.currentUser)) goAfterAuth();
   });
 }
 
@@ -74,7 +83,7 @@ if (formSignIn) {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      goDashboard();
+      goAfterAuth();
     } catch (err) {
       const code = err && err.code;
       let msg = "No se pudo iniciar sesión. Inténtalo de nuevo.";
@@ -127,7 +136,8 @@ if (formSignUp) {
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      window.location.assign("onboarding.html");
+      const next = getSafeNextPath();
+      window.location.assign(next || "onboarding.html");
     } catch (err) {
       const code = err && err.code;
       let msg = "No se pudo crear la cuenta.";
