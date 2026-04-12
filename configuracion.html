@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configuración — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="dash-body cfg-page">
+    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
+
+    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
+      <div class="dash-sidebar-brand">
+        <a href="index.html" class="logo dash-logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+      </div>
+      <nav class="dash-nav" aria-label="Secciones">
+        <a href="dashboard.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
+          Dashboard
+        </a>
+        <a href="solicitudes.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
+          Solicitudes
+        </a>
+        <a href="campanas.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
+          Campañas IA
+        </a>
+        <a href="calendario.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
+          Calendario
+        </a>
+        <a href="clientes.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
+          Clientes
+        </a>
+        <a href="#" class="dash-nav-link" data-cf-soon="Equipo">
+          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+          Equipo
+        </a>
+        <a href="configuracion.html" class="dash-nav-link is-active" aria-current="page">
+          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+          Configuración
+        </a>
+      </nav>
+      <div class="dash-sidebar-foot">
+        <div class="dash-sidebar-card">
+          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
+          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
+          <a
+            href="#"
+            class="dash-sidebar-card-link"
+            data-cf-soon="Centro de ayuda"
+            data-cf-soon-desc="Documentación, tutoriales en vídeo y chat con soporte llegarán en la próxima versión."
+            >Centro de ayuda</a
+          >
+        </div>
+      </div>
+    </aside>
+
+    <div class="dash-shell">
+      <header class="dash-topbar">
+        <button
+          type="button"
+          class="dash-menu-btn"
+          id="dash-menu-btn"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="dash-sidebar"
+        >
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-topbar-title">
+          <h1 class="dash-business-name" id="dash-business-name">…</h1>
+          <span class="dash-business-meta" id="dash-business-meta">…</span>
+        </div>
+        <div class="dash-topbar-actions">
+          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
+            <span class="dash-notify-dot" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="dash-avatar"
+            aria-label="Menú de cuenta"
+            aria-expanded="false"
+            aria-haspopup="true"
+          >
+            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="dash-main" id="dash-main">
+        <div class="cfg-workspace">
+          <header class="cfg-hero">
+            <div class="cfg-hero-top">
+              <div>
+                <p class="cfg-hero-kicker">Centro de control del negocio</p>
+                <h2 class="cfg-hero-title">Configuración</h2>
+                <p class="cfg-hero-lead">
+                  Define el perfil que alimenta recomendaciones de IA, campañas y automatizaciones. Cuanta
+                  más precisión, mejores resultados.
+                </p>
+              </div>
+              <a href="profile.html" class="cfg-hero-profile-link">Perfil de usuario →</a>
+            </div>
+          </header>
+
+          <p id="cfg-load-error" class="cfg-banner cfg-banner--error" hidden role="alert"></p>
+
+          <div id="cfg-no-business" class="cfg-no-business dash-panel" hidden>
+            <p class="cfg-no-business-title">Completa tu perfil de negocio</p>
+            <p class="cfg-no-business-text">
+              Necesitamos un negocio vinculado a tu cuenta para guardar la configuración.
+            </p>
+            <a href="onboarding.html" class="dash-quick-btn dash-quick-btn--primary">Ir al onboarding</a>
+          </div>
+
+          <div id="cfg-main" class="cfg-main" hidden>
+            <!-- 1 Perfil -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-business-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Sección 1</p>
+                  <h3 class="cfg-section-title" id="cfg-s-business-title">Perfil del negocio</h3>
+                  <p class="cfg-section-desc">Datos legales y de contacto que verán clientes y socios.</p>
+                </div>
+                <div class="cfg-section-actions">
+                  <span class="cfg-save-feedback" id="cfg-feedback-business" aria-live="polite"></span>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary cfg-save" data-cfg="business">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-grid cfg-grid--2">
+                  <label class="cfg-field cfg-field--full">
+                    <span class="cfg-label">Nombre del negocio</span>
+                    <input type="text" id="cfg-business-name" class="cfg-input" autocomplete="organization" />
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Industria / categoría</span>
+                    <select id="cfg-industry" class="cfg-input">
+                      <option value="">Seleccionar…</option>
+                      <option value="landscaping">Jardinería y paisajismo</option>
+                      <option value="cleaning">Limpieza</option>
+                      <option value="construction">Construcción y reformas</option>
+                      <option value="home-services">Servicios para el hogar</option>
+                      <option value="pressure-washing">Hidrolimpieza</option>
+                      <option value="roofing">Techos y cubiertas</option>
+                      <option value="retail">Retail / tienda local</option>
+                      <option value="other">Otro</option>
+                    </select>
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Teléfono principal</span>
+                    <input type="tel" id="cfg-phone" class="cfg-input" autocomplete="tel" />
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Email de contacto</span>
+                    <input type="email" id="cfg-email" class="cfg-input" autocomplete="email" />
+                  </label>
+                  <label class="cfg-field cfg-field--full">
+                    <span class="cfg-label">Dirección comercial</span>
+                    <input type="text" id="cfg-address" class="cfg-input" autocomplete="street-address" />
+                  </label>
+                  <label class="cfg-field cfg-field--full">
+                    <span class="cfg-label">Zona de servicio</span>
+                    <textarea id="cfg-service-area" class="cfg-input cfg-textarea" rows="2"></textarea>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- 2 Branding -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-brand-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Sección 2</p>
+                  <h3 class="cfg-section-title" id="cfg-s-brand-title">Marca e identidad</h3>
+                  <p class="cfg-section-desc">Colores y mensaje coherente en campañas y comunicaciones.</p>
+                </div>
+                <div class="cfg-section-actions">
+                  <span class="cfg-save-feedback" id="cfg-feedback-brand" aria-live="polite"></span>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary cfg-save" data-cfg="brand">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-brand-row">
+                  <div class="cfg-logo-box">
+                    <div id="cfg-logo-preview" class="cfg-logo-preview" aria-hidden="true"></div>
+                    <label class="cfg-logo-upload">
+                      <span class="cfg-label">Logo</span>
+                      <input type="file" id="cfg-logo-file" accept="image/png,image/jpeg,image/webp" class="cfg-file" />
+                      <span class="cfg-logo-hint">PNG, JPG o Webp · máx. 400 KB</span>
+                    </label>
+                  </div>
+                  <div class="cfg-grid cfg-grid--2 cfg-brand-fields">
+                    <label class="cfg-field">
+                      <span class="cfg-label">URL del logo (opcional)</span>
+                      <input type="url" id="cfg-logo-url" class="cfg-input" placeholder="https://…" />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Eslogan / tagline</span>
+                      <input type="text" id="cfg-tagline" class="cfg-input" maxlength="160" />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Color principal</span>
+                      <input type="color" id="cfg-color-primary" class="cfg-input cfg-color" value="#2563eb" />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Color secundario</span>
+                      <input type="color" id="cfg-color-secondary" class="cfg-input cfg-color" value="#10b981" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 3 Integraciones -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-int-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Sección 3</p>
+                  <h3 class="cfg-section-title" id="cfg-s-int-title">Integraciones</h3>
+                  <p class="cfg-section-desc">
+                    Conecta canales para sincronizar campañas, reseñas y agenda. OAuth llegará en la siguiente
+                    entrega.
+                  </p>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-int-grid">
+                  <div class="cfg-int-card" data-int-key="facebook">
+                    <div class="cfg-int-card-top">
+                      <span class="cfg-int-name">Facebook / Meta</span>
+                      <span class="cfg-int-badge cfg-int-badge--off" data-int-badge>No conectado</span>
+                    </div>
+                    <button type="button" class="dash-quick-btn cfg-int-toggle">Conectar</button>
+                  </div>
+                  <div class="cfg-int-card" data-int-key="instagram">
+                    <div class="cfg-int-card-top">
+                      <span class="cfg-int-name">Instagram</span>
+                      <span class="cfg-int-badge cfg-int-badge--off" data-int-badge>No conectado</span>
+                    </div>
+                    <button type="button" class="dash-quick-btn cfg-int-toggle">Conectar</button>
+                  </div>
+                  <div class="cfg-int-card" data-int-key="googleBusiness">
+                    <div class="cfg-int-card-top">
+                      <span class="cfg-int-name">Google Business</span>
+                      <span class="cfg-int-badge cfg-int-badge--off" data-int-badge>No conectado</span>
+                    </div>
+                    <button type="button" class="dash-quick-btn cfg-int-toggle">Conectar</button>
+                  </div>
+                  <div class="cfg-int-card" data-int-key="googleCalendar">
+                    <div class="cfg-int-card-top">
+                      <span class="cfg-int-name">Google Calendar</span>
+                      <span class="cfg-int-badge cfg-int-badge--off" data-int-badge>No conectado</span>
+                    </div>
+                    <button type="button" class="dash-quick-btn cfg-int-toggle">Conectar</button>
+                  </div>
+                </div>
+                <p class="cfg-int-footnote" id="cfg-feedback-integrations" aria-live="polite"></p>
+              </div>
+            </section>
+
+            <!-- 4 Marketing -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-mkt-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Sección 4</p>
+                  <h3 class="cfg-section-title" id="cfg-s-mkt-title">Preferencias de marketing</h3>
+                  <p class="cfg-section-desc">Orienta la IA hacia tus objetivos y público objetivo.</p>
+                </div>
+                <div class="cfg-section-actions">
+                  <span class="cfg-save-feedback" id="cfg-feedback-marketing" aria-live="polite"></span>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary cfg-save" data-cfg="marketing">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-grid cfg-grid--2">
+                  <label class="cfg-field">
+                    <span class="cfg-label">Presupuesto mensual de marketing (USD)</span>
+                    <input type="number" id="cfg-mkt-budget" class="cfg-input" min="0" step="50" placeholder="0" />
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Objetivo principal</span>
+                    <select id="cfg-mkt-goal" class="cfg-input">
+                      <option value="leads">Leads</option>
+                      <option value="branding">Branding</option>
+                      <option value="sales">Ventas</option>
+                      <option value="traffic">Tráfico</option>
+                    </select>
+                  </label>
+                  <label class="cfg-field cfg-field--full">
+                    <span class="cfg-label">Público ideal / cliente ideal</span>
+                    <textarea id="cfg-ideal-audience" class="cfg-input cfg-textarea" rows="3"></textarea>
+                  </label>
+                  <label class="cfg-field cfg-field--full">
+                    <span class="cfg-label">Servicios principales</span>
+                    <textarea
+                      id="cfg-main-services"
+                      class="cfg-input cfg-textarea"
+                      rows="3"
+                      placeholder="Describe o lista los servicios que más vendes."
+                    ></textarea>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <!-- 5 Plataforma -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-plat-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Sección 5</p>
+                  <h3 class="cfg-section-title" id="cfg-s-plat-title">Preferencias de la plataforma</h3>
+                  <p class="cfg-section-desc">Horarios y avisos dentro de ClientFlow AI.</p>
+                </div>
+                <div class="cfg-section-actions">
+                  <span class="cfg-save-feedback" id="cfg-feedback-platform" aria-live="polite"></span>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary cfg-save" data-cfg="platform">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-grid cfg-grid--2">
+                  <label class="cfg-field">
+                    <span class="cfg-label">Horario laboral · desde</span>
+                    <input type="time" id="cfg-hours-from" class="cfg-input" />
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Horario laboral · hasta</span>
+                    <input type="time" id="cfg-hours-to" class="cfg-input" />
+                  </label>
+                  <fieldset class="cfg-field cfg-field--full cfg-days-fieldset">
+                    <legend class="cfg-label">Días de operación</legend>
+                    <div class="cfg-days">
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="mon" /> Lun</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="tue" /> Mar</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="wed" /> Mié</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="thu" /> Jue</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="fri" /> Vie</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="sat" /> Sáb</label>
+                      <label class="cfg-day"><input type="checkbox" name="cfg-day" value="sun" /> Dom</label>
+                    </div>
+                  </fieldset>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Zona horaria</span>
+                    <select id="cfg-timezone" class="cfg-input">
+                      <option value="America/Mexico_City">Ciudad de México</option>
+                      <option value="America/Bogota">Bogotá</option>
+                      <option value="America/Lima">Lima</option>
+                      <option value="America/Santiago">Santiago</option>
+                      <option value="America/New_York">Nueva York</option>
+                      <option value="America/Los_Angeles">Los Ángeles</option>
+                      <option value="Europe/Madrid">Madrid</option>
+                    </select>
+                  </label>
+                  <label class="cfg-field">
+                    <span class="cfg-label">Notificaciones</span>
+                    <select id="cfg-notify" class="cfg-input">
+                      <option value="email">Email</option>
+                      <option value="in_app">Solo en la app</option>
+                      <option value="both">Email y app</option>
+                      <option value="minimal">Mínimas</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="configuracion.js"></script>
+  </body>
+</html>
