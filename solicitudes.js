@@ -50,7 +50,7 @@ function boot() {
 
   onAuthStateChanged(auth, (user) => {
     if (!user) {
-      window.location.replace("onboarding.html");
+      window.location.replace("login.html");
       return;
     }
     loadSolicitudesForUser(user).catch((err) => {

@@ -229,8 +229,13 @@ if (form && successEl) {
     }
 
     try {
-      const cred = await signInAnonymously(auth);
-      const uid = cred.user.uid;
+      let uid;
+      if (auth.currentUser) {
+        uid = auth.currentUser.uid;
+      } else {
+        const cred = await signInAnonymously(auth);
+        uid = cred.user.uid;
+      }
 
       const docData = {
         ...raw,

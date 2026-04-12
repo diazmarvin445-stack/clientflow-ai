@@ -34,7 +34,7 @@ function boot() {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.replace("onboarding.html");
+      window.location.replace("login.html");
       return;
     }
 
@@ -54,7 +54,7 @@ function boot() {
     signOutBtn.addEventListener("click", async () => {
       try {
         await signOut(auth);
-        window.location.href = "onboarding.html";
+        window.location.href = "login.html";
       } catch (err) {
         console.error(err);
         openComingSoon("No se pudo cerrar sesión", "Recarga la página e inténtalo de nuevo.");

@@ -30,7 +30,7 @@ function boot() {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.replace("onboarding.html");
+      window.location.replace("login.html");
       return;
     }
     try {

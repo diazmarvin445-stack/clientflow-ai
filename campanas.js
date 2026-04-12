@@ -391,7 +391,7 @@ function boot() {
   onAuthStateChanged(auth, (user) => {
     if (!user) {
       console.log(LOG_PREFIX, "No user — redirect to onboarding.");
-      window.location.replace("onboarding.html");
+      window.location.replace("login.html");
       return;
     }
 

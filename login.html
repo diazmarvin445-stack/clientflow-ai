@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Entrar — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="auth-body">
+    <div class="page-bg" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="index.html" class="logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+        <nav class="nav" aria-label="Principal">
+          <a href="index.html#como-funciona">Cómo funciona</a>
+          <a href="index.html#beneficios">Beneficios</a>
+          <a href="onboarding.html" class="nav-cta nav-cta--soft">Probar Plataforma</a>
+        </nav>
+        <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="auth-main">
+      <div class="container auth-layout">
+        <div class="auth-card reveal is-visible">
+          <div id="auth-panels" data-view="signin">
+            <div class="auth-panel" data-panel="signin">
+              <h1 class="auth-heading">Bienvenido de nuevo</h1>
+              <p class="auth-lead">Accede con el correo de tu cuenta para abrir el panel.</p>
+
+              <form id="login-form" class="auth-form" novalidate>
+                <label class="field">
+                  <span class="field-label">Correo electrónico</span>
+                  <input type="email" name="email" autocomplete="email" required placeholder="tu@empresa.com" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Contraseña</span>
+                  <input
+                    type="password"
+                    name="password"
+                    autocomplete="current-password"
+                    required
+                    placeholder="••••••••"
+                  />
+                </label>
+                <p id="login-error" class="auth-error" hidden role="alert"></p>
+                <button type="submit" class="btn btn-primary btn-block">Entrar al panel</button>
+              </form>
+
+              <p class="auth-meta">
+                <button type="button" class="auth-link-btn" id="login-forgot">¿Olvidaste la contraseña?</button>
+              </p>
+
+              <p class="auth-switch">
+                ¿Nuevo en ClientFlow?
+                <a href="onboarding.html" class="auth-inline-link">Probar la plataforma (sin registro previo)</a>
+              </p>
+
+              <p class="auth-switch">
+                ¿Quieres cuenta con correo?
+                <button type="button" class="auth-link-btn" id="toggle-signup">Crear cuenta con correo</button>
+              </p>
+            </div>
+
+            <div class="auth-panel" data-panel="signup">
+              <h1 class="auth-heading">Crear cuenta con correo</h1>
+              <p class="auth-lead">Después configurarás tu negocio en el mismo flujo guiado.</p>
+
+              <form id="signup-form" class="auth-form" novalidate>
+                <label class="field">
+                  <span class="field-label">Correo electrónico</span>
+                  <input type="email" name="email" autocomplete="email" required placeholder="tu@empresa.com" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Contraseña</span>
+                  <input
+                    type="password"
+                    name="password"
+                    autocomplete="new-password"
+                    required
+                    minlength="6"
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                </label>
+                <label class="field">
+                  <span class="field-label">Confirmar contraseña</span>
+                  <input
+                    type="password"
+                    name="password2"
+                    autocomplete="new-password"
+                    required
+                    placeholder="Repite la contraseña"
+                  />
+                </label>
+                <p id="signup-error" class="auth-error" hidden role="alert"></p>
+                <button type="submit" class="btn btn-primary btn-block">Crear cuenta y continuar</button>
+              </form>
+
+              <p class="auth-switch">
+                ¿Ya tienes cuenta?
+                <button type="button" class="auth-link-btn" id="toggle-login">Volver a iniciar sesión</button>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span class="footer-brand">© <span id="year"></span> ClientFlow AI</span>
+        <span class="footer-note">Acceso seguro para equipos.</span>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script type="module" src="login.js"></script>
+  </body>
+</html>

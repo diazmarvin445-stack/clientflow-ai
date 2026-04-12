@@ -24,7 +24,7 @@
         <nav class="nav" aria-label="Principal">
           <a href="#como-funciona">Cómo funciona</a>
           <a href="#beneficios">Beneficios</a>
-          <a href="dashboard.html">Panel</a>
+          <a href="login.html" class="nav-link-return" data-landing-entry>Ya tengo cuenta</a>
           <a href="solicitar.html" class="nav-link-customer">Solicitar Servicio</a>
           <a href="onboarding.html" class="nav-cta">Probar Plataforma</a>
         </nav>
@@ -47,8 +47,13 @@
             </p>
             <div class="hero-actions">
               <a href="onboarding.html" class="btn btn-primary">Probar Plataforma</a>
-              <a href="#como-funciona" class="btn btn-secondary">Ver Cómo Funciona</a>
+              <a href="login.html" class="btn btn-secondary" data-landing-entry>Ya tengo cuenta</a>
             </div>
+            <p class="hero-actions-note">
+              <strong>Nuevo:</strong> prueba gratis y configura tu negocio en minutos. ¿Ya usas ClientFlow?
+              <a href="login.html" class="hero-actions-inline" data-landing-entry>Entrar al panel</a>
+            </p>
+            <a href="#como-funciona" class="hero-scroll-link">Ver cómo funciona</a>
             <div class="hero-stats">
               <div class="stat">
                 <span class="stat-value">24/7</span>
@@ -275,8 +280,12 @@
             </p>
             <div class="cta-final-actions">
               <a href="onboarding.html" class="btn btn-primary">Probar Plataforma</a>
-              <a href="solicitar.html" class="btn btn-secondary">Soy cliente — Solicitar Servicio</a>
+              <a href="login.html" class="btn btn-secondary" data-landing-entry>Ya tengo cuenta</a>
             </div>
+            <p class="cta-final-note">
+              Clientes finales:
+              <a href="solicitar.html">Solicitar servicio</a>
+            </p>
           </div>
         </div>
       </section>
@@ -290,5 +299,6 @@
     </footer>
 
     <script src="script.js"></script>
+    <script type="module" src="landing-entry.js"></script>
   </body>
 </html>
