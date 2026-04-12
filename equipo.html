@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Equipo — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="dash-body eq-page">
+    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
+
+    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
+      <div class="dash-sidebar-brand">
+        <a href="index.html" class="logo dash-logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+      </div>
+      <nav class="dash-nav" aria-label="Secciones">
+        <a href="dashboard.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
+          Dashboard
+        </a>
+        <a href="solicitudes.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
+          Solicitudes
+        </a>
+        <a href="campanas.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
+          Campañas IA
+        </a>
+        <a href="calendario.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
+          Calendario
+        </a>
+        <a href="clientes.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
+          Clientes
+        </a>
+        <a href="equipo.html" class="dash-nav-link is-active" aria-current="page">
+          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+          Equipo
+        </a>
+        <a href="configuracion.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+          Configuración
+        </a>
+      </nav>
+      <div class="dash-sidebar-foot">
+        <div class="dash-sidebar-card">
+          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
+          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
+          <a
+            href="#"
+            class="dash-sidebar-card-link"
+            data-cf-soon="Centro de ayuda"
+            data-cf-soon-desc="Documentación, tutoriales en vídeo y chat con soporte llegarán en la próxima versión."
+            >Centro de ayuda</a
+          >
+        </div>
+      </div>
+    </aside>
+
+    <div class="dash-shell">
+      <header class="dash-topbar">
+        <button
+          type="button"
+          class="dash-menu-btn"
+          id="dash-menu-btn"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="dash-sidebar"
+        >
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-topbar-title">
+          <h1 class="dash-business-name" id="dash-business-name">…</h1>
+          <span class="dash-business-meta" id="dash-business-meta">…</span>
+        </div>
+        <div class="dash-topbar-actions">
+          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
+            <span class="dash-notify-dot" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="dash-avatar"
+            aria-label="Menú de cuenta"
+            aria-expanded="false"
+            aria-haspopup="true"
+          >
+            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="dash-main" id="dash-main">
+        <div class="eq-workspace">
+          <p class="eq-load-error" id="eq-load-error" hidden role="alert"></p>
+
+          <section class="dash-stats eq-stats" aria-label="Resumen del equipo">
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Total miembros</span>
+                <span class="dash-stat-ico dash-stat-ico--users" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="eq-stat-total">0</p>
+              <div class="dash-stat-foot"></div>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Activos hoy</span>
+                <span class="dash-stat-ico dash-stat-ico--pulse" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="eq-stat-active-today">0</p>
+              <div class="dash-stat-foot">
+                <span class="dash-stat-trend-note">Según horario y días asignados</span>
+              </div>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Técnicos / Staff operativo</span>
+                <span class="dash-stat-ico dash-stat-ico--wrench" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="eq-stat-operativo">0</p>
+              <div class="dash-stat-foot"></div>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Administrativos</span>
+                <span class="dash-stat-ico dash-stat-ico--brief" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="eq-stat-admin">0</p>
+              <div class="dash-stat-foot"></div>
+            </article>
+          </section>
+
+          <section class="dash-panel eq-panel" aria-labelledby="eq-panel-title">
+            <div class="dash-panel-head eq-panel-head">
+              <div>
+                <h2 class="dash-panel-title" id="eq-panel-title">Tu equipo</h2>
+                <p class="eq-panel-sub" id="eq-panel-meta">
+                  Empleados y colaboradores con su rol y disponibilidad.
+                </p>
+              </div>
+              <button type="button" class="dash-quick-btn dash-quick-btn--primary eq-add-btn" id="eq-open-add">
+                + Agregar miembro
+              </button>
+            </div>
+
+            <div id="eq-members-root" class="eq-members"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="eq-modal" class="cf-modal-host" hidden aria-hidden="true">
+      <button type="button" class="cf-modal-backdrop" id="eq-modal-backdrop" aria-label="Cerrar"></button>
+      <div
+        class="cf-modal-dialog cf-modal-dialog--form eq-modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="eq-modal-title"
+      >
+        <h2 class="eq-modal-title" id="eq-modal-title">Agregar miembro</h2>
+        <p class="eq-modal-lead" id="eq-modal-lead">
+          Datos operativos para organizar turnos y responsabilidades.
+        </p>
+
+        <form id="eq-member-form" class="eq-form" novalidate>
+          <input type="hidden" id="eq-edit-id" value="" />
+
+          <div class="cfg-grid cfg-grid--2">
+            <label class="cfg-field cfg-field--full">
+              <span class="cfg-label">Nombre completo</span>
+              <input type="text" id="eq-full-name" class="cfg-input" required autocomplete="name" />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Cargo / Rol</span>
+              <input
+                type="text"
+                id="eq-role-title"
+                class="cfg-input"
+                placeholder="Ej. Técnico de campo"
+                required
+                autocomplete="organization-title"
+              />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Tipo de rol</span>
+              <select id="eq-staff-category" class="cfg-input" required>
+                <option value="operativo">Técnicos / Staff operativo</option>
+                <option value="administrativo">Administrativos</option>
+              </select>
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Teléfono</span>
+              <input type="tel" id="eq-phone" class="cfg-input" autocomplete="tel" />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Correo electrónico</span>
+              <input type="email" id="eq-email" class="cfg-input" autocomplete="email" />
+            </label>
+            <label class="cfg-field cfg-field--full eq-toggle-field">
+              <span class="cfg-label">Estado</span>
+              <label class="eq-checkbox-row">
+                <input type="checkbox" id="eq-active" checked />
+                <span>Activo en la operación</span>
+              </label>
+            </label>
+            <fieldset class="cfg-field cfg-field--full cfg-days-fieldset">
+              <legend class="cfg-label">Días asignados</legend>
+              <div class="cfg-days">
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="mon" /> Lun</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="tue" /> Mar</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="wed" /> Mié</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="thu" /> Jue</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="fri" /> Vie</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="sat" /> Sáb</label>
+                <label class="cfg-day"><input type="checkbox" name="eq-day" value="sun" /> Dom</label>
+              </div>
+            </fieldset>
+            <label class="cfg-field">
+              <span class="cfg-label">Horario desde</span>
+              <input type="time" id="eq-hours-from" class="cfg-input" />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Horario hasta</span>
+              <input type="time" id="eq-hours-to" class="cfg-input" />
+            </label>
+          </div>
+
+          <p class="eq-form-error" id="eq-form-error" hidden role="alert"></p>
+
+          <div class="eq-modal-actions">
+            <button type="button" class="eq-modal-btn eq-modal-btn--ghost" id="eq-modal-cancel">
+              Cancelar
+            </button>
+            <button type="submit" class="eq-modal-btn eq-modal-btn--primary" id="eq-modal-save">
+              Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="equipo.js"></script>
+  </body>
+</html>
