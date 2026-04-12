@@ -104,6 +104,38 @@
           <div class="dash-workspace-primary">
             <p class="sol-load-error" id="sol-load-error" hidden role="alert"></p>
 
+            <section
+              class="sol-request-link-card"
+              id="sol-request-link-section"
+              hidden
+              aria-labelledby="sol-link-title"
+            >
+              <div class="sol-request-link-inner">
+                <h3 class="sol-request-link-title" id="sol-link-title">Tu enlace de solicitud</h3>
+                <p class="sol-request-link-lead">
+                  Usa este enlace en tus anuncios, redes sociales o mensajes para que tus clientes te
+                  envíen solicitudes directamente.
+                </p>
+                <div class="sol-request-link-field">
+                  <p class="sol-request-link-url" id="sol-request-link-url"></p>
+                </div>
+                <div class="sol-request-link-actions">
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="sol-copy-link">
+                    Copiar enlace
+                  </button>
+                  <a
+                    class="dash-quick-btn dash-quick-btn--ghost sol-request-link-open"
+                    id="sol-open-form"
+                    href="solicitar.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Abrir formulario</a
+                  >
+                </div>
+                <p class="sol-request-link-feedback" id="sol-copy-feedback" hidden aria-live="polite"></p>
+              </div>
+            </section>
+
             <section class="dash-panel sol-panel" aria-labelledby="sol-panel-title">
               <div class="dash-panel-head">
                 <div>

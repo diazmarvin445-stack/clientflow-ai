@@ -21,6 +21,74 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
+function getPublicRequestUrl(businessId) {
+  const id = typeof businessId === "string" ? businessId.trim() : "";
+  if (!id) return "";
+  const rel = `solicitar.html?businessId=${encodeURIComponent(id)}`;
+  return new URL(rel, window.location.href).href;
+}
+
+function syncRequestLinkSection(business) {
+  const section = document.getElementById("sol-request-link-section");
+  const urlEl = document.getElementById("sol-request-link-url");
+  const openA = document.getElementById("sol-open-form");
+  const feedback = document.getElementById("sol-copy-feedback");
+  if (!section || !urlEl || !openA) return;
+
+  if (!business || typeof business.id !== "string" || !business.id.trim()) {
+    section.hidden = true;
+    urlEl.textContent = "";
+    openA.href = "solicitar.html";
+    if (feedback) feedback.hidden = true;
+    return;
+  }
+
+  const url = getPublicRequestUrl(business.id);
+  urlEl.textContent = url;
+  openA.href = url;
+  section.hidden = false;
+  if (feedback) {
+    feedback.hidden = true;
+    feedback.textContent = "";
+  }
+}
+
+let requestLinkUiWired = false;
+function ensureRequestLinkUiWired() {
+  if (requestLinkUiWired) return;
+  requestLinkUiWired = true;
+  const copyBtn = document.getElementById("sol-copy-link");
+  const feedback = document.getElementById("sol-copy-feedback");
+  copyBtn?.addEventListener("click", async () => {
+    const urlEl = document.getElementById("sol-request-link-url");
+    const text = urlEl && urlEl.textContent ? urlEl.textContent.trim() : "";
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (feedback) {
+        feedback.textContent = "Enlace copiado al portapapeles";
+        feedback.hidden = false;
+        window.setTimeout(() => {
+          if (feedback) feedback.hidden = true;
+        }, 2800);
+      }
+    } catch (err) {
+      console.error(err);
+      if (feedback) {
+        feedback.textContent = "No se pudo copiar automáticamente. Selecciona el enlace y cópialo manualmente.";
+        feedback.hidden = false;
+        feedback.style.color = "#b45309";
+        window.setTimeout(() => {
+          if (feedback) {
+            feedback.hidden = true;
+            feedback.style.color = "";
+          }
+        }, 4000);
+      }
+    }
+  });
+}
+
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
   const metaEl = document.getElementById("dash-business-meta");
@@ -465,8 +533,10 @@ function renderLeadList(root, businessId, leads) {
 
 async function loadSolicitudesForUser(user) {
   hideLoadError();
+  ensureRequestLinkUiWired();
   const business = await fetchBusinessForOwner(db, user.uid);
   renderHeader(business);
+  syncRequestLinkSection(business);
 
   const root = document.getElementById("sol-leads-root");
   if (!root) return;
@@ -509,6 +579,7 @@ function boot() {
     loadSolicitudesForUser(user).catch((err) => {
       console.error(err);
       renderHeader(null);
+      syncRequestLinkSection(null);
       showLoadError("Error al cargar el módulo de solicitudes.");
       const root = document.getElementById("sol-leads-root");
       if (root) renderEmpty(root);

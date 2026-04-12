@@ -4291,6 +4291,78 @@ a.dash-quick-tile {
   line-height: 1.4;
 }
 
+.sol-request-link-card {
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, var(--surface) 48%, var(--surface) 100%);
+  border: 1px solid rgba(37, 99, 235, 0.14);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.sol-request-link-inner {
+  padding: 1.15rem 1.35rem 1.25rem;
+}
+
+.sol-request-link-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.sol-request-link-lead {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.55;
+  max-width: 52rem;
+}
+
+.sol-request-link-field {
+  padding: 0.75rem 0.85rem;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.sol-request-link-url {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--blue);
+  word-break: break-all;
+  line-height: 1.5;
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+}
+
+.sol-request-link-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.sol-request-link-open {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 1rem;
+  box-sizing: border-box;
+}
+
+.sol-request-link-feedback {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #047857;
+}
+
 .sol-leads {
   padding: 0 1.35rem 1.35rem;
   display: flex;
