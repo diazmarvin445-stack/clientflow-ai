@@ -43,21 +43,64 @@ function parseBudgetInput(raw) {
 /**
  * When the user typed a budget, keep it close (small deterministic nudge).
  * When empty, use a seed-based default in a believable SMB range.
+ * @param {{ value: number, userProvided: boolean }} parsed
  */
-function resolveWeeklyBudget(raw, seed) {
-  const { value, userProvided } = parseBudgetInput(raw);
-  if (!userProvided) {
+function resolveWeeklyBudgetFromParsed(parsed, seed) {
+  if (!parsed.userProvided) {
     const spread = hashStr(`${seed}|budget`) % 140;
     return Math.round(260 + spread);
   }
   const nudge = 0.94 + (hashStr(`${seed}|budge`) % 13) / 100;
-  return Math.min(5000, Math.max(50, Math.round(value * nudge)));
+  return Math.min(5000, Math.max(50, Math.round(parsed.value * nudge)));
 }
 
 function shortPhrase(s, max) {
   const t = norm(s);
   if (!t) return "";
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`;
+}
+
+/** Formato monetario legible en prosa (USD). */
+function formatUsdMoney(n) {
+  const v = Math.round(Number(n) || 0);
+  return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+/** Cómo se interpretó el selector de plataforma en el formulario. */
+function describePlatformPref(pref) {
+  const x = norm(pref).toLowerCase();
+  if (x === "facebook") return "Facebook — elegido manualmente";
+  if (x === "instagram") return "Instagram — elegido manualmente";
+  if (x === "google") return "Google Ads — elegido manualmente";
+  return "Automática — el motor asigna canal según audiencia, ubicación y tipo de servicio";
+}
+
+/**
+ * Párrafo inicial que repite las entradas del usuario; si cambia un campo, este bloque cambia de forma evidente.
+ */
+function buildInputEchoParagraph(inputs, budgetWeekly, platformDisplayLabel, budgetParsed) {
+  const chunks = [];
+  const g = norm(inputs.goal);
+  const o = norm(inputs.offer);
+  const loc = norm(inputs.location);
+  const aud = norm(inputs.audience);
+  if (g) chunks.push(`Objetivo: «${g}».`);
+  if (o) chunks.push(`Promoción u oferta: «${o}».`);
+  if (loc) chunks.push(`Ubicación objetivo: «${loc}».`);
+  if (aud) chunks.push(`Audiencia: «${aud}».`);
+  if (budgetParsed.userProvided) {
+    chunks.push(
+      `Presupuesto: escribiste ${formatUsdMoney(budgetParsed.value)}/semana; la simulación calibra ~${formatUsdMoney(budgetWeekly)}/semana para estimar alcance y leads.`,
+    );
+  } else {
+    chunks.push(
+      `Presupuesto: sin cifra en el formulario — asumimos ~${formatUsdMoney(budgetWeekly)}/semana para los números inferiores (añade un importe para anclar la sugerencia).`,
+    );
+  }
+  chunks.push(
+    `Plataforma en el formulario: ${describePlatformPref(inputs.platformPref)}. Salida operativa sugerida: ${platformDisplayLabel}.`,
+  );
+  return chunks.join(" ");
 }
 
 /**
@@ -236,17 +279,19 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
   const intent = inferCampaignIntent(intentBlob);
   const segment = detectSegment(goalRaw, audienceRaw, offerRaw, locationRaw);
 
-  /** Metrics & channel stay stable for the same form; copy rotates with `variationSalt`. */
-  const stableSeed = `${name}|${goal}|${offer}|${location}|${audience}|${intent}|${segment}`;
+  const budgetParsed = parseBudgetInput(inputs.budget);
+  /** Incluye presupuesto y selector de plataforma para que métricas y texto reaccionen a esos campos. */
+  const stableSeed = `${name}|${goal}|${offer}|${location}|${audience}|${intent}|${segment}|${budgetParsed.userProvided ? `b${budgetParsed.value}` : "nobudget"}|p${norm(inputs.platformPref)}`;
   const seed = `${stableSeed}|v${variationSalt}`;
 
-  const budgetWeekly = resolveWeeklyBudget(inputs.budget, stableSeed);
+  const budgetWeekly = resolveWeeklyBudgetFromParsed(budgetParsed, stableSeed);
 
   const { platform, styleNote } = pickPlatformAuto(inputs.platformPref, segment, stableSeed);
   const cpl = CPL[platform] * (0.94 + (hashStr(`${stableSeed}|cpl`) % 14) / 100);
   const estimatedLeadsWeekly = Math.max(4, Math.round(budgetWeekly / cpl));
 
   const cta = ctaForIntent(intent);
+  const platLabel = PLATFORM_LABEL[platform];
 
   const g = shortPhrase(goal, 56);
   const o = shortPhrase(offer, 48);
@@ -266,6 +311,8 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
     () => (l ? `${name} en ${l}: ${g}` : `${name}: ${g}`),
     () => `${name}: ${o}`,
     () => `${g} ${conn} ${name}${l ? ` · ${l}` : ""}`,
+    () => `${platLabel}: ${g} — ${name}`,
+    () => (l ? `${name} · ${platLabel} · ${g} (${l})` : `${name} · ${platLabel} · ${g}`),
   ];
   const headline = headlinePickers[hi % headlinePickers.length]();
 
@@ -286,10 +333,15 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
       `Si el objetivo es ${g.toLowerCase()}, el gancho es simple: ${o.toLowerCase()} para ${a}${l ? ` en ${l}` : ""}, con ${name} como respuesta rápida.`,
     () =>
       `${a}: cuando la decisión pasa por ${g.toLowerCase()}, ${name} refuerza confianza con ${o.toLowerCase()}${l ? ` y referencia local (${l}).` : "."}`,
+    () =>
+      budgetParsed.userProvided
+        ? `Presupuesto de partida ${formatUsdMoney(budgetParsed.value)}/semana → simulamos con ~${formatUsdMoney(budgetWeekly)}/semana en ${platLabel}: ${o} para ${a}${l ? ` en ${l}` : ""}, ligado a ${g.toLowerCase()}.`
+        : `Sin cifra de presupuesto en el formulario, usamos ~${formatUsdMoney(budgetWeekly)}/semana como supuesto en ${platLabel}; cuando indiques un importe, este párrafo y los números se anclan a tu dato.`,
+    () =>
+      `Canal ${platLabel}: el mensaje conecta «${g}» con «${o}»${l ? ` y geolocaliza en ${l}` : ""} para ${a}.`,
   ];
   const hook = hookPickers[hookIdx % hookPickers.length]();
 
-  const platLabel = PLATFORM_LABEL[platform];
   const intentNarrative = {
     booking:
       "El anuncio debe pedir un siguiente paso concreto en el calendario: fricción mínima y horarios visibles.",
@@ -342,33 +394,41 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
         : "feed o ventana de mensajes con prueba social y oferta explícita"
   }.`;
 
-  const bodyText = [bodyLead, " ", bodyMid, " ", bodyClose].join("").replace(/\s+/g, " ").trim();
+  let platformDisplayLabel = styleNote ? `${platLabel} · ${styleNote}` : platLabel;
+  const prefManual = ["facebook", "instagram", "google"].includes(norm(inputs.platformPref).toLowerCase());
+  if (prefManual) {
+    platformDisplayLabel = styleNote
+      ? `${platLabel} · ${styleNote} · canal del formulario`
+      : `${platLabel} · canal del formulario`;
+  }
 
-  const platformDisplayLabel = styleNote ? `${platLabel} · ${styleNote}` : platLabel;
+  const inputEcho = buildInputEchoParagraph(inputs, budgetWeekly, platformDisplayLabel, budgetParsed);
+
+  const bodyText = [inputEcho, " ", bodyLead, " ", bodyMid, " ", bodyClose].join("").replace(/\s+/g, " ").trim();
 
   const creativeIdeas = (() => {
     const base = hashStr(`${seed}|cr`) % 4;
     if (platform === "google") {
       return [
-        `Anuncio RSA: 12–15 titulares que mezclen ${g.toLowerCase()}, ${l || "tu zona"} y ${o.toLowerCase()}; descripciones con prueba y CTA «${cta}».`,
-        `Grupo de anuncios por intención: keywords locales + anuncio con ${o.toLowerCase()} y extensión de llamada para ${a}.`,
-        `Anuncio de búsqueda: dolor (${g.toLowerCase()}) → solución (${name}) → siguiente paso (${cta}).`,
-        `Prueba A/B: titular con ${l || "ubicación"} vs titular con ${o.toLowerCase()}; mide CTR hacia ${cta}.`,
+        `(${platLabel}) Anuncio RSA: titulares con ${g.toLowerCase()}, ${l || "tu zona"} y ${o.toLowerCase()}; CTA «${cta}» · ~${formatUsdMoney(budgetWeekly)}/sem.`,
+        `(${platLabel}) Keywords + ${l || "zona"} + anuncio con ${o.toLowerCase()} y extensión de llamada para ${a}.`,
+        `(${platLabel}) Intención: ${g.toLowerCase()} → ${name} → ${cta} (supuesto ${formatUsdMoney(budgetWeekly)}/sem).`,
+        `(${platLabel}) A/B: titular ${l || "ubicación"} vs ${o.toLowerCase()}; CTR hacia «${cta}».`,
       ][base];
     }
     if (platform === "instagram") {
       return [
-        `Reels 15–22 s: hook con ${g.toLowerCase()}, plano de ${name}, texto con ${o.toLowerCase()} y sticker de ubicación${l ? ` (${l})` : ""}. Estilo dinámico tipo TikTok.`,
-        `Carrusel: problema para ${a} → cómo ${name} lo resuelve → oferta (${o.toLowerCase()}) → prueba → «${cta}».`,
-        `Historia 3 pasos: encuesta rápida a ${a} → mini prueba → enlace con «${cta}».`,
-        `Foto real + copy breve: titular con ${g.toLowerCase()}, subtítulo con ${o.toLowerCase()} y CTA «${cta}».`,
+        `(${platLabel}) Reels: ${g.toLowerCase()} + ${o.toLowerCase()} + sticker${l ? ` ${l}` : ""} · ${a} · «${cta}».`,
+        `(${platLabel}) Carrusel: ${a} → ${name} → ${o.toLowerCase()} → «${cta}».`,
+        `(${platLabel}) Historias: ${g.toLowerCase()} + prueba + enlace «${cta}».`,
+        `(${platLabel}) Post fijo: ${g.toLowerCase()} + ${o.toLowerCase()} + CTA «${cta}».`,
       ][base];
     }
     return [
-      `Vídeo corto en feed: vecindario (${l || "zona"}) + testimonio de 1 frase + ${o.toLowerCase()} + botón «${cta}».`,
-      `Carrusel 4 diapositivas: antes/después o proceso → ${name} → oferta (${o.toLowerCase()}) → ${cta}.`,
-      `Creatividad estática: headline del anuncio + badge de ${l || "zona"} + prueba social y «${cta}».`,
-      `Secuencia de remarketing: recordatorio de ${g.toLowerCase()} con ${o.toLowerCase()} y CTA «${cta}».`,
+      `(${platLabel}) Vídeo feed: ${l || "zona"} + ${o.toLowerCase()} + «${cta}» · ${a}.`,
+      `(${platLabel}) Carrusel: ${g.toLowerCase()} → ${name} → ${o.toLowerCase()} → ${cta}.`,
+      `(${platLabel}) Estática: badge ${l || "local"} + ${o.toLowerCase()} + ${cta}.`,
+      `(${platLabel}) Remarketing: ${g.toLowerCase()} + ${o.toLowerCase()} + ${cta} (~${formatUsdMoney(budgetWeekly)}/sem).`,
     ][base];
   })();
 
