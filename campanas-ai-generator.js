@@ -60,6 +60,44 @@ function shortPhrase(s, max) {
   return t.length <= max ? t : `${t.slice(0, max).trim()}…`;
 }
 
+/** Texto visible que cambia fuerte cuando el usuario edita el formulario (sin depender solo del hash). */
+function clipRaw(s, max) {
+  const t = norm(s);
+  if (!t) return "";
+  return t.length <= max ? t : `${t.slice(0, max).trim()}…`;
+}
+
+/**
+ * Titular principal: prioriza las cadenas tal cual en el formulario (objetivo, oferta, zona, audiencia).
+ */
+function buildInputForwardHeadline(
+  name,
+  goalRaw,
+  offerRaw,
+  locationRaw,
+  audienceRaw,
+  platLabel,
+  seed,
+) {
+  const g = clipRaw(goalRaw, 72) || "(sin objetivo — escribe uno en el formulario)";
+  const o = clipRaw(offerRaw, 56) || "(sin promoción — añade tu oferta)";
+  const l = clipRaw(locationRaw, 48);
+  const au = clipRaw(audienceRaw, 56);
+  const v = hashStr(`${seed}|hlmain`) % 4;
+  const loc = l ? ` · ${l}` : "";
+  const aud = au ? ` · ${au}` : "";
+  switch (v) {
+    case 0:
+      return `${g} — ${o} · ${name}${loc}${aud} · ${platLabel}`;
+    case 1:
+      return `${name}: ${g}${loc} · Oferta: ${o}${aud} · ${platLabel}`;
+    case 2:
+      return `${o} · ${name}${loc} · Objetivo: ${g}${aud} · ${platLabel}`;
+    default:
+      return `${name} · ${platLabel}${loc} · ${g} — ${o}${aud}`;
+  }
+}
+
 /** Formato monetario legible en prosa (USD). */
 function formatUsdMoney(n) {
   const v = Math.round(Number(n) || 0);
@@ -280,8 +318,8 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
   const segment = detectSegment(goalRaw, audienceRaw, offerRaw, locationRaw);
 
   const budgetParsed = parseBudgetInput(inputs.budget);
-  /** Incluye presupuesto y selector de plataforma para que métricas y texto reaccionen a esos campos. */
-  const stableSeed = `${name}|${goal}|${offer}|${location}|${audience}|${intent}|${segment}|${budgetParsed.userProvided ? `b${budgetParsed.value}` : "nobudget"}|p${norm(inputs.platformPref)}`;
+  /** Usa texto crudo del formulario (incl. vacíos) para que el seed no colapse en los mismos valores por defecto. */
+  const stableSeed = `${name}|${goalRaw}|${offerRaw}|${locationRaw}|${audienceRaw}|${norm(inputs.budget)}|${intent}|${segment}|${budgetParsed.userProvided ? `b${budgetParsed.value}` : "nobudget"}|p${norm(inputs.platformPref)}`;
   const seed = `${stableSeed}|v${variationSalt}`;
 
   const budgetWeekly = resolveWeeklyBudgetFromParsed(budgetParsed, stableSeed);
@@ -298,47 +336,38 @@ export function mockGenerateCampaignFromInputs(inputs, businessName, variationSa
   const l = shortPhrase(location, 40);
   const a = shortPhrase(audience, 48);
 
-  const hi = hashStr(`${seed}|head`);
-  const connectors = ["·", "—", "|"];
-  const conn = connectors[hi % connectors.length];
-
-  /** @type {() => string[]} */
-  const headlinePickers = [
-    () => [`${name} ${conn} ${g}`, l ? ` (${l})` : ""].join(""),
-    () => (l ? `${o} · ${name} en ${l}` : `${o} · ${name}`),
-    () => `${g.charAt(0).toUpperCase() + g.slice(1)} — ${name}`,
-    () => `Para ${a}: ${name} y ${g.toLowerCase()}`,
-    () => (l ? `${name} en ${l}: ${g}` : `${name}: ${g}`),
-    () => `${name}: ${o}`,
-    () => `${g} ${conn} ${name}${l ? ` · ${l}` : ""}`,
-    () => `${platLabel}: ${g} — ${name}`,
-    () => (l ? `${name} · ${platLabel} · ${g} (${l})` : `${name} · ${platLabel} · ${g}`),
-  ];
-  const headline = headlinePickers[hi % headlinePickers.length]();
+  /** Titular principal: siempre ancla en texto del formulario (goal/offer/location/audience). */
+  const headline = buildInputForwardHeadline(
+    name,
+    goalRaw,
+    offerRaw,
+    locationRaw,
+    audienceRaw,
+    platLabel,
+    seed,
+  );
 
   const hookIdx = hashStr(`${seed}|hook`);
+  const gRawDisp = clipRaw(goalRaw, 90) || clipRaw(goal, 90);
+  const oRawDisp = clipRaw(offerRaw, 80) || clipRaw(offer, 80);
   /** @type {() => string} */
   const hookPickers = [
     () =>
       l
-        ? `En ${l}, ${a} suele buscar exactamente esto: ${g.toLowerCase()}. Con ${name}, ${o.toLowerCase()} queda explicado en el primer pantallazo.`
-        : `${a} valora claridad: ${g.toLowerCase()}. ${name} presenta ${o.toLowerCase()} sin rodeos.`,
+        ? `Hook basado en tu texto: «${gRawDisp}» + «${oRawDisp}». En ${l}, ${a} conecta con ese mensaje; ${name} refuerza cercanía.`
+        : `Hook basado en tu texto: «${gRawDisp}» + «${oRawDisp}». Para ${a}, ${name} presenta la oferta con tono directo.`,
     () =>
-      `Tu prioridad (${g.toLowerCase()}) se traduce en un mensaje que nombra a ${a} y ancla la oferta: ${o.toLowerCase()}${l ? `, con foco en ${l}.` : "."}`,
+      `Tu prioridad (tal como escribiste: «${gRawDisp}») se traduce en anuncio que vende «${oRawDisp}»${l ? ` y menciona ${l}` : ""} para ${a}.`,
     () =>
       l
-        ? `${l}: ${o} con ${name}. Pensado para ${a} — alineado con «${g.toLowerCase()}».`
-        : `${o} con ${name}, hablando directamente con ${a} sobre ${g.toLowerCase()}.`,
-    () =>
-      `Si el objetivo es ${g.toLowerCase()}, el gancho es simple: ${o.toLowerCase()} para ${a}${l ? ` en ${l}` : ""}, con ${name} como respuesta rápida.`,
-    () =>
-      `${a}: cuando la decisión pasa por ${g.toLowerCase()}, ${name} refuerza confianza con ${o.toLowerCase()}${l ? ` y referencia local (${l}).` : "."}`,
+        ? `${l}: oferta «${oRawDisp}» con ${name}. Audiencia «${clipRaw(audienceRaw, 70) || a}» · objetivo «${gRawDisp}».`
+        : `Oferta «${oRawDisp}» con ${name}; audiencia «${clipRaw(audienceRaw, 70) || a}» · objetivo «${gRawDisp}».`,
     () =>
       budgetParsed.userProvided
-        ? `Presupuesto de partida ${formatUsdMoney(budgetParsed.value)}/semana → simulamos con ~${formatUsdMoney(budgetWeekly)}/semana en ${platLabel}: ${o} para ${a}${l ? ` en ${l}` : ""}, ligado a ${g.toLowerCase()}.`
-        : `Sin cifra de presupuesto en el formulario, usamos ~${formatUsdMoney(budgetWeekly)}/semana como supuesto en ${platLabel}; cuando indiques un importe, este párrafo y los números se anclan a tu dato.`,
+        ? `Presupuesto formulario: ${formatUsdMoney(budgetParsed.value)}/sem → simulación ~${formatUsdMoney(budgetWeekly)}/sem en ${platLabel}. Mensaje: «${gRawDisp}» / «${oRawDisp}»${l ? ` · ${l}` : ""}.`
+        : `Sin importe en el formulario: ~${formatUsdMoney(budgetWeekly)}/sem de supuesto en ${platLabel}. Mensaje: «${gRawDisp}» / «${oRawDisp}».`,
     () =>
-      `Canal ${platLabel}: el mensaje conecta «${g}» con «${o}»${l ? ` y geolocaliza en ${l}` : ""} para ${a}.`,
+      `Canal ${platLabel}: une «${gRawDisp}» con «${oRawDisp}»${l ? ` y zona «${l}»` : ""} para «${clipRaw(audienceRaw, 70) || a}».`,
   ];
   const hook = hookPickers[hookIdx % hookPickers.length]();
 
