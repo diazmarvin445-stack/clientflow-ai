@@ -242,6 +242,24 @@ export async function fetchClientsForBusiness(db, businessId) {
 }
 
 /**
+ * Staff / team members in `businesses/{businessId}/teamMembers`, newest `createdAt` first.
+ * Operational fields: fullName, roleTitle, staffCategory, phone, email, active, workDays[], hoursFrom, hoursTo.
+ */
+export async function fetchTeamMembersForBusiness(db, businessId) {
+  const snap = await getDocs(collection(db, "businesses", businessId, "teamMembers"));
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data() });
+  });
+  rows.sort((a, b) => {
+    const ta = toDate(a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  return rows;
+}
+
+/**
  * Display label for campaign `platform` (Facebook / Instagram / Google Ads).
  */
 export function campaignPlatformDisplayName(raw) {
