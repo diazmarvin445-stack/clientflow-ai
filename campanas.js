@@ -183,7 +183,7 @@ function renderLiveCampaignCard(row) {
   if (isGenerator) {
     const kicker = document.createElement("p");
     kicker.className = "camp-live-card-kicker";
-    kicker.textContent = "Generada con IA";
+    kicker.textContent = "Desde el generador";
     titles.appendChild(kicker);
   }
 
@@ -522,7 +522,7 @@ async function renderCampaignsPage(business) {
 
   if (noteEl) {
     noteEl.textContent =
-      "El generador usa tus campos; la sugerencia inferior resume tu perfil guardado. Ambas son simulaciones hasta OpenAI e historial.";
+      "El generador usa tus campos; la sugerencia inferior resume tu perfil guardado. Ambas son orientativas (demostración).";
   }
 }
 
@@ -640,7 +640,7 @@ function runCampaignGenerator() {
     regenBtn.disabled = true;
     regenBtn.setAttribute("aria-busy", "true");
   }
-  if (note) note.textContent = "Generando vista previa…";
+  if (note) note.textContent = "Generando borrador…";
   if (outWrap) outWrap.hidden = false;
   if (hint) hint.textContent = "";
 
@@ -683,7 +683,7 @@ function runCampaignGenerator() {
       fillGeneratorOutput(output);
       if (note) {
         note.textContent =
-          "Vista previa simulada. Conecta OpenAI más adelante para textos a medida e historial.";
+          "Borrador de demostración a partir de tus datos. Los números son estimaciones orientativas.";
       }
       if (saveBtn) saveBtn.disabled = false;
       const resultCard = document.getElementById("camp-gen-result-card");
@@ -750,21 +750,6 @@ function wireCampaignGenerator() {
   });
 }
 
-function wireGeneratorScrollCta() {
-  const btn = document.getElementById("camp-generator-scroll-btn");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    const target = document.getElementById("camp-gen-section");
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-      target.classList.add("camp-reco-highlight");
-      window.setTimeout(() => target.classList.remove("camp-reco-highlight"), 1600);
-    }
-    // Misma acción que «Generar campaña con IA»: lee el formulario actual y ejecuta el mock.
-    runCampaignGenerator();
-  });
-}
-
 async function loadCampanasForUser(user) {
   console.log(LOG_PREFIX, "Loading for uid:", user.uid);
 
@@ -800,7 +785,6 @@ async function loadCampanasForUser(user) {
 
 function boot() {
   initDashShell({ auth });
-  wireGeneratorScrollCta();
   wireCampaignGenerator();
 
   onAuthStateChanged(auth, (user) => {

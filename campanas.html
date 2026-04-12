@@ -104,12 +104,12 @@
           <header class="camp-hub-hero">
             <div class="camp-hub-hero-badge" aria-hidden="true">
               <span class="camp-hub-hero-badge-ico"></span>
-              Motor de marketing IA
+              Resumen
             </div>
-            <h2 class="camp-hub-hero-title">Centro de Campañas IA</h2>
+            <h2 class="camp-hub-hero-title">Campañas</h2>
             <p class="camp-hub-hero-subtitle">
-              Revisa el rendimiento de lo que ya guardaste, genera una vista previa orientativa con IA y
-              consolida tu estrategia local desde aquí.
+              Crea un borrador con tus datos, revisa las métricas de lo guardado y mantén el foco en tu
+              negocio local.
             </p>
           </header>
 
@@ -168,22 +168,13 @@
               </article>
             </section>
 
-            <div class="camp-hub-cta">
-              <button type="button" class="camp-cta-principal" id="camp-generator-scroll-btn">
-                Generar Campaña IA
-              </button>
-              <p class="camp-hub-cta-hint">
-                Abre el generador y obtén una vista previa orientativa para tu negocio.
-              </p>
-            </div>
-
             <section class="camp-gen-panel dash-panel" id="camp-gen-section" aria-labelledby="camp-gen-title">
               <div class="camp-gen-head">
-                <p class="camp-gen-kicker">IA · ClientFlow</p>
-                <h2 class="camp-gen-title" id="camp-gen-title">Generador de campaña con IA</h2>
+                <p class="camp-gen-kicker">Vista previa</p>
+                <h2 class="camp-gen-title" id="camp-gen-title">Generador de campaña</h2>
                 <p class="camp-gen-lead">
-                  Completa los campos y genera una sola vista previa (simulación hasta conectar OpenAI).
-                  Puedes regenerarla o guardarla cuando te encaje.
+                  Completa los campos y obtén un borrador orientativo a partir de tu información. Los números
+                  son estimaciones de demostración; podrás guardar el resultado si te encaja.
                 </p>
               </div>
               <form class="camp-gen-form" id="camp-gen-form" novalidate>
@@ -257,14 +248,14 @@
               </form>
               <div class="camp-gen-generate-wrap">
                 <button type="button" class="camp-gen-generate-btn" id="camp-gen-generate-btn">
-                  Generar campaña con IA
+                  Generar vista previa
                 </button>
               </div>
               <div id="camp-gen-output" class="camp-gen-output" hidden>
                 <div class="camp-gen-result-card" id="camp-gen-result-card">
                   <header class="camp-gen-result-header">
-                    <span class="camp-gen-result-badge" aria-hidden="true">IA</span>
-                    <h3 class="camp-gen-result-title">Vista previa de campaña sugerida</h3>
+                    <span class="camp-gen-result-badge" aria-hidden="true">Borrador</span>
+                    <h3 class="camp-gen-result-title">Vista previa sugerida</h3>
                     <p class="camp-gen-result-lead" id="camp-gen-output-note" role="status"></p>
                   </header>
                   <div class="camp-gen-result-body">
@@ -283,7 +274,7 @@
                         <p class="camp-gen-result-tile-value" id="camp-gen-out-cta"></p>
                       </section>
                       <section class="camp-gen-result-tile">
-                        <h4 class="camp-gen-result-h4">Plataforma recomendada</h4>
+                        <h4 class="camp-gen-result-h4">Plataforma sugerida</h4>
                         <p class="camp-gen-result-tile-value camp-gen-result-platform" id="camp-gen-out-platform"></p>
                       </section>
                       <section class="camp-gen-result-tile">
@@ -335,7 +326,7 @@
                   <div class="camp-live-empty-icon" aria-hidden="true"></div>
                   <p class="camp-live-empty-title">Aún no has guardado ninguna campaña.</p>
                   <p class="camp-live-empty-text">
-                    Genera una vista previa arriba y pulsa «Guardar campaña» para verla aquí.
+                    Genera una vista previa con el formulario y pulsa «Guardar campaña» para verla aquí.
                   </p>
                 </div>
               </div>
@@ -382,8 +373,9 @@
           </div>
 
           <p class="camp-demo-note" role="note">
-            Las métricas superiores y «Campañas guardadas» reflejan lo almacenado en Firestore. El generador
-            y la sugerencia de perfil son simulaciones orientativas hasta conectar OpenAI e historial.
+            Las métricas y «Campañas guardadas» reflejan lo almacenado en Firestore. El generador y la
+            sugerencia de perfil son orientativos (modo demostración), no sustituyen asesoramiento real ni
+            un modelo de IA conectado.
           </p>
         </div>
       </main>
