@@ -178,6 +178,138 @@
               </p>
             </div>
 
+            <section class="camp-gen-panel dash-panel" id="camp-gen-section" aria-labelledby="camp-gen-title">
+              <div class="camp-gen-head">
+                <p class="camp-gen-kicker">IA · ClientFlow</p>
+                <h2 class="camp-gen-title" id="camp-gen-title">Generador de campañas con IA</h2>
+                <p class="camp-gen-lead">
+                  Define tu objetivo y tu oferta; obtén titular, texto de anuncio, CTA y recomendaciones
+                  listas para usar en anuncios o redes.
+                </p>
+              </div>
+              <form class="camp-gen-form" id="camp-gen-form" novalidate>
+                <div class="camp-gen-grid">
+                  <label class="camp-gen-field">
+                    <span class="camp-gen-label">Objetivo de la campaña</span>
+                    <input
+                      type="text"
+                      id="camp-gen-goal"
+                      name="goal"
+                      class="camp-gen-input"
+                      placeholder="Ej. Llenar agenda de visitas este mes"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="camp-gen-field">
+                    <span class="camp-gen-label">Promoción u oferta</span>
+                    <input
+                      type="text"
+                      id="camp-gen-offer"
+                      name="offer"
+                      class="camp-gen-input"
+                      placeholder="Ej. 15% en la primera visita"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="camp-gen-field">
+                    <span class="camp-gen-label">Ubicación objetivo</span>
+                    <input
+                      type="text"
+                      id="camp-gen-location"
+                      name="location"
+                      class="camp-gen-input"
+                      placeholder="Ej. Madrid sur, código postal…"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="camp-gen-field">
+                    <span class="camp-gen-label">Presupuesto (semanal, USD)</span>
+                    <input
+                      type="text"
+                      id="camp-gen-budget"
+                      name="budget"
+                      class="camp-gen-input"
+                      placeholder="Ej. 300"
+                      inputmode="decimal"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="camp-gen-field camp-gen-field--full">
+                    <span class="camp-gen-label">Audiencia objetivo</span>
+                    <input
+                      type="text"
+                      id="camp-gen-audience"
+                      name="audience"
+                      class="camp-gen-input"
+                      placeholder="Ej. Propietarios de vivienda 35–55 años"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="camp-gen-field camp-gen-field--full">
+                    <span class="camp-gen-label">Preferencia de plataforma</span>
+                    <select id="camp-gen-platform" name="platformPref" class="camp-gen-input camp-gen-select">
+                      <option value="auto">Automática (recomendada)</option>
+                      <option value="facebook">Facebook</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="google">Google Ads</option>
+                    </select>
+                  </label>
+                </div>
+              </form>
+              <div class="camp-gen-generate-wrap">
+                <button type="button" class="camp-gen-generate-btn" id="camp-gen-generate-btn">
+                  Generar campaña con IA
+                </button>
+              </div>
+              <div id="camp-gen-output" class="camp-gen-output" hidden>
+                <div class="camp-gen-output-head">
+                  <h3 class="camp-gen-output-title">Resultado generado</h3>
+                  <p class="camp-gen-output-note" id="camp-gen-output-note" role="status"></p>
+                </div>
+                <div class="camp-gen-output-blocks">
+                  <div class="camp-gen-block">
+                    <span class="camp-gen-block-label">Titular / Gancho</span>
+                    <p class="camp-gen-block-text" id="camp-gen-out-headline"></p>
+                    <p class="camp-gen-block-sub" id="camp-gen-out-hook"></p>
+                  </div>
+                  <div class="camp-gen-block">
+                    <span class="camp-gen-block-label">Descripción del anuncio</span>
+                    <p class="camp-gen-block-text camp-gen-block-text--body" id="camp-gen-out-body"></p>
+                  </div>
+                  <div class="camp-gen-output-row">
+                    <div class="camp-gen-block camp-gen-block--compact">
+                      <span class="camp-gen-block-label">CTA sugerido</span>
+                      <p class="camp-gen-block-text" id="camp-gen-out-cta"></p>
+                    </div>
+                    <div class="camp-gen-block camp-gen-block--compact">
+                      <span class="camp-gen-block-label">Plataforma recomendada</span>
+                      <p class="camp-gen-block-text" id="camp-gen-out-platform"></p>
+                    </div>
+                  </div>
+                  <div class="camp-gen-output-row">
+                    <div class="camp-gen-block camp-gen-block--compact">
+                      <span class="camp-gen-block-label">Presupuesto sugerido (sem.)</span>
+                      <p class="camp-gen-block-text" id="camp-gen-out-budget"></p>
+                    </div>
+                    <div class="camp-gen-block camp-gen-block--compact">
+                      <span class="camp-gen-block-label">Leads estimados (sem.)</span>
+                      <p class="camp-gen-block-text" id="camp-gen-out-leads"></p>
+                    </div>
+                  </div>
+                  <div class="camp-gen-block">
+                    <span class="camp-gen-block-label">Idea creativa (foto / vídeo)</span>
+                    <p class="camp-gen-block-text" id="camp-gen-out-creative"></p>
+                  </div>
+                </div>
+                <div class="camp-gen-save-wrap">
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="camp-gen-save-btn" disabled>
+                    Guardar campaña
+                  </button>
+                  <span class="camp-gen-save-hint" id="camp-gen-save-hint" aria-live="polite"></span>
+                </div>
+              </div>
+            </section>
+
             <section class="camp-live-block" aria-labelledby="camp-live-title">
               <div class="camp-section-head">
                 <h2 class="camp-section-title" id="camp-live-title">Tus campañas</h2>
