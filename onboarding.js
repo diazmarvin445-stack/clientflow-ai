@@ -245,7 +245,11 @@ if (form && successEl) {
         updatedAt: serverTimestamp(),
       };
 
-      await addDoc(collection(db, "businesses"), docData);
+      const businessRef = await addDoc(collection(db, "businesses"), docData);
+      console.log(
+        "[ClientFlow onboarding] Negocio creado. Enlace público de solicitudes (misma ruta que Solicitudes):",
+        `solicitar.html?businessId=${businessRef.id}`,
+      );
 
       try {
         localStorage.setItem("clientflow_onboarding_v1", JSON.stringify(raw));

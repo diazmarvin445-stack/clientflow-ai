@@ -167,6 +167,12 @@ async function loadDashboardForUser(user) {
   }
 
   const metrics = await fetchDashboardMetrics(db, business.id);
+  console.log(
+    "[ClientFlow dashboard] recentLeads for table:",
+    metrics.recentLeads.length,
+    "businessId:",
+    business.id,
+  );
   renderMetrics(metrics);
   renderLeadsTable(metrics.recentLeads);
 }
