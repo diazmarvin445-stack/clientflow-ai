@@ -127,12 +127,44 @@ function refreshConvertUI(article, businessId, leadRef) {
   else if (el) article.appendChild(el);
 }
 
+/**
+ * Idempotent: creates one client per lead and marks the lead. Safe to call multiple times.
+ * @returns {"skipped" | "created" | "error"}
+ */
+async function convertLeadToClientRecord(businessId, leadRef) {
+  if (leadRef.convertedToClient === true) return "skipped";
+  const existingId =
+    typeof leadRef.convertedToClientId === "string" ? leadRef.convertedToClientId.trim() : "";
+  if (existingId) return "skipped";
+
+  try {
+    const payload = buildClientPayloadFromLead(leadRef);
+    const toWrite = { ...payload };
+    if (toWrite.createdAt == null) {
+      toWrite.createdAt = serverTimestamp();
+    }
+    const ref = await addDoc(collection(db, "businesses", businessId, "clients"), toWrite);
+    await updateDoc(doc(db, "businesses", businessId, "leads", leadRef.id), {
+      convertedToClient: true,
+      convertedClientId: ref.id,
+      updatedAt: serverTimestamp(),
+    });
+    leadRef.convertedToClient = true;
+    leadRef.convertedToClientId = ref.id;
+    return "created";
+  } catch (err) {
+    console.error("[ClientFlow] Error al convertir solicitud en cliente:", err);
+    console.error("[ClientFlow] Detalle (leadId):", leadRef.id);
+    return "error";
+  }
+}
+
 function buildConvertSection(article, businessId, leadRef) {
   const convertedId =
     typeof leadRef.convertedToClientId === "string"
       ? leadRef.convertedToClientId.trim()
       : "";
-  if (convertedId) {
+  if (leadRef.convertedToClient === true || convertedId) {
     const wrap = document.createElement("div");
     wrap.className = "sol-convert sol-convert--done";
     const a = document.createElement("a");
@@ -151,7 +183,7 @@ function buildConvertSection(article, businessId, leadRef) {
   const hint = document.createElement("p");
   hint.className = "sol-convert-hint";
   hint.textContent =
-    "Copia los datos de esta solicitud a tu directorio de clientes para el seguimiento a largo plazo.";
+    "Si la conversión automática falló, puedes crear el cliente manualmente con los mismos datos.";
 
   const btn = document.createElement("button");
   btn.type = "button";
@@ -161,22 +193,14 @@ function buildConvertSection(article, businessId, leadRef) {
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     try {
-      const payload = buildClientPayloadFromLead(leadRef);
-      const ref = await addDoc(collection(db, "businesses", businessId, "clients"), {
-        ...payload,
-        createdAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, "businesses", businessId, "leads", leadRef.id), {
-        convertedToClientId: ref.id,
-        updatedAt: serverTimestamp(),
-      });
-      leadRef.convertedToClientId = ref.id;
-      refreshConvertUI(article, businessId, leadRef);
-    } catch (err) {
-      console.error(err);
-      window.alert(
-        "No se pudo crear el cliente. Revisa la conexión y que las reglas de Firestore permitan escribir en clientes.",
-      );
+      const result = await convertLeadToClientRecord(businessId, leadRef);
+      if (result === "error") {
+        window.alert(
+          "No se pudo crear el cliente. Revisa la conexión y que las reglas de Firestore permitan escribir en clientes.",
+        );
+      } else {
+        refreshConvertUI(article, businessId, leadRef);
+      }
     } finally {
       btn.disabled = false;
     }
@@ -369,6 +393,18 @@ function buildLeadCard(businessId, lead) {
       });
       select.dataset.lastSaved = next;
       leadRef.status = next;
+
+      const norm = normalizeLeadStatus(next);
+      if (norm === "completed") {
+        const conv = await convertLeadToClientRecord(businessId, leadRef);
+        if (conv === "error") {
+          console.error(
+            "[ClientFlow] Estado guardado como Ganado, pero la creación automática del cliente falló. Lead:",
+            id,
+          );
+        }
+      }
+
       refreshConvertUI(article, businessId, leadRef);
     } catch (err) {
       console.error(err);

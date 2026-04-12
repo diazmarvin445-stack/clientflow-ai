@@ -333,7 +333,6 @@ export function buildClientPayloadFromLead(lead) {
   const address = typeof lead.address === "string" ? lead.address.trim() : "";
   const primaryService = typeof lead.service === "string" ? lead.service.trim() : "";
   const notes = typeof lead.notes === "string" ? lead.notes : "";
-  const estimated = Number(lead.estimatedPrice);
   const payload = {
     fullName,
     phone,
@@ -342,9 +341,24 @@ export function buildClientPayloadFromLead(lead) {
     notes,
     sourceLeadId: typeof lead.id === "string" ? lead.id : String(lead.id || ""),
   };
-  if (Number.isFinite(estimated) && estimated > 0) {
-    payload.totalValue = estimated;
+
+  const desc = typeof lead.description === "string" ? lead.description.trim() : "";
+  if (desc) {
+    payload.description = desc;
   }
+
+  const estimated = Number(lead.estimatedPrice);
+  if (Number.isFinite(estimated)) {
+    payload.estimatedPrice = estimated;
+    if (estimated > 0) {
+      payload.totalValue = estimated;
+    }
+  }
+
+  if (lead.createdAt != null) {
+    payload.createdAt = lead.createdAt;
+  }
+
   return payload;
 }
 
@@ -421,7 +435,7 @@ const STATUS_BADGE = {
   contacted: { className: "dash-badge--prog", label: "Contactado" },
   quoted: { className: "dash-badge--quote", label: "Cotización" },
   scheduled: { className: "dash-badge--sched", label: "Programado" },
-  completed: { className: "dash-badge--done", label: "Completado" },
+  completed: { className: "dash-badge--done", label: "Ganado" },
   lost: { className: "dash-badge--lost", label: "Perdido" },
 };
 
@@ -449,7 +463,7 @@ export const LEAD_STATUS_OPTIONS_ES = [
   { value: "contacted", label: "Contactado" },
   { value: "quoted", label: "Cotización enviada" },
   { value: "scheduled", label: "Programado" },
-  { value: "completed", label: "Completado" },
+  { value: "completed", label: "Ganado" },
   { value: "lost", label: "Perdido" },
 ];
 
