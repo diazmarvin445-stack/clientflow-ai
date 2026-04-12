@@ -7,7 +7,6 @@ import {
   getDocs,
   query,
   where,
-  limit,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 /**
@@ -48,19 +47,39 @@ export function normalizeBusinessDocument(raw) {
   };
 }
 
-export async function fetchBusinessForOwner(db, ownerUid) {
-  const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid), limit(1));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  const docSnap = snap.docs[0];
-  return { id: docSnap.id, data: normalizeBusinessDocument(docSnap.data()) };
-}
-
 function toDate(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
   if (value instanceof Date) return value;
   return new Date(value);
+}
+
+/**
+ * Owner may have more than one `businesses` doc (e.g. repeated onboarding). `limit(1)` was
+ * non-deterministic — Dashboard/Solicitudes could read a different doc than the one used in
+ * `solicitar.html?businessId=…`, so leads looked “missing”. We always prefer the newest by `createdAt`.
+ */
+export async function fetchBusinessForOwner(db, ownerUid) {
+  const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const rows = snap.docs.map((d) => ({ id: d.id, raw: d.data() }));
+  rows.sort((a, b) => {
+    const ta = toDate(a.raw.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.raw.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  const best = rows[0];
+  if (rows.length > 1) {
+    console.warn(
+      `[ClientFlow] fetchBusinessForOwner: ${rows.length} business(es) for uid; using id=${best.id} (latest createdAt). Leads must use solicitar.html?businessId=${best.id} to match.`,
+    );
+  } else {
+    console.log(
+      `[ClientFlow] fetchBusinessForOwner: businesses/${best.id} (reads leads/clients from this doc id)`,
+    );
+  }
+  return { id: best.id, data: normalizeBusinessDocument(best.raw) };
 }
 
 function startOfLocalDay(d = new Date()) {
