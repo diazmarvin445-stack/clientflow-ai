@@ -289,13 +289,15 @@ export function generateCampaignRecommendations(businessData) {
   const businessName = norm(safe.businessName);
   const vertical = detectVertical(services, description, businessName);
 
-  const campaigns = buildThreeCampaigns(vertical, {
+  const built = buildThreeCampaigns(vertical, {
     businessName,
     businessDescription: description,
     serviceArea: norm(safe.serviceArea),
     services,
     serviceOtherDetail: norm(safe.serviceOtherDetail),
   });
+  /** Una sola sugerencia orientativa hasta integrar IA real e historial. */
+  const campaigns = built.slice(0, 1);
 
   const totalBudgetWeekly = campaigns.reduce((s, c) => s + c.budgetWeekly, 0);
   const estimatedLeadsWeekly = campaigns.reduce((s, c) => s + c.estimatedLeadsWeekly, 0);
