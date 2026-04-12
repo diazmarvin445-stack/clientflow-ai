@@ -135,6 +135,10 @@ export async function fetchDashboardMetrics(db, businessId) {
     return tb - ta;
   });
 
+  console.log(
+    `[ClientFlow] fetchDashboardMetrics: businesses/${businessId}/leads → ${recentLeadDocs.length} lead document(s) (for recents & counts)`,
+  );
+
   let jobsConfirmed = 0;
   let revenueSum = 0;
   jobsSnap.forEach((doc) => {
@@ -256,6 +260,9 @@ export async function fetchTeamMembersForBusiness(db, businessId) {
     const tb = toDate(b.createdAt)?.getTime() ?? 0;
     return tb - ta;
   });
+  console.log(
+    `[ClientFlow] fetchLeadsForBusiness (Solicitudes): businesses/${businessId}/leads → ${rows.length} document(s)`,
+  );
   return rows;
 }
 

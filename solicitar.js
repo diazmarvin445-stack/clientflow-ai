@@ -10,9 +10,6 @@ const SUCCESS_ID = "success-message";
 const ERROR_ID = "solicitar-config-error";
 const FILE_NAME_ID = "file-name";
 
-/** Temporary MVP fallback when query/hash have no businessId (remove before production). */
-const FALLBACK_BUSINESS_ID = "5YF2W5UyZAuOzq8kCISD";
-
 function getBusinessIdFromHash() {
   const h = window.location.hash || "";
   if (!h || h.indexOf("businessId=") === -1) return null;
@@ -114,8 +111,12 @@ function initFormSubmit(businessId) {
       createdAt: serverTimestamp(),
     };
 
+    const leadsPath = `businesses/${businessId}/leads`;
+
     try {
-      await addDoc(collection(db, "businesses", businessId, "leads"), payload);
+      const colRef = collection(db, "businesses", businessId, "leads");
+      const docRef = await addDoc(colRef, payload);
+      console.log("[ClientFlow solicitar] Lead write OK:", leadsPath, "docId:", docRef.id);
 
       form.classList.add("is-hidden");
       successEl.hidden = false;
@@ -127,7 +128,7 @@ function initFormSubmit(businessId) {
         fileNameEl.hidden = true;
       }
     } catch (err) {
-      console.error(err);
+      console.error("[ClientFlow solicitar] Lead write failed:", leadsPath, err);
       alert(
         "No se pudo enviar la solicitud. Comprueba tu conexión y que las reglas de Firestore permitan crear solicitudes públicas.",
       );
@@ -139,20 +140,43 @@ function initFormSubmit(businessId) {
   });
 }
 
+/**
+ * Resolves the tenant id for public lead creation. Must match `fetchBusinessForOwner` / Solicitudes.
+ * Order: ?businessId= → inline early script → #hash — never guess a default (would hide leads from the real owner).
+ */
+function resolveSolicitarBusinessId() {
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get("businessId");
+  if (fromQuery && String(fromQuery).trim() !== "") {
+    return String(fromQuery).trim();
+  }
+
+  if (typeof window !== "undefined" && window.__CF_SOLICITAR_BUSINESS_ID__) {
+    const early = String(window.__CF_SOLICITAR_BUSINESS_ID__).trim();
+    if (early) return early;
+  }
+
+  const fromHash = getBusinessIdFromHash();
+  if (fromHash && String(fromHash).trim() !== "") {
+    return String(fromHash).trim();
+  }
+
+  return null;
+}
+
 function boot() {
   bindFileNameHint();
 
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("businessId");
-  const queryTrimmed =
-    fromQuery && String(fromQuery).trim() !== "" ? String(fromQuery).trim() : null;
+  const businessId = resolveSolicitarBusinessId();
+  console.log(
+    "[ClientFlow solicitar] Resolved businessId:",
+    businessId ?? "(missing — enable form only with ?businessId=)",
+  );
 
-  const fromHash = getBusinessIdFromHash();
-  const hashTrimmed =
-    fromHash && String(fromHash).trim() !== "" ? String(fromHash).trim() : null;
-
-  let businessId = queryTrimmed || hashTrimmed || FALLBACK_BUSINESS_ID;
-  console.log("Using businessId:", businessId);
+  if (!businessId) {
+    showConfigError();
+    return;
+  }
 
   hideConfigError();
   preserveBusinessIdInNavLinks(businessId);
