@@ -139,7 +139,13 @@ function applyFormFromBusiness(data) {
   setVal("cfg-hours-from", data.hoursFrom || "");
   setVal("cfg-hours-to", data.hoursTo || "");
   setVal("cfg-timezone", data.timezone || "America/Mexico_City");
-  setVal("cfg-notify", data.notificationPreference || "email");
+  {
+    let np = typeof data.notificationPreference === "string" ? data.notificationPreference : "both";
+    if (np === "email") np = "both";
+    const allowed = ["both", "in_app", "minimal"];
+    if (!allowed.includes(np)) np = "both";
+    setVal("cfg-notify", np);
+  }
 
   const days = Array.isArray(data.days) ? data.days : [];
   document.querySelectorAll('input[name="cfg-day"]').forEach((cb) => {
@@ -168,7 +174,7 @@ async function saveSection(section) {
         commercialAddress: val("cfg-address").trim(),
         serviceArea: val("cfg-service-area").trim(),
       });
-      feedback("cfg-feedback-business", "Guardado correctamente", true);
+      feedback("cfg-feedback-business", "Cambios guardados", true);
     } else if (section === "brand") {
       const payload = {
         ...base,
@@ -181,7 +187,7 @@ async function saveSection(section) {
         payload.brandLogoDataUrl = pendingLogoDataUrl;
       }
       await updateDoc(ref, payload);
-      feedback("cfg-feedback-brand", "Guardado correctamente", true);
+      feedback("cfg-feedback-brand", "Cambios guardados", true);
     } else if (section === "marketing") {
       const rawB = val("cfg-mkt-budget").trim();
       const budget = rawB === "" ? null : Number(rawB);
@@ -192,7 +198,7 @@ async function saveSection(section) {
         marketingIdealAudience: val("cfg-ideal-audience").trim(),
         marketingMainServicesText: val("cfg-main-services").trim(),
       });
-      feedback("cfg-feedback-marketing", "Guardado correctamente", true);
+      feedback("cfg-feedback-marketing", "Cambios guardados", true);
     } else if (section === "platform") {
       const days = Array.from(document.querySelectorAll('input[name="cfg-day"]:checked')).map(
         (el) => el.value,
@@ -203,9 +209,9 @@ async function saveSection(section) {
         hoursTo: val("cfg-hours-to").trim(),
         days,
         timezone: val("cfg-timezone").trim(),
-        notificationPreference: val("cfg-notify").trim() || "email",
+        notificationPreference: val("cfg-notify").trim() || "both",
       });
-      feedback("cfg-feedback-platform", "Guardado correctamente", true);
+      feedback("cfg-feedback-platform", "Cambios guardados", true);
     }
 
     const business = await fetchBusinessForOwner(db, auth.currentUser.uid);
@@ -224,7 +230,7 @@ async function saveSection(section) {
           : section === "marketing"
             ? "cfg-feedback-marketing"
             : "cfg-feedback-platform";
-    feedback(fb, "No se pudo guardar. Revisa la conexión y las reglas.", false);
+    feedback(fb, "No se pudo guardar. Revisa tu conexión e inténtalo otra vez.", false);
   }
 }
 
@@ -242,14 +248,16 @@ async function toggleIntegration(key) {
     businessData.integrations[key] = { connected: next };
     renderIntegrationCards();
     if (foot) {
-      foot.textContent = next ? "Estado actualizado (simulación hasta OAuth)." : "Desconectado.";
+      foot.textContent = next
+        ? "Listo. Cuando activemos la conexión real, te avisamos aquí."
+        : "Quedó desconectado.";
       window.setTimeout(() => {
         if (foot) foot.textContent = "";
       }, 4000);
     }
   } catch (err) {
     console.error(err);
-    if (foot) foot.textContent = "No se pudo actualizar la integración.";
+    if (foot) foot.textContent = "No se pudo guardar el cambio. Inténtalo otra vez.";
   }
 }
 
@@ -261,7 +269,7 @@ function wireLogoFile() {
     const file = input.files && input.files[0];
     if (!file) return;
     if (file.size > 400 * 1024) {
-      alert("El archivo supera 400 KB. Elige una imagen más pequeña.");
+      alert("La imagen pesa más de 400 KB. Prueba con un archivo más liviano.");
       input.value = "";
       return;
     }
