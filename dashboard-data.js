@@ -47,6 +47,111 @@ export function normalizeBusinessDocument(raw) {
   };
 }
 
+/** Service checkbox values from onboarding (shared labels for UI + campaign defaults). */
+export const SERVICE_LABELS = {
+  "lawn-care": "Lawn Care",
+  landscaping: "Landscaping",
+  "tree-removal": "Tree Removal",
+  "pressure-washing": "Pressure Washing",
+  other: "Other",
+};
+
+/**
+ * Maps Configuración marketing goal (`cfg-mkt-goal`) values to a short campaign objective line.
+ * @param {string} [raw]
+ */
+function mapMarketingGoalToObjective(raw) {
+  const g = (typeof raw === "string" ? raw : "leads").toLowerCase().trim();
+  if (g === "branding") return "Dar a conocer mi negocio y reforzar marca";
+  if (g === "sales") return "Vender más y cerrar oportunidades";
+  if (g === "traffic") return "Recibir más llamadas o mensajes";
+  return "Conseguir más clientes (leads y solicitudes)";
+}
+
+function clipText(s, max) {
+  const t = typeof s === "string" ? s.trim() : "";
+  if (!t) return "";
+  return t.length <= max ? t : `${t.slice(0, Math.max(0, max - 1)).trim()}…`;
+}
+
+/**
+ * Build audience fallback from services checklist + optional "other" service detail.
+ * @param {Record<string, unknown>} d normalized business
+ */
+function buildAudienceHintFromServices(d) {
+  const services = Array.isArray(d.services) ? d.services : [];
+  const labels = services
+    .filter((s) => s !== "other")
+    .map((s) => SERVICE_LABELS[s] || s)
+    .filter(Boolean);
+  const other =
+    services.includes("other") && typeof d.serviceOtherDetail === "string" && d.serviceOtherDetail.trim()
+      ? d.serviceOtherDetail.trim()
+      : "";
+  const parts = [...labels, other].filter(Boolean);
+  if (!parts.length) return "";
+  return `Interesados en: ${parts.slice(0, 5).join(", ")}`;
+}
+
+/**
+ * Suggested generator field values from the logged-in business profile (onboarding + configuración).
+ * Used to prefill the form and to fill gaps when the user leaves a field empty.
+ *
+ * Sources: `serviceArea`, `marketingMonthlyBudget`, `marketingGoal`, `marketingIdealAudience`,
+ * `marketingMainServicesText`, `tagline`, `businessDescription`, `services` / `serviceOtherDetail`, `industry`.
+ *
+ * @param {Record<string, unknown>} raw Firestore business document (or normalized subset).
+ * @returns {{ goal: string, offer: string, location: string, budget: string, audience: string, platformPref: string }}
+ */
+export function getCampaignGeneratorProfileDefaults(raw) {
+  const d = normalizeBusinessDocument(raw || {});
+
+  const location = typeof d.serviceArea === "string" ? d.serviceArea.trim() : "";
+
+  let audience = typeof d.marketingIdealAudience === "string" ? d.marketingIdealAudience.trim() : "";
+  if (!audience) {
+    audience = buildAudienceHintFromServices(d);
+  }
+  if (!audience && typeof d.industry === "string" && d.industry.trim()) {
+    audience = `Sector: ${d.industry.trim()}`;
+  }
+
+  let budgetStr = "";
+  const mbRaw = d.marketingMonthlyBudget;
+  const mb =
+    typeof mbRaw === "number"
+      ? mbRaw
+      : typeof mbRaw === "string" && mbRaw.trim()
+        ? parseFloat(mbRaw.replace(/[^\d.]/g, ""))
+        : NaN;
+  if (Number.isFinite(mb) && mb > 0) {
+    const weeklyUsd = Math.round((mb * 12) / 52);
+    budgetStr = String(Math.max(50, Math.min(5000, weeklyUsd)));
+  }
+
+  const goal = mapMarketingGoalToObjective(
+    typeof d.marketingGoal === "string" ? d.marketingGoal : "leads",
+  );
+
+  let offer = "";
+  const mst = typeof d.marketingMainServicesText === "string" ? d.marketingMainServicesText.trim() : "";
+  const tag = typeof d.tagline === "string" ? d.tagline.trim() : "";
+  if (mst) offer = mst;
+  else if (tag) offer = tag;
+  else if (typeof d.businessDescription === "string" && d.businessDescription.trim()) {
+    offer = clipText(d.businessDescription, 160);
+  }
+
+  return {
+    goal,
+    offer,
+    location,
+    budget: budgetStr,
+    audience,
+    platformPref: "auto",
+  };
+}
+
 function toDate(value) {
   if (!value) return null;
   if (typeof value.toDate === "function") return value.toDate();
@@ -404,14 +509,6 @@ export function buildClientPayloadFromLead(lead) {
 
   return payload;
 }
-
-export const SERVICE_LABELS = {
-  "lawn-care": "Lawn Care",
-  landscaping: "Landscaping",
-  "tree-removal": "Tree Removal",
-  "pressure-washing": "Pressure Washing",
-  other: "Other",
-};
 
 export function formatBusinessMeta(businessData) {
   if (!businessData || typeof businessData !== "object") {
