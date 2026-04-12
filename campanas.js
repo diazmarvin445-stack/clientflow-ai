@@ -86,7 +86,7 @@ function platformClass(platform) {
 function showCampLaunchSuccessToast(message) {
   const el = document.getElementById("camp-launch-toast");
   if (!el) return;
-  el.textContent = message || "Campaña lanzada correctamente";
+  el.textContent = message || "Campaña guardada";
   el.hidden = false;
   const prev = showCampLaunchSuccessToast._timer;
   if (prev) clearTimeout(prev);
@@ -292,7 +292,7 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
   try {
     await addDoc(campaignsCol, payload);
     markLaunchButtonLaunched(btn);
-    showCampLaunchSuccessToast();
+    showCampLaunchSuccessToast("Campaña guardada");
     await refreshCampaignsHub(businessId);
   } catch (err) {
     console.error("Campaign save failed", err);
@@ -376,7 +376,7 @@ function renderCampaignCard(c, businessId, launchedIds) {
   const btnLaunch = document.createElement("button");
   btnLaunch.type = "button";
   btnLaunch.className = "dash-quick-btn dash-quick-btn--primary camp-ai-btn-launch";
-  btnLaunch.textContent = "Lanzar Campaña";
+  btnLaunch.textContent = "Guardar campaña";
 
   const already = launchedIds.has(c.id);
   if (already) {
@@ -406,7 +406,7 @@ function renderRecommendationSummary(summary) {
   if (!summary) return;
   setText(
     "camp-reco-summary-line",
-    `${summary.campaignsSuggested} propuestas · ${formatUsd(summary.totalBudgetWeekly)}/sem combinado · ~${summary.estimatedLeadsWeekly} leads/semana estimados · foco ${summary.bestPlatformLabel}`,
+    `Vista previa orientativa · ${formatUsd(summary.totalBudgetWeekly)}/sem · ~${summary.estimatedLeadsWeekly} leads/semana estimados · plataforma ${summary.bestPlatformLabel}`,
   );
 }
 
@@ -455,7 +455,7 @@ async function renderCampaignsPage(business) {
     setText("camp-reco-summary-line", "");
     if (noteEl) {
       noteEl.textContent =
-        "Completa el onboarding para guardar tu negocio en Firestore y generar campañas aquí.";
+        "Completa el onboarding para guardar tu negocio en Firestore y usar el generador aquí.";
     }
     return;
   }
@@ -491,7 +491,7 @@ async function renderCampaignsPage(business) {
   } catch (e) {
     console.error(LOG_PREFIX, "generateCampaignRecommendations failed:", e);
     showFirestoreError(
-      "No se pudieron calcular las campañas a partir del perfil. Revisa la consola o vuelve a guardar el onboarding.",
+      "No se pudo calcular la sugerencia a partir del perfil. Revisa la consola o vuelve a guardar el onboarding.",
     );
     listEl.hidden = true;
     listEl.innerHTML = "";
@@ -519,7 +519,7 @@ async function renderCampaignsPage(business) {
 
   if (noteEl) {
     noteEl.textContent =
-      "El generador superior crea borradores desde tus campos (simulación hasta conectar OpenAI). Las recomendaciones inferiores se calculan desde tu perfil guardado.";
+      "El generador usa tus campos; la sugerencia inferior resume tu perfil guardado. Ambas son simulaciones hasta OpenAI e historial.";
   }
 }
 
@@ -573,65 +573,84 @@ async function saveGeneratedCampaign(businessId, pack) {
   });
 }
 
+function runCampaignGenerator() {
+  const b = genState.business;
+  if (!b) return;
+  const genBtn = document.getElementById("camp-gen-generate-btn");
+  const regenBtn = document.getElementById("camp-gen-regenerate-btn");
+  const saveBtn = document.getElementById("camp-gen-save-btn");
+  hideCampaignSaveError();
+  const hint = document.getElementById("camp-gen-save-hint");
+  const note = document.getElementById("camp-gen-output-note");
+  const outWrap = document.getElementById("camp-gen-output");
+  const inputs = {
+    goal: genFormVal("camp-gen-goal"),
+    offer: genFormVal("camp-gen-offer"),
+    location: genFormVal("camp-gen-location"),
+    budget: genFormVal("camp-gen-budget"),
+    audience: genFormVal("camp-gen-audience"),
+    platformPref: (() => {
+      const el = document.getElementById("camp-gen-platform");
+      return el && "value" in el ? String(el.value) : "auto";
+    })(),
+  };
+
+  const displayName =
+    (typeof b.data.businessName === "string" && b.data.businessName.trim()) || "Tu negocio";
+  if (genBtn) {
+    genBtn.disabled = true;
+    genBtn.setAttribute("aria-busy", "true");
+  }
+  if (regenBtn) {
+    regenBtn.disabled = true;
+    regenBtn.setAttribute("aria-busy", "true");
+  }
+  if (note) note.textContent = "Generando vista previa…";
+  if (outWrap) outWrap.hidden = false;
+  if (hint) hint.textContent = "";
+
+  window.setTimeout(() => {
+    try {
+      const output = mockGenerateCampaignFromInputs(inputs, displayName);
+      genState.last = { inputs, output };
+      fillGeneratorOutput(output);
+      if (note) {
+        note.textContent =
+          "Vista previa simulada. Conecta OpenAI más adelante para textos a medida e historial.";
+      }
+      if (saveBtn) saveBtn.disabled = false;
+      const resultCard = document.getElementById("camp-gen-result-card");
+      if (resultCard) {
+        window.requestAnimationFrame(() => {
+          resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    } catch (e) {
+      console.error(LOG_PREFIX, "Generator mock failed:", e);
+      if (note) note.textContent = "No se pudo generar. Inténtalo de nuevo.";
+      if (outWrap) outWrap.hidden = true;
+    } finally {
+      if (genBtn) {
+        genBtn.disabled = false;
+        genBtn.removeAttribute("aria-busy");
+      }
+      if (regenBtn) {
+        regenBtn.disabled = false;
+        regenBtn.removeAttribute("aria-busy");
+      }
+    }
+  }, 420);
+}
+
 function wireCampaignGenerator() {
   const genBtn = document.getElementById("camp-gen-generate-btn");
+  const regenBtn = document.getElementById("camp-gen-regenerate-btn");
   const saveBtn = document.getElementById("camp-gen-save-btn");
   if (!genBtn || !saveBtn || genBtn.dataset.wired === "1") return;
   genBtn.dataset.wired = "1";
 
-  genBtn.addEventListener("click", () => {
-    const b = genState.business;
-    if (!b) return;
-    hideCampaignSaveError();
-    const hint = document.getElementById("camp-gen-save-hint");
-    const note = document.getElementById("camp-gen-output-note");
-    const outWrap = document.getElementById("camp-gen-output");
-    const inputs = {
-      goal: genFormVal("camp-gen-goal"),
-      offer: genFormVal("camp-gen-offer"),
-      location: genFormVal("camp-gen-location"),
-      budget: genFormVal("camp-gen-budget"),
-      audience: genFormVal("camp-gen-audience"),
-      platformPref: (() => {
-        const el = document.getElementById("camp-gen-platform");
-        return el && "value" in el ? String(el.value) : "auto";
-      })(),
-    };
-
-    const displayName =
-      (typeof b.data.businessName === "string" && b.data.businessName.trim()) || "Tu negocio";
-    genBtn.disabled = true;
-    genBtn.setAttribute("aria-busy", "true");
-    if (note) note.textContent = "Generando borrador…";
-    if (outWrap) outWrap.hidden = false;
-    if (hint) hint.textContent = "";
-
-    window.setTimeout(() => {
-      try {
-        const output = mockGenerateCampaignFromInputs(inputs, displayName);
-        genState.last = { inputs, output };
-        fillGeneratorOutput(output);
-        if (note) {
-          note.textContent =
-            "Borrador generado (simulación). Conecta OpenAI más adelante para textos a medida.";
-        }
-        if (saveBtn) saveBtn.disabled = false;
-        const resultCard = document.getElementById("camp-gen-result-card");
-        if (resultCard) {
-          window.requestAnimationFrame(() => {
-            resultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          });
-        }
-      } catch (e) {
-        console.error(LOG_PREFIX, "Generator mock failed:", e);
-        if (note) note.textContent = "No se pudo generar. Inténtalo de nuevo.";
-        if (outWrap) outWrap.hidden = true;
-      } finally {
-        genBtn.disabled = false;
-        genBtn.removeAttribute("aria-busy");
-      }
-    }, 420);
-  });
+  genBtn.addEventListener("click", () => runCampaignGenerator());
+  if (regenBtn) regenBtn.addEventListener("click", () => runCampaignGenerator());
 
   saveBtn.addEventListener("click", async () => {
     const b = genState.business;
@@ -645,7 +664,7 @@ function wireCampaignGenerator() {
     try {
       await saveGeneratedCampaign(b.id, pack);
       showCampLaunchSuccessToast("Campaña guardada");
-      if (hint) hint.textContent = "Listo — aparece en «Tus campañas».";
+      if (hint) hint.textContent = "Listo — aparece en «Campañas guardadas».";
       await refreshCampaignsHub(b.id);
       window.setTimeout(() => {
         if (hint) hint.textContent = "";
@@ -664,11 +683,11 @@ function wireCampaignGenerator() {
   });
 }
 
-function wireNewCampaignCta() {
-  const btn = document.getElementById("camp-new-campaign-btn");
+function wireGeneratorScrollCta() {
+  const btn = document.getElementById("camp-generator-scroll-btn");
   if (!btn) return;
   btn.addEventListener("click", () => {
-    const target = document.getElementById("camp-gen-section") || document.getElementById("ai-campaign-recommendations");
+    const target = document.getElementById("camp-gen-section");
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
       target.classList.add("camp-reco-highlight");
@@ -712,7 +731,7 @@ async function loadCampanasForUser(user) {
 
 function boot() {
   initDashShell({ auth });
-  wireNewCampaignCta();
+  wireGeneratorScrollCta();
   wireCampaignGenerator();
 
   onAuthStateChanged(auth, (user) => {

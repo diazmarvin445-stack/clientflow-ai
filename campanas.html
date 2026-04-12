@@ -108,8 +108,8 @@
             </div>
             <h2 class="camp-hub-hero-title">Centro de Campañas IA</h2>
             <p class="camp-hub-hero-subtitle">
-              Controla el rendimiento de tus anuncios, lanza nuevas ideas con IA y mantén el crecimiento
-              de tu negocio local desde un solo lugar.
+              Revisa el rendimiento de lo que ya guardaste, genera una vista previa orientativa con IA y
+              consolida tu estrategia local desde aquí.
             </p>
           </header>
 
@@ -169,22 +169,21 @@
             </section>
 
             <div class="camp-hub-cta">
-              <button type="button" class="camp-cta-principal" id="camp-new-campaign-btn">
-                <span class="camp-cta-principal-plus" aria-hidden="true">+</span>
-                Nueva Campaña IA
+              <button type="button" class="camp-cta-principal" id="camp-generator-scroll-btn">
+                Generar Campaña IA
               </button>
               <p class="camp-hub-cta-hint">
-                Te llevamos a las recomendaciones generadas para tu perfil para lanzar en segundos.
+                Abre el generador y obtén una vista previa orientativa para tu negocio.
               </p>
             </div>
 
             <section class="camp-gen-panel dash-panel" id="camp-gen-section" aria-labelledby="camp-gen-title">
               <div class="camp-gen-head">
                 <p class="camp-gen-kicker">IA · ClientFlow</p>
-                <h2 class="camp-gen-title" id="camp-gen-title">Generador de campañas con IA</h2>
+                <h2 class="camp-gen-title" id="camp-gen-title">Generador de campaña con IA</h2>
                 <p class="camp-gen-lead">
-                  Define tu objetivo y tu oferta; obtén titular, texto de anuncio, CTA y recomendaciones
-                  listas para usar en anuncios o redes.
+                  Completa los campos y genera una sola vista previa (simulación hasta conectar OpenAI).
+                  Puedes regenerarla o guardarla cuando te encaje.
                 </p>
               </div>
               <form class="camp-gen-form" id="camp-gen-form" novalidate>
@@ -265,7 +264,7 @@
                 <div class="camp-gen-result-card" id="camp-gen-result-card">
                   <header class="camp-gen-result-header">
                     <span class="camp-gen-result-badge" aria-hidden="true">IA</span>
-                    <h3 class="camp-gen-result-title">Campaña generada</h3>
+                    <h3 class="camp-gen-result-title">Vista previa de campaña sugerida</h3>
                     <p class="camp-gen-result-lead" id="camp-gen-output-note" role="status"></p>
                   </header>
                   <div class="camp-gen-result-body">
@@ -302,14 +301,19 @@
                     </section>
                   </div>
                   <footer class="camp-gen-result-footer">
-                    <button
-                      type="button"
-                      class="dash-quick-btn dash-quick-btn--primary camp-gen-save-primary"
-                      id="camp-gen-save-btn"
-                      disabled
-                    >
-                      Guardar campaña
-                    </button>
+                    <div class="camp-gen-result-actions">
+                      <button type="button" class="dash-quick-btn camp-gen-regenerate-btn" id="camp-gen-regenerate-btn">
+                        Regenerar
+                      </button>
+                      <button
+                        type="button"
+                        class="dash-quick-btn dash-quick-btn--primary camp-gen-save-primary"
+                        id="camp-gen-save-btn"
+                        disabled
+                      >
+                        Guardar campaña
+                      </button>
+                    </div>
                     <span class="camp-gen-save-hint" id="camp-gen-save-hint" aria-live="polite"></span>
                   </footer>
                 </div>
@@ -318,8 +322,8 @@
 
             <section class="camp-live-block" aria-labelledby="camp-live-title">
               <div class="camp-section-head">
-                <h2 class="camp-section-title" id="camp-live-title">Tus campañas</h2>
-                <p class="camp-section-sub">Presupuesto, alcance y rendimiento por campaña</p>
+                <h2 class="camp-section-title" id="camp-live-title">Campañas guardadas</h2>
+                <p class="camp-section-sub">Lo que ya guardaste en Firestore: presupuesto, alcance y rendimiento</p>
               </div>
 
               <div
@@ -329,9 +333,9 @@
               >
                 <div class="camp-live-empty-inner">
                   <div class="camp-live-empty-icon" aria-hidden="true"></div>
-                  <p class="camp-live-empty-title">Aún no tienes campañas creadas.</p>
+                  <p class="camp-live-empty-title">Aún no has guardado ninguna campaña.</p>
                   <p class="camp-live-empty-text">
-                    Crea tu primera campaña con IA para empezar a atraer clientes.
+                    Genera una vista previa arriba y pulsa «Guardar campaña» para verla aquí.
                   </p>
                 </div>
               </div>
@@ -339,31 +343,16 @@
               <div id="camp-live-list" class="camp-live-list"></div>
             </section>
 
-            <section class="camp-builder-card" id="camp-ai-builder" aria-labelledby="camp-builder-title">
-              <div class="camp-builder-card-inner">
-                <div class="camp-builder-kicker">IA · ClientFlow</div>
-                <h2 class="camp-builder-title" id="camp-builder-title">Constructor de campañas con IA</h2>
-                <p class="camp-builder-lead">
-                  Nuestra IA te ayuda a generar campañas listas para publicar, copy de anuncios, ideas de
-                  segmentación y recomendaciones de optimización para que inviertas mejor cada dólar.
-                </p>
-                <ul class="camp-builder-list">
-                  <li>Propuestas de creatividades y mensajes alineados con tu servicio</li>
-                  <li>Sugerencias de audiencia y zona según tu perfil guardado</li>
-                  <li>Indicadores estimados de alcance y leads antes de lanzar</li>
-                </ul>
-              </div>
-            </section>
           </div>
 
           <div class="camp-ai-list-wrap">
             <div class="camp-reco-head">
-              <h2 class="camp-section-title" id="camp-reco-title">Recomendaciones para tu negocio</h2>
+              <h2 class="camp-section-title" id="camp-reco-title">Sugerencia según tu perfil</h2>
               <p class="camp-reco-line" id="camp-reco-summary-line"></p>
             </div>
 
             <p id="camp-loading" class="camp-loading" role="status" aria-live="polite">
-              Preparando recomendaciones…
+              Preparando sugerencia…
             </p>
 
             <div id="camp-firestore-error" class="camp-firestore-error" hidden role="alert">
@@ -378,7 +367,7 @@
               <p class="camp-empty-state-title">No encontramos un perfil de negocio</p>
               <p class="camp-empty-state-text" id="camp-empty-state-text">
                 No hay ningún documento en «businesses» con tu usuario como propietario (<code>ownerUid</code>).
-                Completa el onboarding con la misma sesión para generar campañas aquí.
+                Completa el onboarding con la misma sesión para vincular tu negocio y usar el generador.
               </p>
               <a href="onboarding.html" class="dash-quick-btn dash-quick-btn--primary">Completar perfil</a>
             </div>
@@ -386,15 +375,15 @@
             <section
               class="camp-ai-list"
               id="ai-campaign-recommendations"
-              aria-label="Campañas recomendadas por IA"
+              aria-label="Sugerencia de campaña según el perfil"
               data-campaign-source="pending"
               hidden
             ></section>
           </div>
 
           <p class="camp-demo-note" role="note">
-            Las métricas superiores reflejan tus campañas guardadas en Firestore. Las recomendaciones usan
-            tu perfil (simulación orientativa hasta conectar el modelo de IA).
+            Las métricas superiores y «Campañas guardadas» reflejan lo almacenado en Firestore. El generador
+            y la sugerencia de perfil son simulaciones orientativas hasta conectar OpenAI e historial.
           </p>
         </div>
       </main>
