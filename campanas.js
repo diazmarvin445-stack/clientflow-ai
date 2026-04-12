@@ -12,6 +12,7 @@ import {
   fetchLaunchedRecommendationIds,
   formatBusinessMeta,
   formatShortDate,
+  getCampaignGeneratorProfileDefaults,
   initialsFromName,
 } from "./dashboard-data.js";
 import { generateCampaignRecommendations, formatUsd } from "./campanas-campaign-sim.js";
@@ -22,11 +23,12 @@ const LOG_PREFIX = "[ClientFlow Campañas]";
 /** Set false to silence temporary generator wiring logs. */
 const DEBUG_CAMPAIGN_GENERATOR = true;
 
-/** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number }} */
+/** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number, prefillBusinessId: string | null }} */
 const genState = {
   business: null,
   last: null,
   genVariation: 0,
+  prefillBusinessId: null,
 };
 
 function logProfileDebug(business) {
@@ -449,6 +451,8 @@ async function renderCampaignsPage(business) {
 
   if (!business) {
     genState.business = null;
+    genState.prefillBusinessId = null;
+    clearGeneratorFormFields();
     resetGeneratorUI();
     listEl.hidden = true;
     listEl.innerHTML = "";
@@ -464,6 +468,11 @@ async function renderCampaignsPage(business) {
   }
 
   genState.business = business;
+
+  if (genState.prefillBusinessId !== business.id) {
+    applyGeneratorPrefillFromBusiness(data);
+    genState.prefillBusinessId = business.id;
+  }
 
   if (emptyEl) emptyEl.hidden = true;
   setHubVisible(true);
@@ -549,6 +558,52 @@ function readGeneratorInputsFromDom() {
   };
 }
 
+function setGeneratorFormField(id, value) {
+  const el = document.getElementById(id);
+  if (el && "value" in el) el.value = value ?? "";
+}
+
+/** Vacía el generador si no hay negocio vinculado. */
+function clearGeneratorFormFields() {
+  setGeneratorFormField("camp-gen-goal", "");
+  setGeneratorFormField("camp-gen-offer", "");
+  setGeneratorFormField("camp-gen-location", "");
+  setGeneratorFormField("camp-gen-budget", "");
+  setGeneratorFormField("camp-gen-audience", "");
+  setGeneratorFormField("camp-gen-platform", "auto");
+}
+
+/**
+ * Rellena el formulario con datos del perfil (una vez por negocio al cargar).
+ * @param {Record<string, unknown>} data
+ */
+function applyGeneratorPrefillFromBusiness(data) {
+  const d = getCampaignGeneratorProfileDefaults(data);
+  setGeneratorFormField("camp-gen-goal", d.goal);
+  setGeneratorFormField("camp-gen-offer", d.offer);
+  setGeneratorFormField("camp-gen-location", d.location);
+  setGeneratorFormField("camp-gen-budget", d.budget);
+  setGeneratorFormField("camp-gen-audience", d.audience);
+  setGeneratorFormField("camp-gen-platform", d.platformPref || "auto");
+}
+
+/**
+ * Valores efectivos para el mock: campo del formulario si el usuario escribió algo; si no, perfil.
+ * @param {ReturnType<typeof readGeneratorInputsFromDom>} fromDom
+ * @param {ReturnType<typeof getCampaignGeneratorProfileDefaults>} profile
+ */
+function mergeCampaignGeneratorInputs(fromDom, profile) {
+  const nz = (s) => (typeof s === "string" && s.trim() ? s.trim() : "");
+  return {
+    goal: nz(fromDom.goal) || nz(profile.goal) || "",
+    offer: nz(fromDom.offer) || nz(profile.offer) || "",
+    location: nz(fromDom.location) || nz(profile.location) || "",
+    budget: nz(fromDom.budget) || nz(profile.budget) || "",
+    audience: nz(fromDom.audience) || nz(profile.audience) || "",
+    platformPref: nz(fromDom.platformPref) || nz(profile.platformPref) || "auto",
+  };
+}
+
 function hashStringForDebug(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
@@ -619,14 +674,16 @@ function runCampaignGenerator() {
   const note = document.getElementById("camp-gen-output-note");
   const outWrap = document.getElementById("camp-gen-output");
   const inputsAtEvent = readGeneratorInputsFromDom();
+  const profileDefaults = getCampaignGeneratorProfileDefaults(b.data);
   if (DEBUG_CAMPAIGN_GENERATOR) {
-    console.log(`${LOG_PREFIX} [gen] DOM inputs at click (runCampaignGenerator)`, {
+    console.log(`${LOG_PREFIX} [gen] DOM inputs at click`, {
       goal: inputsAtEvent.goal,
       offer: inputsAtEvent.offer,
       location: inputsAtEvent.location,
       budget: inputsAtEvent.budget,
       audience: inputsAtEvent.audience,
       platformPref: inputsAtEvent.platformPref,
+      profileDefaults,
     });
   }
 
@@ -646,22 +703,19 @@ function runCampaignGenerator() {
 
   window.setTimeout(() => {
     try {
-      const inputs = readGeneratorInputsFromDom();
+      const fromDom = readGeneratorInputsFromDom();
+      const diverged = JSON.stringify(fromDom) !== JSON.stringify(inputsAtEvent);
+      const inputs = mergeCampaignGeneratorInputs(fromDom, profileDefaults);
       if (DEBUG_CAMPAIGN_GENERATOR) {
-        const diverged = JSON.stringify(inputs) !== JSON.stringify(inputsAtEvent);
-        console.log(`${LOG_PREFIX} [gen] inputs passed to mockGenerateCampaignFromInputs`, {
-          goal: inputs.goal,
-          offer: inputs.offer,
-          location: inputs.location,
-          budget: inputs.budget,
-          audience: inputs.audience,
-          platformPref: inputs.platformPref,
+        console.log(`${LOG_PREFIX} [gen] merged inputs → mockGenerateCampaignFromInputs`, {
+          fromDom,
+          merged: inputs,
           reReadMatchesClick: !diverged,
         });
         if (diverged) {
-          console.warn(`${LOG_PREFIX} [gen] inputs at click vs pre-mock differ (IME/autofill?)`, {
+          console.warn(`${LOG_PREFIX} [gen] DOM at click vs pre-mock differ (IME/autofill?)`, {
             atClick: inputsAtEvent,
-            preMock: inputs,
+            preMock: fromDom,
           });
         }
       }

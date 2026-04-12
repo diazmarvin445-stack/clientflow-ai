@@ -3655,6 +3655,15 @@ a.dash-quick-tile {
   max-width: 44rem;
 }
 
+.camp-gen-profile-hint {
+  margin: 0.65rem 0 0;
+  max-width: 44rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 .camp-gen-form {
   padding: 1.15rem 1.35rem 0.25rem;
 }
