@@ -64,6 +64,16 @@
         }
 
         var id = bidQ || bidH;
+        if (!id) {
+          var hrefMatch = (window.location.href || "").match(/[?&#]businessId=([^&]+)/i);
+          if (hrefMatch && hrefMatch[1]) {
+            try {
+              id = decodeURIComponent(hrefMatch[1]).trim();
+            } catch (e) {
+              id = hrefMatch[1].trim();
+            }
+          }
+        }
         if (id) {
           window.__CF_SOLICITAR_BUSINESS_ID__ = id;
           console.log("businessId found:", id);

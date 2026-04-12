@@ -117,11 +117,14 @@ export async function fetchLaunchedRecommendationIds(db, businessId) {
   return ids;
 }
 
-export async function fetchDashboardMetrics(db, businessId) {
-  const [leadsSnap, jobsSnap, campaignsSnap] = await Promise.all([
-    getDocs(collection(db, "businesses", businessId, "leads")),
+/**
+ * @param {string | null} [ownerUidForMergedLeads] If set, merges leads from ALL `businesses` docs with this owner (fixes mismatched solicitar `businessId` vs newest `fetchBusinessForOwner` id).
+ */
+export async function fetchDashboardMetrics(db, businessId, ownerUidForMergedLeads = null) {
+  const [jobsSnap, campaignsSnap, recentLeadDocs] = await Promise.all([
     getDocs(collection(db, "businesses", businessId, "jobs")),
     getDocs(collection(db, "businesses", businessId, "campaigns")),
+    fetchLeadsForBusiness(db, businessId, ownerUidForMergedLeads || undefined),
   ]);
 
   const todayStart = startOfLocalDay();
@@ -133,11 +136,8 @@ export async function fetchDashboardMetrics(db, businessId) {
 
   let leadsToday = 0;
   let leadsYesterday = 0;
-  const recentLeadDocs = [];
 
-  /** Solicitudes públicas (`solicitar.html`) → `businesses/{businessId}/leads` (customerName, service, status, createdAt, …) */
-  leadsSnap.forEach((doc) => {
-    const row = doc.data();
+  for (const row of recentLeadDocs) {
     const created = toDate(row.createdAt);
     if (created && created >= todayStart && created <= todayEnd) {
       leadsToday += 1;
@@ -145,17 +145,10 @@ export async function fetchDashboardMetrics(db, businessId) {
     if (created && created >= yesterdayStart && created <= yesterdayEnd) {
       leadsYesterday += 1;
     }
-    recentLeadDocs.push({ ...row, id: doc.id });
-  });
-
-  recentLeadDocs.sort((a, b) => {
-    const ta = toDate(a.createdAt)?.getTime() ?? 0;
-    const tb = toDate(b.createdAt)?.getTime() ?? 0;
-    return tb - ta;
-  });
+  }
 
   console.log(
-    `[ClientFlow] fetchDashboardMetrics: businesses/${businessId}/leads → ${recentLeadDocs.length} lead document(s) (for recents & counts)`,
+    `[ClientFlow] fetchDashboardMetrics: businessId=${businessId} mergedOwnerUid=${ownerUidForMergedLeads || "(single path)"} recentLeads count=${recentLeadDocs.length}`,
   );
 
   let jobsConfirmed = 0;
@@ -231,19 +224,43 @@ export async function fetchDashboardMetrics(db, businessId) {
 }
 
 /**
- * All leads under `businesses/{businessId}/leads`, newest `createdAt` first.
+ * All leads under `businesses/{businessId}/leads` (or every owned business if `ownerUidMerge` is set).
+ * Each row includes `_cfBusinessId` for writes (Solicitudes) when multiple tenant docs exist.
+ * Newest `createdAt` first.
  */
-export async function fetchLeadsForBusiness(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "leads"));
+export async function fetchLeadsForBusiness(db, businessId, ownerUidMerge) {
+  let ids;
+  if (ownerUidMerge) {
+    const snap = await getDocs(
+      query(collection(db, "businesses"), where("ownerUid", "==", ownerUidMerge)),
+    );
+    ids = snap.docs.map((d) => d.id);
+  } else {
+    ids = businessId ? [businessId] : [];
+  }
+  if (!ids.length) {
+    console.log("[ClientFlow] fetchLeadsForBusiness: no business id(s), count=0");
+    return [];
+  }
+
+  const snaps = await Promise.all(
+    ids.map((bid) => getDocs(collection(db, "businesses", bid, "leads"))),
+  );
   const rows = [];
-  snap.forEach((docSnap) => {
-    rows.push({ id: docSnap.id, ...docSnap.data() });
+  snaps.forEach((leadSnap, idx) => {
+    const bid = ids[idx];
+    leadSnap.forEach((docSnap) => {
+      rows.push({ id: docSnap.id, _cfBusinessId: bid, ...docSnap.data() });
+    });
   });
   rows.sort((a, b) => {
     const ta = toDate(a.createdAt)?.getTime() ?? 0;
     const tb = toDate(b.createdAt)?.getTime() ?? 0;
     return tb - ta;
   });
+  console.log(
+    `[ClientFlow] fetchLeadsForBusiness: paths ${ids.map((id) => `businesses/${id}/leads`).join(", ")} → count=${rows.length}`,
+  );
   return rows;
 }
 
@@ -280,7 +297,7 @@ export async function fetchTeamMembersForBusiness(db, businessId) {
     return tb - ta;
   });
   console.log(
-    `[ClientFlow] fetchLeadsForBusiness (Solicitudes): businesses/${businessId}/leads → ${rows.length} document(s)`,
+    `[ClientFlow] fetchTeamMembersForBusiness: businesses/${businessId}/teamMembers → ${rows.length} document(s)`,
   );
   return rows;
 }

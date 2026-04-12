@@ -211,6 +211,10 @@ function buildConvertSection(article, businessId, leadRef) {
 }
 
 function buildLeadCard(businessId, lead) {
+  const leadBusinessId =
+    typeof lead._cfBusinessId === "string" && lead._cfBusinessId.trim()
+      ? lead._cfBusinessId.trim()
+      : businessId;
   const id = lead.id;
   const leadRef = { ...lead, id };
   const name =
@@ -340,7 +344,7 @@ function buildLeadCard(businessId, lead) {
     article.appendChild(descBlock);
   }
 
-  const convertEl = buildConvertSection(article, businessId, leadRef);
+  const convertEl = buildConvertSection(article, leadBusinessId, leadRef);
   if (convertEl) article.appendChild(convertEl);
 
   const details = document.createElement("details");
@@ -387,7 +391,7 @@ function buildLeadCard(businessId, lead) {
     select.disabled = true;
     statusHint.hidden = true;
     try {
-      await updateDoc(doc(db, "businesses", businessId, "leads", id), {
+      await updateDoc(doc(db, "businesses", leadBusinessId, "leads", id), {
         status: next,
         updatedAt: serverTimestamp(),
       });
@@ -396,7 +400,7 @@ function buildLeadCard(businessId, lead) {
 
       const norm = normalizeLeadStatus(next);
       if (norm === "completed") {
-        const conv = await convertLeadToClientRecord(businessId, leadRef);
+        const conv = await convertLeadToClientRecord(leadBusinessId, leadRef);
         if (conv === "error") {
           console.error(
             "[ClientFlow] Estado guardado como Ganado, pero la creación automática del cliente falló. Lead:",
@@ -405,7 +409,7 @@ function buildLeadCard(businessId, lead) {
         }
       }
 
-      refreshConvertUI(article, businessId, leadRef);
+      refreshConvertUI(article, leadBusinessId, leadRef);
     } catch (err) {
       console.error(err);
       select.value = prev;
@@ -424,7 +428,7 @@ function buildLeadCard(businessId, lead) {
     saveBtn.setAttribute("aria-busy", "true");
     statusHint.hidden = true;
     try {
-      await updateDoc(doc(db, "businesses", businessId, "leads", id), {
+      await updateDoc(doc(db, "businesses", leadBusinessId, "leads", id), {
         notes: text,
         updatedAt: serverTimestamp(),
       });
@@ -475,7 +479,13 @@ async function loadSolicitudesForUser(user) {
 
   let leads;
   try {
-    leads = await fetchLeadsForBusiness(db, business.id);
+    console.log(
+      "[ClientFlow solicitudes] Reading leads for owner; primary businessId=",
+      business.id,
+      "uid=",
+      user.uid,
+    );
+    leads = await fetchLeadsForBusiness(db, business.id, user.uid);
   } catch (err) {
     console.error(err);
     showLoadError("No se pudieron cargar las solicitudes. Inténtalo de nuevo.");

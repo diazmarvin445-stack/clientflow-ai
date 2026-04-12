@@ -32,26 +32,12 @@ function preserveBusinessIdInNavLinks(businessId) {
 
 function showConfigError() {
   const err = document.getElementById(ERROR_ID);
-  const form = document.getElementById(FORM_ID);
   if (err) err.hidden = false;
-  if (form) {
-    form.setAttribute("aria-disabled", "true");
-    form.querySelectorAll("input, select, textarea, button").forEach((el) => {
-      el.disabled = true;
-    });
-  }
 }
 
 function hideConfigError() {
   const err = document.getElementById(ERROR_ID);
-  const form = document.getElementById(FORM_ID);
   if (err) err.hidden = true;
-  if (form) {
-    form.removeAttribute("aria-disabled");
-    form.querySelectorAll("input, select, textarea, button").forEach((el) => {
-      el.disabled = false;
-    });
-  }
 }
 
 function bindFileNameHint() {
@@ -81,7 +67,10 @@ function initFormSubmit(businessId) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    if (!businessId) return;
+    if (!businessId) {
+      console.error("[ClientFlow solicitar] Submit blocked: missing businessId");
+      return;
+    }
 
     if (!form.checkValidity()) {
       form.reportValidity();
@@ -141,14 +130,18 @@ function initFormSubmit(businessId) {
 }
 
 /**
- * Resolves the tenant id for public lead creation. Must match `fetchBusinessForOwner` / Solicitudes.
- * Order: ?businessId= → inline early script → #hash — never guess a default (would hide leads from the real owner).
+ * Resolves the tenant id for public lead creation (must match Solicitudes/Dashboard reads).
+ * Uses query string, early inline capture, hash, and a full-URL regex fallback (Live Server / encoding edge cases).
  */
 function resolveSolicitarBusinessId() {
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("businessId");
-  if (fromQuery && String(fromQuery).trim() !== "") {
-    return String(fromQuery).trim();
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const fromQuery = params.get("businessId");
+    if (fromQuery && String(fromQuery).trim() !== "") {
+      return String(fromQuery).trim();
+    }
+  } catch (e) {
+    /* ignore */
   }
 
   if (typeof window !== "undefined" && window.__CF_SOLICITAR_BUSINESS_ID__) {
@@ -159,6 +152,16 @@ function resolveSolicitarBusinessId() {
   const fromHash = getBusinessIdFromHash();
   if (fromHash && String(fromHash).trim() !== "") {
     return String(fromHash).trim();
+  }
+
+  const href = typeof window !== "undefined" && window.location.href ? window.location.href : "";
+  const fromHref = href.match(/[?&#]businessId=([^&]+)/i);
+  if (fromHref && fromHref[1]) {
+    try {
+      return decodeURIComponent(fromHref[1]).trim();
+    } catch (e) {
+      return String(fromHref[1]).trim();
+    }
   }
 
   return null;
@@ -175,6 +178,12 @@ function boot() {
 
   if (!businessId) {
     showConfigError();
+    const formMissing = document.getElementById(FORM_ID);
+    if (formMissing) {
+      formMissing.addEventListener("submit", (e) => {
+        e.preventDefault();
+      });
+    }
     return;
   }
 
