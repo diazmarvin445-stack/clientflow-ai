@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Query string debug — ClientFlow</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 56rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      pre {
+        background: #f1f5f9;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+        word-break: break-all;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Query string debug (temporary)</h1>
+    <p>Open with a query string, e.g. <code>testquery.html?foo=bar&amp;businessId=test</code></p>
+    <p><strong>window.location.href</strong></p>
+    <pre id="out-href"></pre>
+    <p><strong>window.location.search</strong></p>
+    <pre id="out-search"></pre>
+    <script>
+      document.getElementById("out-href").textContent = window.location.href;
+      document.getElementById("out-search").textContent =
+        window.location.search === "" ? "(empty string)" : window.location.search;
+    </script>
+  </body>
+</html>

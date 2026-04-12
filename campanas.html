@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campañas IA — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="dash-body campanas-page">
+    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
+
+    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
+      <div class="dash-sidebar-brand">
+        <a href="index.html" class="logo dash-logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+      </div>
+      <nav class="dash-nav" aria-label="Secciones">
+        <a href="dashboard.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
+          Dashboard
+        </a>
+        <a href="solicitar.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
+          Solicitudes
+        </a>
+        <a href="campanas.html" class="dash-nav-link is-active" aria-current="page">
+          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
+          Campañas IA
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
+          Calendario
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
+          Clientes
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+          Equipo
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+          Configuración
+        </a>
+      </nav>
+      <div class="dash-sidebar-foot">
+        <div class="dash-sidebar-card">
+          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
+          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
+          <a href="#" class="dash-sidebar-card-link">Centro de ayuda</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="dash-shell">
+      <header class="dash-topbar">
+        <button
+          type="button"
+          class="dash-menu-btn"
+          id="dash-menu-btn"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="dash-sidebar"
+        >
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-topbar-title">
+          <h1 class="dash-business-name" id="dash-business-name">…</h1>
+          <span class="dash-business-meta" id="dash-business-meta">…</span>
+        </div>
+        <div class="dash-topbar-actions">
+          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
+            <span class="dash-notify-dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="dash-avatar" aria-label="Perfil de usuario">
+            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="dash-main" id="dash-main">
+        <div class="camp-workspace">
+          <header class="camp-hero">
+            <div class="camp-hero-badge" aria-hidden="true">
+              <span class="camp-hero-badge-ico"></span>
+              IA
+            </div>
+            <h2 class="camp-hero-title">Campañas IA</h2>
+            <p class="camp-hero-subtitle">
+              Nuestra inteligencia artificial analiza tu negocio y recomienda campañas para ayudarte a
+              conseguir más clientes.
+            </p>
+          </header>
+
+          <section
+            class="dash-stats camp-summary-stats"
+            id="camp-summary-stats"
+            aria-label="Resumen de recomendaciones"
+            aria-busy="true"
+          >
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Campañas sugeridas</span>
+                <span class="dash-stat-ico camp-stat-ico camp-stat-ico--suggested" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="camp-summary-count">—</p>
+              <span class="dash-stat-trend" id="camp-summary-count-trend">Cargando…</span>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Presupuesto total recomendado</span>
+                <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="camp-summary-budget">—</p>
+              <span class="dash-stat-trend" id="camp-summary-budget-trend">—</span>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Leads estimados</span>
+                <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value" id="camp-summary-leads">—</p>
+              <span class="dash-stat-trend" id="camp-summary-leads-trend">—</span>
+            </article>
+            <article class="dash-stat-card">
+              <div class="dash-stat-head">
+                <span class="dash-stat-label">Mejor plataforma</span>
+                <span class="dash-stat-ico camp-stat-ico camp-stat-ico--platform" aria-hidden="true"></span>
+              </div>
+              <p class="dash-stat-value camp-stat-value-platform" id="camp-summary-platform">—</p>
+              <span class="dash-stat-trend" id="camp-summary-platform-trend">—</span>
+            </article>
+          </section>
+
+          <div class="camp-ai-list-wrap">
+            <p
+              id="camp-loading"
+              class="camp-loading"
+              role="status"
+              aria-live="polite"
+            >
+              Analizando tu perfil de negocio…
+            </p>
+
+            <div id="camp-firestore-error" class="camp-firestore-error" hidden role="alert">
+              <p id="camp-firestore-error-text" class="camp-firestore-error-text"></p>
+            </div>
+
+            <div id="camp-campaign-save-error" class="camp-campaign-save-error" hidden role="alert">
+              <p id="camp-campaign-save-error-text" class="camp-campaign-save-error-text"></p>
+            </div>
+
+            <div
+              id="camp-empty-state"
+              class="camp-empty-state dash-panel"
+              hidden
+            >
+              <p class="camp-empty-state-title">No encontramos un perfil de negocio</p>
+              <p class="camp-empty-state-text" id="camp-empty-state-text">
+                No hay ningún documento en «businesses» con tu usuario como propietario (<code>ownerUid</code>).
+                Completa el onboarding con la misma sesión para generar campañas aquí.
+              </p>
+              <a href="onboarding.html" class="dash-quick-btn dash-quick-btn--primary">Completar perfil</a>
+            </div>
+
+            <section
+              class="camp-ai-list"
+              id="ai-campaign-recommendations"
+              aria-label="Campañas recomendadas"
+              data-campaign-source="pending"
+              hidden
+            ></section>
+          </div>
+
+          <p class="camp-demo-note" role="note">
+            Las recomendaciones se generan a partir de tu perfil guardado en Firestore (simulación, sin
+            modelo externo aún).
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <div
+      id="camp-launch-toast"
+      class="camp-launch-toast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      hidden
+    ></div>
+
+    <script type="module" src="campanas.js"></script>
+  </body>
+</html>

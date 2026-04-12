@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configura tu negocio — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page-onboarding-body">
+    <div class="page-bg" aria-hidden="true"></div>
+
+    <header class="site-header onboarding-header">
+      <div class="container header-inner">
+        <a href="index.html" class="logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+        <div class="onboarding-header-meta">
+          <span class="onboarding-step-label">Paso 1 · Perfil de negocio</span>
+          <a href="dashboard.html" class="onboarding-panel-link">Ir al panel</a>
+          <a href="index.html" class="onboarding-exit">Salir</a>
+        </div>
+      </div>
+      <div class="onboarding-progress-wrap">
+        <div class="container">
+          <div class="onboarding-progress" role="progressbar" aria-valuenow="33" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de configuración">
+            <div class="onboarding-progress-bar" style="width: 33%"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-onboarding">
+      <div class="container onboarding-container">
+        <header class="onboarding-intro">
+          <h1 class="onboarding-title">Configura tu negocio</h1>
+          <p class="onboarding-subtitle">
+            Cuéntanos sobre tu empresa para que nuestra IA pueda ayudarte a conseguir y cerrar más
+            clientes.
+          </p>
+          <div class="onboarding-trust">
+            <span class="onboarding-trust-item">
+              <span class="onboarding-trust-icon" aria-hidden="true"></span>
+              Datos cifrados en tránsito
+            </span>
+            <span class="onboarding-trust-item">
+              <span class="onboarding-trust-icon onboarding-trust-icon--check" aria-hidden="true"></span>
+              Sin compromiso · puedes editar después
+            </span>
+          </div>
+        </header>
+
+        <form class="onboarding-form" id="onboarding-form" novalidate>
+          <!-- SECTION 1 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">1</span>
+              <div>
+                <h2 class="onboarding-card-title">Información del negocio</h2>
+                <p class="onboarding-card-desc">Lo básico para presentar tu empresa con claridad.</p>
+              </div>
+            </div>
+            <div class="onboarding-fields">
+              <label class="field">
+                <span class="field-label">Nombre del negocio <abbr title="obligatorio">*</abbr></span>
+                <input type="text" name="businessName" required autocomplete="organization" placeholder="Ej. Jardines del Valle" />
+              </label>
+              <label class="field">
+                <span class="field-label">Descripción del negocio</span>
+                <textarea name="businessDescription" rows="4" placeholder="Qué hacéis, experiencia, qué os diferencia…"></textarea>
+              </label>
+              <div class="form-row--split onboarding-split">
+                <label class="field">
+                  <span class="field-label">Teléfono <abbr title="obligatorio">*</abbr></span>
+                  <input type="tel" name="phone" required autocomplete="tel" placeholder="Ej. 600 000 000" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Correo electrónico <abbr title="obligatorio">*</abbr></span>
+                  <input type="email" name="email" required autocomplete="email" placeholder="hola@tuempresa.com" />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 2 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">2</span>
+              <div>
+                <h2 class="onboarding-card-title">Servicios que ofreces</h2>
+                <p class="onboarding-card-desc">Selecciona todos los que apliquen.</p>
+              </div>
+            </div>
+            <fieldset class="onboarding-fieldset">
+              <legend class="visually-hidden">Servicios ofrecidos</legend>
+              <div class="tag-grid" id="service-tags">
+                <label class="tag-chip">
+                  <input type="checkbox" name="services" value="lawn-care" />
+                  <span class="tag-chip-ui">Lawn Care</span>
+                </label>
+                <label class="tag-chip">
+                  <input type="checkbox" name="services" value="landscaping" />
+                  <span class="tag-chip-ui">Landscaping</span>
+                </label>
+                <label class="tag-chip">
+                  <input type="checkbox" name="services" value="tree-removal" />
+                  <span class="tag-chip-ui">Tree Removal</span>
+                </label>
+                <label class="tag-chip">
+                  <input type="checkbox" name="services" value="pressure-washing" />
+                  <span class="tag-chip-ui">Pressure Washing</span>
+                </label>
+                <label class="tag-chip">
+                  <input type="checkbox" name="services" value="other" id="service-other-check" />
+                  <span class="tag-chip-ui">Other</span>
+                </label>
+              </div>
+              <div class="field onboarding-other-wrap" id="service-other-field" hidden>
+                <span class="field-label">Describe el servicio (Other)</span>
+                <input type="text" name="serviceOtherDetail" placeholder="Ej. Instalación de riego" autocomplete="off" />
+              </div>
+            </fieldset>
+          </section>
+
+          <!-- SECTION 3 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">3</span>
+              <div>
+                <h2 class="onboarding-card-title">Zona de servicio</h2>
+                <p class="onboarding-card-desc">Dónde trabajáis y hasta dónde os desplazáis.</p>
+              </div>
+            </div>
+            <div class="onboarding-fields">
+              <label class="field">
+                <span class="field-label">Ciudad / zona cubierta</span>
+                <input type="text" name="serviceArea" autocomplete="address-level2" placeholder="Ej. Madrid capital y corona norte" />
+              </label>
+              <div class="field field-with-suffix">
+                <span class="field-label">Distancia máxima de desplazamiento</span>
+                <div class="field-suffix-row">
+                  <input type="number" name="maxDistance" min="0" step="1" placeholder="25" />
+                  <select name="distanceUnit" aria-label="Unidad de distancia">
+                    <option value="km">km</option>
+                    <option value="mi">millas</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 4 -->
+          <section class="onboarding-card onboarding-card--pricing">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">4</span>
+              <div>
+                <h2 class="onboarding-card-title">Precios y tarifas</h2>
+                <p class="onboarding-card-desc">
+                  Define cómo cobráis para que las estimaciones encajen con tu modelo real.
+                </p>
+              </div>
+            </div>
+            <p class="onboarding-pricing-help" role="note">
+              Estos datos ayudarán a la IA a estimar trabajos automáticamente.
+            </p>
+            <div class="onboarding-fields">
+              <label class="field">
+                <span class="field-label">Método de facturación</span>
+                <select name="billingMethod" id="billing-method" required>
+                  <option value="fixed" selected>Precio fijo</option>
+                  <option value="hourly">Por hora</option>
+                  <option value="sqft">Por pie cuadrado</option>
+                  <option value="lot">Por tamaño de lote</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </label>
+
+              <div class="pricing-dynamic" id="pricing-dynamic" aria-live="polite">
+                <div class="pricing-dynamic-panel" data-billing="fixed">
+                  <label class="field">
+                    <span class="field-label">Precio fijo estándar</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="rateFixed"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        autocomplete="off"
+                      />
+                    </span>
+                    <span class="field-hint">Importe típico por servicio o visita estándar.</span>
+                  </label>
+                </div>
+                <div class="pricing-dynamic-panel" data-billing="hourly" hidden>
+                  <label class="field">
+                    <span class="field-label">Costo por hora</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="rateHourly"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        autocomplete="off"
+                      />
+                    </span>
+                    <span class="field-hint">Tarifa de mano de obra por hora.</span>
+                  </label>
+                </div>
+                <div class="pricing-dynamic-panel" data-billing="sqft" hidden>
+                  <label class="field">
+                    <span class="field-label">Costo por pie cuadrado</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="rateSqft"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        autocomplete="off"
+                      />
+                    </span>
+                    <span class="field-hint">Precio por ft² (área de trabajo).</span>
+                  </label>
+                </div>
+                <div class="pricing-dynamic-panel" data-billing="lot" hidden>
+                  <label class="field">
+                    <span class="field-label">Costo por lote</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="rateLot"
+                        inputmode="decimal"
+                        placeholder="0.00"
+                        autocomplete="off"
+                      />
+                    </span>
+                    <span class="field-hint">Según tamaño de parcela o categoría de lote.</span>
+                  </label>
+                </div>
+                <div class="pricing-dynamic-panel" data-billing="custom" hidden>
+                  <label class="field">
+                    <span class="field-label">Describe tu modelo de precios</span>
+                    <textarea
+                      name="pricingCustomDetail"
+                      rows="4"
+                      placeholder="Ej. paquetes por estación, mínimos por visita, cómo escaláis el precio…"
+                    ></textarea>
+                    <span class="field-hint"
+                      >Opcional pero recomendado para que la IA interprete reglas especiales.</span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="field">
+                <span class="field-label">Precio mínimo por trabajo</span>
+                <span class="field-prefix-wrap">
+                  <span class="field-prefix">$</span>
+                  <input
+                    type="text"
+                    name="minJobPrice"
+                    inputmode="decimal"
+                    placeholder="0.00"
+                    required
+                  />
+                </span>
+                <span class="field-hint">Nunca cotizar por debajo de este importe.</span>
+              </label>
+
+              <div class="pricing-addons">
+                <h3 class="pricing-addons-title">Cargos adicionales <span>(opcional)</span></h3>
+                <div class="form-row--split onboarding-split pricing-addons-grid">
+                  <label class="field">
+                    <span class="field-label">Cargo extra por distancia</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="extraDistance"
+                        inputmode="decimal"
+                        placeholder="0"
+                        autocomplete="off"
+                      />
+                    </span>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Cargo por urgencia</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="extraUrgency"
+                        inputmode="decimal"
+                        placeholder="0"
+                        autocomplete="off"
+                      />
+                    </span>
+                  </label>
+                  <label class="field">
+                    <span class="field-label">Cargo adicional por materiales</span>
+                    <span class="field-prefix-wrap">
+                      <span class="field-prefix">$</span>
+                      <input
+                        type="text"
+                        name="extraMaterials"
+                        inputmode="decimal"
+                        placeholder="0"
+                        autocomplete="off"
+                      />
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="field">
+                <span class="field-label">Notas adicionales <span class="field-label-optional">(opcional)</span></span>
+                <textarea
+                  name="pricingNotes"
+                  rows="3"
+                  placeholder="Descuentos recurrentes, promociones, exclusiones…"
+                ></textarea>
+              </label>
+            </div>
+          </section>
+
+          <!-- SECTION 5 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">5</span>
+              <div>
+                <h2 class="onboarding-card-title">Disponibilidad</h2>
+                <p class="onboarding-card-desc">Cuándo podéis atender nuevas solicitudes.</p>
+              </div>
+            </div>
+            <fieldset class="onboarding-fieldset">
+              <legend class="field-label" style="margin-bottom: 0.65rem">Días disponibles</legend>
+              <div class="days-grid">
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="mon" />
+                  <span>Lun</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="tue" />
+                  <span>Mar</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="wed" />
+                  <span>Mié</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="thu" />
+                  <span>Jue</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="fri" />
+                  <span>Vie</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="sat" />
+                  <span>Sáb</span>
+                </label>
+                <label class="day-chip">
+                  <input type="checkbox" name="days" value="sun" />
+                  <span>Dom</span>
+                </label>
+              </div>
+            </fieldset>
+            <div class="onboarding-fields onboarding-hours">
+              <div class="form-row--split onboarding-split">
+                <label class="field">
+                  <span class="field-label">Desde</span>
+                  <input type="time" name="hoursFrom" value="08:00" />
+                </label>
+                <label class="field">
+                  <span class="field-label">Hasta</span>
+                  <input type="time" name="hoursTo" value="18:00" />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <!-- SECTION 6 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">6</span>
+              <div>
+                <h2 class="onboarding-card-title">Fotos de marca o trabajo</h2>
+                <p class="onboarding-card-desc">
+                  Sube fotos de tu trabajo para que la IA conozca mejor tu negocio.
+                </p>
+              </div>
+            </div>
+            <div
+              class="dropzone-premium"
+              id="photo-dropzone"
+              tabindex="0"
+              role="button"
+              aria-label="Zona para arrastrar fotos o pulsar para seleccionar"
+            >
+              <input type="file" id="brand-photos" name="photos" accept="image/*" multiple class="upload-input" />
+              <div class="dropzone-premium-inner">
+                <span class="dropzone-illustration" aria-hidden="true"></span>
+                <p class="dropzone-title">
+                  Arrastra imágenes aquí o <strong>haz clic para explorar</strong>
+                </p>
+                <p class="dropzone-hint">PNG, JPG o WEBP · varias a la vez</p>
+              </div>
+            </div>
+            <ul class="file-list" id="file-list" hidden></ul>
+          </section>
+
+          <div class="onboarding-footer-cta">
+            <p class="onboarding-disclaimer">
+              Al continuar aceptas que usemos estos datos para configurar tu cuenta y campañas de
+              captación. Podrás revisarlo todo antes de publicar.
+            </p>
+            <button type="submit" class="btn btn-primary btn-onboarding-submit">Guardar y Continuar</button>
+          </div>
+        </form>
+
+        <div class="onboarding-success" id="onboarding-success" hidden role="status" aria-live="polite">
+          <div class="onboarding-success-icon" aria-hidden="true"></div>
+          <h2 class="onboarding-success-title">Perfil guardado</h2>
+          <p class="onboarding-success-text">
+            Hemos guardado la información de tu negocio. El siguiente paso será generar tu campaña con
+            IA (próximamente).
+          </p>
+          <div class="onboarding-success-actions">
+            <a href="dashboard.html" class="btn btn-primary">Ir al panel</a>
+            <a href="index.html" class="btn btn-secondary">Volver al inicio</a>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span class="footer-brand">© <span id="year"></span> ClientFlow AI</span>
+        <span class="footer-note">Onboarding · datos en Firebase (Firestore).</span>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script type="module" src="onboarding.js"></script>
+  </body>
+</html>

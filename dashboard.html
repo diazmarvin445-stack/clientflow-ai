@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Panel — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="dash-body">
+    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
+
+    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
+      <div class="dash-sidebar-brand">
+        <a href="index.html" class="logo dash-logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+      </div>
+      <nav class="dash-nav" aria-label="Secciones">
+        <a href="dashboard.html" class="dash-nav-link is-active" aria-current="page">
+          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
+          Dashboard
+        </a>
+        <a href="solicitar.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
+          Solicitudes
+        </a>
+        <a href="campanas.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
+          Campañas IA
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
+          Calendario
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
+          Clientes
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+          Equipo
+        </a>
+        <a href="#" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+          Configuración
+        </a>
+      </nav>
+      <div class="dash-sidebar-foot">
+        <div class="dash-sidebar-card">
+          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
+          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
+          <a href="#" class="dash-sidebar-card-link">Centro de ayuda</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="dash-shell">
+      <header class="dash-topbar">
+        <button
+          type="button"
+          class="dash-menu-btn"
+          id="dash-menu-btn"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="dash-sidebar"
+        >
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-topbar-title">
+          <h1 class="dash-business-name" id="dash-business-name">…</h1>
+          <span class="dash-business-meta" id="dash-business-meta">…</span>
+        </div>
+        <div class="dash-topbar-actions">
+          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
+            <span class="dash-notify-dot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="dash-avatar" aria-label="Perfil de usuario">
+            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="dash-main" id="dash-main">
+        <div class="dash-workspace">
+          <div class="dash-workspace-primary">
+            <section class="dash-stats" aria-label="Resumen">
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Leads Hoy</span>
+                  <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="dash-metric-leads">0</p>
+                <span class="dash-stat-trend" id="dash-trend-leads">—</span>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Trabajos Confirmados</span>
+                  <span class="dash-stat-ico dash-stat-ico--check" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="dash-metric-jobs">0</p>
+                <span class="dash-stat-trend" id="dash-trend-jobs">—</span>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Ingresos Estimados</span>
+                  <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="dash-metric-revenue">$0</p>
+                <span class="dash-stat-trend" id="dash-trend-revenue">—</span>
+              </article>
+              <article class="dash-stat-card">
+                <div class="dash-stat-head">
+                  <span class="dash-stat-label">Campañas Activas</span>
+                  <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
+                </div>
+                <p class="dash-stat-value" id="dash-metric-campaigns">0</p>
+                <span class="dash-stat-trend" id="dash-trend-campaigns">—</span>
+              </article>
+            </section>
+
+            <section class="dash-panel dash-panel--table" id="recent-requests">
+              <div class="dash-panel-head">
+                <h2 class="dash-panel-title">Solicitudes recientes</h2>
+                <a href="#" class="dash-panel-link">Ver todas</a>
+              </div>
+              <div class="dash-table-wrap">
+                <table class="dash-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Cliente</th>
+                      <th scope="col">Servicio</th>
+                      <th scope="col">Estado</th>
+                      <th scope="col">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dash-leads-tbody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+
+          <aside class="dash-workspace-aside" aria-label="Calendario y citas">
+            <section class="dash-panel dash-panel--widget">
+              <h2 class="dash-widget-title">Calendario semanal</h2>
+              <p class="dash-widget-sub">Semana del 7–13 abril 2026</p>
+              <div class="dash-cal" role="grid" aria-label="Vista semanal">
+                <div class="dash-cal-weekdays">
+                  <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+                </div>
+                <div class="dash-cal-days">
+                  <button type="button" class="dash-cal-day">7</button>
+                  <button type="button" class="dash-cal-day">8</button>
+                  <button type="button" class="dash-cal-day">9</button>
+                  <button type="button" class="dash-cal-day">10</button>
+                  <button type="button" class="dash-cal-day is-today" aria-current="date">
+                    11
+                  </button>
+                  <button type="button" class="dash-cal-day">12</button>
+                  <button type="button" class="dash-cal-day">13</button>
+                </div>
+              </div>
+              <p class="dash-cal-hint">Hoy: 4 bloques ocupados</p>
+            </section>
+
+            <section class="dash-panel dash-panel--widget">
+              <div class="dash-panel-head dash-panel-head--compact">
+                <h2 class="dash-widget-title">Próximas citas</h2>
+                <span class="dash-widget-badge">5</span>
+              </div>
+              <ul class="dash-appointments">
+                <li class="dash-appt">
+                  <span class="dash-appt-time">09:00</span>
+                  <div class="dash-appt-body">
+                    <span class="dash-appt-title">Visita · María González</span>
+                    <span class="dash-appt-meta">Mantenimiento</span>
+                  </div>
+                </li>
+                <li class="dash-appt">
+                  <span class="dash-appt-time">11:30</span>
+                  <div class="dash-appt-body">
+                    <span class="dash-appt-title">Presupuesto · Residencial Norte</span>
+                    <span class="dash-appt-meta">Paisajismo</span>
+                  </div>
+                </li>
+                <li class="dash-appt">
+                  <span class="dash-appt-time">15:00</span>
+                  <div class="dash-appt-body">
+                    <span class="dash-appt-title">Instalación · Comunidad Los Pinos</span>
+                    <span class="dash-appt-meta">Riego</span>
+                  </div>
+                </li>
+                <li class="dash-appt dash-appt--more">
+                  <a href="#" class="dash-appt-link">+ 2 citas más esta semana</a>
+                </li>
+              </ul>
+            </section>
+
+            <section class="dash-panel dash-panel--widget dash-panel--quick" aria-label="Acciones rápidas">
+              <h2 class="dash-widget-title">Acciones rápidas</h2>
+              <p class="dash-widget-sub dash-widget-sub--tight">Atajos para gestionar tu operación</p>
+              <div class="dash-quick-actions">
+                <a href="campanas.html" class="dash-quick-btn dash-quick-btn--primary">Nueva campaña</a>
+                <a href="#recent-requests" class="dash-quick-btn">Ver solicitudes</a>
+                <a href="onboarding.html" class="dash-quick-btn">Actualizar negocio</a>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="dashboard.js"></script>
+  </body>
+</html>

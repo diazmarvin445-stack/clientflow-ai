@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solicitar servicio — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="solicitar">
+    <!--
+      1) Normaliza /solicitar → /solicitar.html conservando ?businessId= (Live Server / rutas sin extensión).
+      2) Captura businessId antes de cualquier otro script. No usar pushState/replaceState salvo arriba.
+    -->
+    <script>
+      (function () {
+        var path = window.location.pathname || "";
+        var q = window.location.search || "";
+        var h = window.location.hash || "";
+
+        function getBidFromSearch(s) {
+          if (!s || s.indexOf("businessId=") === -1) return null;
+          try {
+            var params = new URLSearchParams(s.charAt(0) === "?" ? s : "?" + s);
+            var id = params.get("businessId");
+            return id ? id.trim() : null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function getBidFromHash(ha) {
+          if (!ha || ha.indexOf("businessId=") === -1) return null;
+          var m = ha.match(/businessId=([^&]+)/i);
+          if (!m || !m[1]) return null;
+          try {
+            return decodeURIComponent(m[1]).trim();
+          } catch (e) {
+            return m[1].trim();
+          }
+        }
+
+        var bidQ = getBidFromSearch(q);
+        var bidH = bidQ ? null : getBidFromHash(h);
+
+        var isExtensionlessSolicitar =
+          path === "/solicitar" ||
+          path === "/solicitar/" ||
+          /\/solicitar\/?$/.test(path) && path.indexOf("solicitar.html") === -1;
+
+        if ((bidQ || bidH) && isExtensionlessSolicitar) {
+          try {
+            var newSearch = bidQ ? q : "?businessId=" + encodeURIComponent(bidH);
+            var newUrl = window.location.origin + "/solicitar.html" + newSearch;
+            window.history.replaceState(null, "", newUrl);
+            q = window.location.search;
+            bidQ = getBidFromSearch(q);
+          } catch (e) {}
+        }
+
+        var id = bidQ || bidH;
+        if (id) {
+          window.__CF_SOLICITAR_BUSINESS_ID__ = id;
+          console.log("businessId found:", id);
+        }
+      })();
+    </script>
+    <div class="page-bg" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="index.html" class="logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+        <nav class="nav" aria-label="Principal">
+          <a href="index.html#como-funciona">Cómo funciona</a>
+          <a href="index.html#beneficios">Beneficios</a>
+          <a href="index.html#dashboard">Panel</a>
+          <a href="solicitar.html" class="nav-link-customer" aria-current="page">Solicitar Servicio</a>
+          <a href="onboarding.html" class="nav-cta">Probar Plataforma</a>
+        </nav>
+        <button type="button" class="nav-toggle" aria-label="Abrir menú" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <main class="page-request">
+      <section class="section request">
+        <div class="container request-layout">
+          <div class="request-intro reveal">
+            <h1 class="section-title request-page-title">Solicitar un servicio</h1>
+            <p class="section-desc">
+              Cuéntanos qué necesitas: te pondremos en contacto con el profesional adecuado y te
+              responderemos lo antes posible.
+            </p>
+            <ul class="request-list">
+              <li>Envío gratuito y sin compromiso</li>
+              <li>Respuesta habitual en un día hábil</li>
+              <li>Las fotos ayudan a cotizar con precisión</li>
+            </ul>
+            <p class="request-back">
+              <a href="index.html" class="request-back-link">← Volver al inicio</a>
+            </p>
+          </div>
+
+          <div class="form-shell reveal reveal-delay-1">
+            <div class="solicitar-config-error" id="solicitar-config-error" hidden role="alert">
+              <p class="solicitar-config-error-title">No se puede enviar la solicitud</p>
+              <p class="solicitar-config-error-text">
+                Falta el identificador del negocio en el enlace. Usa el enlace completo que te
+                compartió el profesional (incluye <code class="solicitar-code">?businessId=…</code>) o
+                <a href="index.html">vuelve al inicio</a>.
+              </p>
+            </div>
+            <form class="request-form" id="request-form" novalidate>
+              <div class="form-row">
+                <label class="field">
+                  <span class="field-label">Nombre completo</span>
+                  <input type="text" name="fullName" autocomplete="name" required placeholder="Ej. Ana López" />
+                </label>
+              </div>
+              <div class="form-row form-row--split">
+                <label class="field">
+                  <span class="field-label">Teléfono</span>
+                  <input
+                    type="tel"
+                    name="phone"
+                    autocomplete="tel"
+                    required
+                    placeholder="Ej. 600 000 000"
+                  />
+                </label>
+                <label class="field">
+                  <span class="field-label">Dirección</span>
+                  <input
+                    type="text"
+                    name="address"
+                    autocomplete="street-address"
+                    required
+                    placeholder="Calle, ciudad, CP"
+                  />
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <span class="field-label">Seleccionar servicio</span>
+                  <select name="service" required>
+                    <option value="" disabled selected>Elegir un servicio</option>
+                    <option value="lawn-care">Cuidado del césped</option>
+                    <option value="landscaping">Paisajismo</option>
+                    <option value="tree-removal">Tala / retirada de árboles</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <span class="field-label">Subir foto</span>
+                <label class="upload-zone">
+                  <input type="file" name="photo" accept="image/*" class="upload-input" />
+                  <span class="upload-content">
+                    <span class="upload-icon" aria-hidden="true"></span>
+                    <span class="upload-text">
+                      <strong>Pulsa para subir</strong>
+                      <span class="upload-hint">o arrastra aquí — PNG, JPG hasta 10MB</span>
+                    </span>
+                  </span>
+                  <span class="file-name" id="file-name" hidden></span>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-block">Enviar solicitud</button>
+              </div>
+            </form>
+
+            <div class="success-message" id="success-message" hidden role="status" aria-live="polite">
+              <div class="success-icon" aria-hidden="true"></div>
+              <p>¡Gracias! Tu solicitud se ha enviado correctamente.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <span class="footer-brand">© <span id="year"></span> ClientFlow AI</span>
+        <span class="footer-note">Solicitudes para clientes finales.</span>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+    <script type="module" src="solicitar.js"></script>
+  </body>
+</html>

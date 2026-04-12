@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /businesses/{businessId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
+
+      match /leads/{leadId} {
+        // Public: customers submit leads without signing in (validated fields only).
+        allow create: if
+          request.resource.data.keys().hasAll([
+            'customerName',
+            'phone',
+            'address',
+            'service',
+            'description',
+            'status',
+            'estimatedPrice',
+            'createdAt'
+          ])
+          && request.resource.data.customerName is string
+          && request.resource.data.phone is string
+          && request.resource.data.address is string
+          && request.resource.data.service is string
+          && request.resource.data.description is string
+          && request.resource.data.status == 'new'
+          && request.resource.data.estimatedPrice == 0;
+
+        allow read, update, delete: if request.auth != null
+          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+      }
+
+      match /jobs/{jobId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+      }
+
+      match /campaigns/{campaignId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+      }
+    }
+  }
+}
