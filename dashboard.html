@@ -80,8 +80,11 @@
           <span></span><span></span><span></span>
         </button>
         <div class="dash-topbar-title">
-          <h1 class="dash-business-name" id="dash-business-name">…</h1>
-          <span class="dash-business-meta" id="dash-business-meta">…</span>
+          <div class="dash-topbar-title-main">
+            <h1 class="dash-business-name" id="dash-business-name">…</h1>
+            <span class="dash-business-meta" id="dash-business-meta">…</span>
+            <span class="dash-topbar-greet" id="dash-greeting">Buenos días</span>
+          </div>
         </div>
         <div class="dash-topbar-actions">
           <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
@@ -101,11 +104,6 @@
 
       <main class="dash-main" id="dash-main">
         <div class="dash-page">
-          <section class="dash-welcome" aria-labelledby="dash-welcome-greet">
-            <p class="dash-welcome-greet" id="dash-welcome-greet">Buenos días 👋</p>
-            <p class="dash-welcome-lead" id="dash-welcome-lead">Este es el resumen de tu negocio hoy.</p>
-          </section>
-
           <div class="dash-workspace">
             <div class="dash-workspace-primary">
             <section class="dash-stats" aria-label="Resumen">
@@ -175,7 +173,8 @@
             </div>
 
             <aside class="dash-workspace-aside" aria-label="Calendario y citas">
-            <section class="dash-panel dash-panel--widget">
+              <div class="dash-aside-column">
+            <section class="dash-panel dash-panel--widget dash-panel--calendar">
               <h2 class="dash-widget-title">Calendario semanal</h2>
               <p class="dash-widget-sub">Semana del 7–13 abril 2026</p>
               <div class="dash-cal" role="grid" aria-label="Vista semanal">
@@ -271,7 +270,8 @@
                 </a>
               </div>
             </section>
-            </aside>
+              </div>
+          </aside>
           </div>
         </div>
       </main>

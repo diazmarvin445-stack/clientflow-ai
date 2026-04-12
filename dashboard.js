@@ -26,25 +26,9 @@ function greetingForHour() {
   return "Buenas noches";
 }
 
-function displayNameForWelcome(business, user) {
-  const fromBiz =
-    business?.data &&
-    typeof business.data.businessName === "string" &&
-    business.data.businessName.trim();
-  if (fromBiz) return fromBiz.trim();
-  if (user?.displayName && String(user.displayName).trim()) return String(user.displayName).trim();
-  if (user?.email) return user.email.split("@")[0];
-  return "tu equipo";
-}
-
-function renderWelcome(business, user) {
-  const greetEl = document.getElementById("dash-welcome-greet");
-  const leadEl = document.getElementById("dash-welcome-lead");
-  if (!greetEl || !leadEl) return;
-
-  const name = displayNameForWelcome(business, user);
-  greetEl.textContent = `${greetingForHour()}, ${name} 👋`;
-  leadEl.textContent = "Este es el resumen de tu negocio hoy.";
+function renderGreeting() {
+  const el = document.getElementById("dash-greeting");
+  if (el) el.textContent = greetingForHour();
 }
 
 function renderHeader(business) {
@@ -145,7 +129,7 @@ function renderLeadsTable(leads) {
 async function loadDashboardForUser(user) {
   const business = await fetchBusinessForOwner(db, user.uid);
   renderHeader(business);
-  renderWelcome(business, user);
+  renderGreeting();
 
   if (!business) {
     renderMetrics({
@@ -189,7 +173,7 @@ function boot() {
     loadDashboardForUser(user).catch((err) => {
       console.error(err);
       renderHeader(null);
-      renderWelcome(null, user);
+      renderGreeting();
       renderMetrics({
         leadsToday: 0,
         leadsYesterday: 0,
