@@ -207,6 +207,23 @@ export async function fetchDashboardMetrics(db, businessId) {
   };
 }
 
+/**
+ * All leads under `businesses/{businessId}/leads`, newest `createdAt` first.
+ */
+export async function fetchLeadsForBusiness(db, businessId) {
+  const snap = await getDocs(collection(db, "businesses", businessId, "leads"));
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data() });
+  });
+  rows.sort((a, b) => {
+    const ta = toDate(a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  return rows;
+}
+
 export const SERVICE_LABELS = {
   "lawn-care": "Lawn Care",
   landscaping: "Landscaping",
@@ -248,21 +265,83 @@ export function initialsFromName(name) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const STATUS_BADGE = {
-  new: { className: "dash-badge--new", label: "Nuevo" },
-  nuevo: { className: "dash-badge--new", label: "Nuevo" },
-  in_progress: { className: "dash-badge--prog", label: "En curso" },
-  progress: { className: "dash-badge--prog", label: "En curso" },
-  quote: { className: "dash-badge--quote", label: "Presupuesto" },
-  presupuesto: { className: "dash-badge--quote", label: "Presupuesto" },
-  confirmed: { className: "dash-badge--done", label: "Confirmado" },
-  confirmado: { className: "dash-badge--done", label: "Confirmado" },
+/** Maps legacy / alternate labels to canonical Firestore `status` values. */
+const LEGACY_STATUS_TO_CANONICAL = {
+  "": "new",
+  new: "new",
+  nuevo: "new",
+  contacted: "contacted",
+  contactado: "contacted",
+  quoted: "quoted",
+  quote: "quoted",
+  presupuesto: "quoted",
+  scheduled: "scheduled",
+  programado: "scheduled",
+  confirmed: "scheduled",
+  confirmado: "scheduled",
+  completed: "completed",
+  completado: "completed",
+  done: "completed",
+  lost: "lost",
+  perdido: "lost",
+  in_progress: "contacted",
+  progress: "contacted",
 };
 
+const CANONICAL_STATUSES = ["new", "contacted", "quoted", "scheduled", "completed", "lost"];
+
+const STATUS_BADGE = {
+  new: { className: "dash-badge--new", label: "Nuevo" },
+  contacted: { className: "dash-badge--prog", label: "Contactado" },
+  quoted: { className: "dash-badge--quote", label: "Cotización" },
+  scheduled: { className: "dash-badge--sched", label: "Programado" },
+  completed: { className: "dash-badge--done", label: "Completado" },
+  lost: { className: "dash-badge--lost", label: "Perdido" },
+};
+
+/**
+ * Normalizes any stored `status` to a canonical CRM value for selects and writes.
+ */
+export function normalizeLeadStatus(raw) {
+  if (raw == null) return "new";
+  const key = String(raw).toLowerCase().trim();
+  if (Object.prototype.hasOwnProperty.call(LEGACY_STATUS_TO_CANONICAL, key)) {
+    return LEGACY_STATUS_TO_CANONICAL[key];
+  }
+  if (CANONICAL_STATUSES.includes(key)) return key;
+  return "new";
+}
+
 export function leadStatusPresentation(status) {
-  const key = typeof status === "string" ? status.toLowerCase() : "";
-  if (STATUS_BADGE[key]) return STATUS_BADGE[key];
+  const c = normalizeLeadStatus(status);
+  if (STATUS_BADGE[c]) return STATUS_BADGE[c];
   return { className: "dash-badge--new", label: status ? String(status) : "—" };
+}
+
+export const LEAD_STATUS_OPTIONS_ES = [
+  { value: "new", label: "Nuevo lead" },
+  { value: "contacted", label: "Contactado" },
+  { value: "quoted", label: "Cotización enviada" },
+  { value: "scheduled", label: "Programado" },
+  { value: "completed", label: "Completado" },
+  { value: "lost", label: "Perdido" },
+];
+
+/**
+ * Relative label for lists (Hoy / Ayer / hace N días / fecha).
+ */
+export function formatLeadRelativeTimeEs(value) {
+  const d = toDate(value);
+  if (!d || Number.isNaN(d.getTime())) return "—";
+  const now = new Date();
+  const today0 = startOfLocalDay(now);
+  const day0 = startOfLocalDay(d);
+  const diffDays = Math.round((today0.getTime() - day0.getTime()) / 86400000);
+  const timeStr = d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 0) return `Hoy · ${timeStr}`;
+  if (diffDays === 1) return `Ayer · ${timeStr}`;
+  if (diffDays > 1 && diffDays < 7) return `Hace ${diffDays} días`;
+  return d.toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function formatShortDate(value, locale = "es") {

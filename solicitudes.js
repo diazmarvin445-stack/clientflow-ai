@@ -1,11 +1,20 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  doc,
+  serverTimestamp,
+  updateDoc,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import {
   fetchBusinessForOwner,
-  fetchDashboardMetrics,
+  fetchLeadsForBusiness,
   formatBusinessMeta,
+  formatLeadRelativeTimeEs,
+  formatShortDate,
   initialsFromName,
-  renderLeadsTbody,
+  LEAD_STATUS_OPTIONS_ES,
+  normalizeLeadStatus,
+  SERVICE_LABELS,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
@@ -31,18 +40,339 @@ function renderHeader(business) {
   if (av) av.textContent = initialsFromName(displayName);
 }
 
+function serviceLabel(raw) {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s) return "—";
+  return SERVICE_LABELS[s] || s;
+}
+
+function formatPriceLine(raw) {
+  const v = Number(raw);
+  if (Number.isFinite(v) && v > 0) {
+    return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  }
+  return null;
+}
+
+function telHref(phone) {
+  const s = typeof phone === "string" ? phone.trim() : "";
+  if (!s) return null;
+  const cleaned = s.replace(/[^\d+]/g, "");
+  return cleaned ? `tel:${cleaned}` : null;
+}
+
+function setMetaLine(count) {
+  const el = document.getElementById("sol-leads-meta");
+  if (!el) return;
+  if (count === 0) {
+    el.textContent = "Gestiona el estado y las notas de cada lead.";
+    return;
+  }
+  el.textContent = `${count} ${count === 1 ? "solicitud" : "solicitudes"} · más recientes primero`;
+}
+
+function showLoadError(msg) {
+  const el = document.getElementById("sol-load-error");
+  if (!el) return;
+  el.textContent = msg;
+  el.hidden = false;
+}
+
+function hideLoadError() {
+  const el = document.getElementById("sol-load-error");
+  if (!el) return;
+  el.hidden = true;
+  el.textContent = "";
+}
+
+function renderEmpty(root) {
+  root.replaceChildren();
+  const wrap = document.createElement("div");
+  wrap.className = "sol-empty";
+  wrap.innerHTML =
+    '<div class="dash-leads-empty-icon" aria-hidden="true"></div>' +
+    '<p class="dash-leads-empty-title">Aún no tienes solicitudes.</p>' +
+    '<p class="dash-leads-empty-text">Cuando entren nuevos clientes potenciales aparecerán aquí.</p>';
+  root.appendChild(wrap);
+}
+
+function metaRow(label, valueNode) {
+  const row = document.createElement("div");
+  row.className = "sol-meta-row";
+  const lab = document.createElement("span");
+  lab.className = "sol-meta-label";
+  lab.textContent = label;
+  const val = document.createElement("div");
+  val.className = "sol-meta-value";
+  val.appendChild(valueNode);
+  row.append(lab, val);
+  return row;
+}
+
+function textNode(text) {
+  const s = document.createElement("span");
+  s.textContent = text;
+  return s;
+}
+
+function buildLeadCard(businessId, lead) {
+  const id = lead.id;
+  const name =
+    (typeof lead.customerName === "string" && lead.customerName.trim()) ||
+    (typeof lead.clientName === "string" && lead.clientName.trim()) ||
+    (typeof lead.name === "string" && lead.name.trim()) ||
+    "Sin nombre";
+
+  const phoneRaw = typeof lead.phone === "string" ? lead.phone.trim() : "";
+  const address =
+    (typeof lead.address === "string" && lead.address.trim()) || "—";
+  const canonical = normalizeLeadStatus(lead.status);
+  const rel = formatLeadRelativeTimeEs(lead.createdAt);
+  const abs = formatShortDate(lead.createdAt);
+  const priceLine = formatPriceLine(lead.estimatedPrice);
+  const desc =
+    typeof lead.description === "string" && lead.description.trim()
+      ? lead.description.trim()
+      : "";
+
+  const notesVal = lead.notes != null ? String(lead.notes) : "";
+
+  const article = document.createElement("article");
+  article.className = "sol-lead-card";
+  article.dataset.leadId = id;
+
+  const head = document.createElement("div");
+  head.className = "sol-lead-card-head";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "sol-lead-title-row";
+
+  const h3 = document.createElement("h3");
+  h3.className = "sol-lead-name";
+  h3.textContent = name;
+
+  titleRow.appendChild(h3);
+
+  if (canonical === "new") {
+    const pri = document.createElement("span");
+    pri.className = "sol-priority-badge";
+    pri.textContent = "Nuevo";
+    pri.title = "Lead sin gestionar";
+    titleRow.appendChild(pri);
+  }
+
+  head.appendChild(titleRow);
+
+  const timeEl = document.createElement("p");
+  timeEl.className = "sol-lead-time";
+  timeEl.textContent = `${rel} · ${abs}`;
+
+  head.appendChild(timeEl);
+
+  const grid = document.createElement("div");
+  grid.className = "sol-meta-grid";
+
+  const phoneNode = document.createElement("span");
+  if (phoneRaw) {
+    const tel = telHref(phoneRaw);
+    if (tel) {
+      const a = document.createElement("a");
+      a.href = tel;
+      a.className = "sol-phone-link";
+      a.textContent = phoneRaw;
+      phoneNode.appendChild(a);
+    } else {
+      phoneNode.textContent = phoneRaw;
+    }
+  } else {
+    phoneNode.textContent = "—";
+  }
+  grid.appendChild(metaRow("Teléfono", phoneNode));
+
+  grid.appendChild(metaRow("Servicio", textNode(serviceLabel(lead.service))));
+
+  const addrSpan = document.createElement("span");
+  addrSpan.textContent = address;
+  grid.appendChild(metaRow("Dirección", addrSpan));
+
+  grid.appendChild(
+    metaRow(
+      "Presupuesto estimado",
+      textNode(priceLine != null ? priceLine : "—"),
+    ),
+  );
+
+  const statusWrap = document.createElement("div");
+  statusWrap.className = "sol-status-field";
+
+  const statusLab = document.createElement("label");
+  const statusId = `sol-status-${id}`;
+  statusLab.setAttribute("for", statusId);
+  statusLab.className = "sol-status-label";
+  statusLab.textContent = "Estado";
+
+  const select = document.createElement("select");
+  select.id = statusId;
+  select.className = "sol-status-select";
+  select.setAttribute("aria-label", `Estado de la solicitud de ${name}`);
+
+  LEAD_STATUS_OPTIONS_ES.forEach((opt) => {
+    const o = document.createElement("option");
+    o.value = opt.value;
+    o.textContent = opt.label;
+    select.appendChild(o);
+  });
+
+  select.value = canonical;
+  select.dataset.lastSaved = canonical;
+
+  statusWrap.append(statusLab, select);
+  grid.appendChild(statusWrap);
+
+  article.append(head, grid);
+
+  if (desc) {
+    const descBlock = document.createElement("div");
+    descBlock.className = "sol-lead-desc";
+    const dLab = document.createElement("span");
+    dLab.className = "sol-meta-label";
+    dLab.textContent = "Descripción";
+    const dBody = document.createElement("p");
+    dBody.className = "sol-lead-desc-text";
+    dBody.textContent = desc;
+    descBlock.append(dLab, dBody);
+    article.appendChild(descBlock);
+  }
+
+  const details = document.createElement("details");
+  details.className = "sol-notes";
+  if (notesVal.trim().length > 0) details.open = true;
+
+  const summ = document.createElement("summary");
+  summ.className = "sol-notes-summary";
+  summ.textContent = "Notas internas";
+
+  const notesBody = document.createElement("div");
+  notesBody.className = "sol-notes-body";
+
+  const ta = document.createElement("textarea");
+  ta.className = "sol-notes-input";
+  ta.rows = 4;
+  ta.maxLength = 8000;
+  ta.value = notesVal;
+  ta.setAttribute("aria-label", `Notas para ${name}`);
+  ta.placeholder = "Seguimiento de llamadas, acuerdos, recordatorios…";
+
+  const foot = document.createElement("div");
+  foot.className = "sol-notes-foot";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "sol-notes-save dash-quick-btn dash-quick-btn--primary";
+  saveBtn.textContent = "Guardar notas";
+
+  const statusHint = document.createElement("span");
+  statusHint.className = "sol-inline-hint";
+  statusHint.setAttribute("aria-live", "polite");
+  statusHint.hidden = true;
+
+  foot.append(saveBtn, statusHint);
+  notesBody.append(ta, foot);
+  details.append(summ, notesBody);
+  article.appendChild(details);
+
+  select.addEventListener("change", async () => {
+    const next = select.value;
+    const prev = select.dataset.lastSaved || canonical;
+    article.classList.add("sol-lead-card--busy");
+    select.disabled = true;
+    statusHint.hidden = true;
+    try {
+      await updateDoc(doc(db, "businesses", businessId, "leads", id), {
+        status: next,
+        updatedAt: serverTimestamp(),
+      });
+      select.dataset.lastSaved = next;
+    } catch (err) {
+      console.error(err);
+      select.value = prev;
+      statusHint.textContent = "No se pudo guardar el estado. Revisa la conexión o las reglas.";
+      statusHint.className = "sol-inline-hint sol-inline-hint--bad";
+      statusHint.hidden = false;
+    } finally {
+      select.disabled = false;
+      article.classList.remove("sol-lead-card--busy");
+    }
+  });
+
+  saveBtn.addEventListener("click", async () => {
+    const text = ta.value;
+    saveBtn.disabled = true;
+    saveBtn.setAttribute("aria-busy", "true");
+    statusHint.hidden = true;
+    try {
+      await updateDoc(doc(db, "businesses", businessId, "leads", id), {
+        notes: text,
+        updatedAt: serverTimestamp(),
+      });
+      statusHint.textContent = "Notas guardadas";
+      statusHint.className = "sol-inline-hint sol-inline-hint--ok";
+      statusHint.hidden = false;
+      window.setTimeout(() => {
+        statusHint.hidden = true;
+      }, 2500);
+    } catch (err) {
+      console.error(err);
+      statusHint.textContent = "No se pudieron guardar las notas.";
+      statusHint.className = "sol-inline-hint sol-inline-hint--bad";
+      statusHint.hidden = false;
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.removeAttribute("aria-busy");
+    }
+  });
+
+  return article;
+}
+
+function renderLeadList(root, businessId, leads) {
+  root.replaceChildren();
+  if (!leads.length) {
+    renderEmpty(root);
+    return;
+  }
+  leads.forEach((lead) => {
+    root.appendChild(buildLeadCard(businessId, lead));
+  });
+}
+
 async function loadSolicitudesForUser(user) {
+  hideLoadError();
   const business = await fetchBusinessForOwner(db, user.uid);
   renderHeader(business);
 
-  const tbody = document.getElementById("dash-leads-tbody");
+  const root = document.getElementById("sol-leads-root");
+  if (!root) return;
+
   if (!business) {
-    renderLeadsTbody(tbody, []);
+    setMetaLine(0);
+    renderEmpty(root);
     return;
   }
 
-  const metrics = await fetchDashboardMetrics(db, business.id);
-  renderLeadsTbody(tbody, metrics.recentLeads);
+  let leads;
+  try {
+    leads = await fetchLeadsForBusiness(db, business.id);
+  } catch (err) {
+    console.error(err);
+    showLoadError("No se pudieron cargar las solicitudes. Inténtalo de nuevo.");
+    setMetaLine(0);
+    root.replaceChildren();
+    return;
+  }
+
+  setMetaLine(leads.length);
+  renderLeadList(root, business.id, leads);
 }
 
 function boot() {
@@ -56,7 +386,10 @@ function boot() {
     loadSolicitudesForUser(user).catch((err) => {
       console.error(err);
       renderHeader(null);
-      renderLeadsTbody(document.getElementById("dash-leads-tbody"), []);
+      showLoadError("Error al cargar el módulo de solicitudes.");
+      const root = document.getElementById("sol-leads-root");
+      if (root) renderEmpty(root);
+      setMetaLine(0);
     });
   });
 }

@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="dash-body">
+  <body class="dash-body sol-page">
     <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
 
     <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
@@ -100,30 +100,21 @@
       </header>
 
       <main class="dash-main" id="dash-main">
-        <div class="dash-workspace dash-workspace--full">
+        <div class="dash-workspace dash-workspace--full sol-workspace">
           <div class="dash-workspace-primary">
-            <section class="dash-panel dash-panel--table" id="all-requests">
+            <p class="sol-load-error" id="sol-load-error" hidden role="alert"></p>
+
+            <section class="dash-panel sol-panel" aria-labelledby="sol-panel-title">
               <div class="dash-panel-head">
-                <h2 class="dash-panel-title">Todas las solicitudes (leads)</h2>
+                <div>
+                  <h2 class="dash-panel-title" id="sol-panel-title">Solicitudes</h2>
+                  <p class="sol-panel-sub" id="sol-leads-meta">
+                    Cargando…
+                  </p>
+                </div>
                 <a href="dashboard.html" class="dash-panel-link">Volver al resumen</a>
               </div>
-              <p class="dash-leads-intro">
-                Entradas desde tu página de solicitudes y otras fuentes conectadas. Las más recientes
-                aparecen primero.
-              </p>
-              <div class="dash-table-wrap">
-                <table class="dash-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Cliente</th>
-                      <th scope="col">Servicio</th>
-                      <th scope="col">Estado</th>
-                      <th scope="col">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody id="dash-leads-tbody"></tbody>
-                </table>
-              </div>
+              <div id="sol-leads-root" class="sol-leads"></div>
             </section>
           </div>
         </div>

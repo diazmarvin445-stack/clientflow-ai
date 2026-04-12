@@ -2992,6 +2992,16 @@ body.dash-menu-open {
   color: #047857;
 }
 
+.dash-badge--sched {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.dash-badge--lost {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 .dash-workspace-aside {
   display: block;
   min-width: 0;
@@ -3822,6 +3832,319 @@ a.dash-quick-tile {
   font-size: 0.875rem;
   color: var(--text-muted);
   line-height: 1.45;
+}
+
+/* —— Solicitudes (CRM) —— */
+.sol-page .sol-workspace {
+  padding-bottom: 2rem;
+}
+
+.sol-load-error {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 0.75rem;
+}
+
+.sol-panel .dash-panel-head {
+  align-items: flex-start;
+}
+
+.sol-panel-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.sol-leads {
+  padding: 0 1.35rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sol-empty {
+  padding: 2.5rem 1rem 2rem;
+  text-align: center;
+}
+
+.sol-empty .dash-leads-empty-icon {
+  margin-bottom: 1rem;
+}
+
+.sol-lead-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.2rem 1.2rem;
+  box-shadow: var(--shadow-sm);
+  transition: opacity 0.2s var(--ease), box-shadow 0.2s;
+}
+
+.sol-lead-card--busy {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.sol-lead-card-head {
+  margin-bottom: 1rem;
+}
+
+.sol-lead-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.sol-lead-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.sol-priority-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #1d4ed8;
+  background: var(--blue-soft);
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.sol-lead-time {
+  margin: 0.45rem 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.sol-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .sol-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sol-meta-row {
+  display: grid;
+  grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+  gap: 0.5rem 0.75rem;
+  align-items: start;
+}
+
+.sol-meta-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  line-height: 1.35;
+  padding-top: 0.15rem;
+}
+
+.sol-meta-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.sol-phone-link {
+  color: var(--blue);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.sol-phone-link:hover {
+  text-decoration: underline;
+}
+
+.sol-status-field {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+}
+
+.sol-status-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.sol-status-select {
+  width: 100%;
+  max-width: 22rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 2rem 0.45rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sol-status-select:hover:not(:disabled) {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.sol-status-select:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.sol-status-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.sol-lead-desc {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.sol-lead-desc .sol-meta-label {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.sol-lead-desc-text {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.sol-notes {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.sol-notes-summary {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sol-notes-summary::-webkit-details-marker {
+  display: none;
+}
+
+.sol-notes-summary::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.2s var(--ease);
+}
+
+.sol-notes[open] .sol-notes-summary::before {
+  transform: rotate(45deg);
+  margin-top: 0.15rem;
+}
+
+.sol-notes-body {
+  margin-top: 0.75rem;
+}
+
+.sol-notes-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 5.5rem;
+  padding: 0.65rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.sol-notes-input:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.sol-notes-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 0.65rem;
+}
+
+.sol-notes-save {
+  min-height: 2.5rem;
+  padding-inline: 1rem;
+  font-size: 0.8125rem;
+}
+
+.sol-inline-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.sol-inline-hint--ok {
+  color: #047857;
+}
+
+.sol-inline-hint--bad {
+  color: #b91c1c;
+}
+
+.sol-inline-hint:not([hidden]) {
+  display: inline-block;
 }
 
 a.dash-stat-card--link {
