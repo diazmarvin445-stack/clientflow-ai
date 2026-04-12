@@ -6,7 +6,7 @@ import {
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
-  fetchBusinessForOwner,
+  resolveBusinessForUser,
   formatBusinessMeta,
   initialsFromName,
   SERVICE_LABELS,
@@ -161,7 +161,7 @@ async function saveSection(section) {
   if (!businessId || !businessData) return;
 
   const ref = doc(db, "businesses", businessId);
-  const base = { updatedAt: serverTimestamp() };
+  const base = { updatedAt: serverTimestamp(), ownerUid: auth.currentUser.uid };
 
   try {
     if (section === "business") {
@@ -170,7 +170,7 @@ async function saveSection(section) {
         businessName: val("cfg-business-name").trim(),
         industry: val("cfg-industry").trim(),
         phone: val("cfg-phone").trim(),
-        email: val("cfg-email").trim(),
+        email: val("cfg-email").trim().toLowerCase(),
         commercialAddress: val("cfg-address").trim(),
         serviceArea: val("cfg-service-area").trim(),
       });
@@ -214,7 +214,7 @@ async function saveSection(section) {
       feedback("cfg-feedback-platform", "Cambios guardados", true);
     }
 
-    const business = await fetchBusinessForOwner(db, auth.currentUser.uid);
+    const business = await resolveBusinessForUser(db, auth.currentUser);
     if (business) {
       businessId = business.id;
       businessData = business.data;
@@ -243,6 +243,7 @@ async function toggleIntegration(key) {
     await updateDoc(ref, {
       [`integrations.${key}`]: { connected: next },
       updatedAt: serverTimestamp(),
+      ownerUid: auth.currentUser.uid,
     });
     if (!businessData.integrations) businessData.integrations = {};
     businessData.integrations[key] = { connected: next };
@@ -315,7 +316,7 @@ async function loadPage(user) {
   const main = document.getElementById("cfg-main");
 
   try {
-    const business = await fetchBusinessForOwner(db, user.uid);
+    const business = await resolveBusinessForUser(db, user);
     renderHeader(business);
 
     if (!business) {

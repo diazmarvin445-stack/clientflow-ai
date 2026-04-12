@@ -4,9 +4,13 @@
  */
 import {
   collection,
+  doc,
   getDocs,
   getDocsFromServer,
+  limit,
   query,
+  serverTimestamp,
+  updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
@@ -196,6 +200,77 @@ export async function fetchBusinessForOwner(db, ownerUid) {
     );
   }
   return { id: best.id, data: normalizeBusinessDocument(best.raw) };
+}
+
+function rawBusinessUnclaimed(raw) {
+  const o = raw && raw.ownerUid;
+  return o === undefined || o === null || o === "";
+}
+
+/**
+ * Busca documentos por email de negocio (variantes de mayúsculas) para reclamación.
+ */
+async function collectBusinessDocsByBusinessEmail(db, email) {
+  const t = typeof email === "string" ? email.trim() : "";
+  if (!t) return [];
+  const variants = Array.from(new Set([t, t.toLowerCase()]));
+  const byId = new Map();
+  for (const em of variants) {
+    const q = query(collection(db, "businesses"), where("email", "==", em), limit(25));
+    let snap;
+    try {
+      snap = await getDocsFromServer(q);
+    } catch (e) {
+      console.warn("[ClientFlow] collectBusinessDocsByBusinessEmail: server read failed", e);
+      snap = await getDocs(q);
+    }
+    snap.forEach((d) => byId.set(d.id, { id: d.id, raw: d.data() }));
+  }
+  return [...byId.values()];
+}
+
+/**
+ * Si existe un negocio sin ownerUid cuyo email coincide con la cuenta autenticada, asigna ownerUid.
+ */
+async function tryClaimUnownedBusinessByEmail(db, uid, authEmail) {
+  const rows = await collectBusinessDocsByBusinessEmail(db, authEmail);
+  const unowned = rows.filter((r) => rawBusinessUnclaimed(r.raw));
+  if (!unowned.length) return null;
+  unowned.sort((a, b) => {
+    const ta = toDate(a.raw.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.raw.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  const pick = unowned[0];
+  const docEm = typeof pick.raw.email === "string" ? pick.raw.email.trim().toLowerCase() : "";
+  const authEm = authEmail.trim().toLowerCase();
+  if (!docEm || docEm !== authEm) {
+    console.warn("[ClientFlow] Reclamación cancelada: email del documento no coincide con la cuenta.");
+    return null;
+  }
+  const ref = doc(db, "businesses", pick.id);
+  await updateDoc(ref, {
+    ownerUid: uid,
+    email: authEm,
+    updatedAt: serverTimestamp(),
+  });
+  console.log(`[ClientFlow] Negocio ${pick.id} vinculado a ownerUid (reclamación por email).`);
+  return fetchBusinessForOwner(db, uid);
+}
+
+/**
+ * Resuelve el negocio del usuario: por ownerUid, o reclamando uno sin dueño con el mismo email en el documento.
+ * Usar en lugar de fetchBusinessForOwner cuando haya objeto `user` (p. ej. auth.currentUser).
+ *
+ * @param {{ uid: string, email?: string | null }} user Firebase Auth user o equivalente
+ */
+export async function resolveBusinessForUser(db, user) {
+  if (!user || typeof user.uid !== "string") return null;
+  const primary = await fetchBusinessForOwner(db, user.uid);
+  if (primary) return primary;
+  const em = typeof user.email === "string" ? user.email.trim() : "";
+  if (!em) return null;
+  return tryClaimUnownedBusinessByEmail(db, user.uid, em);
 }
 
 function startOfLocalDay(d = new Date()) {

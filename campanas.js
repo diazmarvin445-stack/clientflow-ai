@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   campaignPlatformDisplayName,
-  fetchBusinessForOwner,
+  resolveBusinessForUser,
   fetchCampaignsListAndStats,
   fetchLaunchedRecommendationIds,
   formatBusinessMeta,
@@ -816,7 +816,7 @@ async function loadCampanasForUser(user) {
       await auth.authStateReady();
     }
 
-    const business = await fetchBusinessForOwner(db, queryUid);
+    const business = await resolveBusinessForUser(db, user);
     if (business) {
       const ou = business.data && business.data.ownerUid;
       console.log(LOG_PREFIX, "[biz-link] negocio encontrado", {

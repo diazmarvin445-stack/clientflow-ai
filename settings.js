@@ -1,6 +1,6 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-import { fetchBusinessForOwner, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
+import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
 function renderHeader(business) {
@@ -34,7 +34,7 @@ function boot() {
       return;
     }
     try {
-      const business = await fetchBusinessForOwner(db, user.uid);
+      const business = await resolveBusinessForUser(db, user);
       renderHeader(business);
     } catch (e) {
       console.error(e);

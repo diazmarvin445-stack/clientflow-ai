@@ -6,7 +6,7 @@ import {
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
-  fetchBusinessForOwner,
+  resolveBusinessForUser,
   fetchClientsForBusiness,
   formatBusinessMeta,
   formatLeadRelativeTimeEs,
@@ -318,7 +318,7 @@ function buildClientCard(businessId, client) {
 
 async function loadClientesForUser(user) {
   hideLoadError();
-  const business = await fetchBusinessForOwner(db, user.uid);
+  const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
 
   const root = document.getElementById("cli-clients-root");

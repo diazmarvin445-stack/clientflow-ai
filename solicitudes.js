@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   buildClientPayloadFromLead,
-  fetchBusinessForOwner,
+  resolveBusinessForUser,
   fetchLeadsForBusiness,
   formatBusinessMeta,
   formatLeadRelativeTimeEs,
@@ -534,7 +534,7 @@ function renderLeadList(root, businessId, leads) {
 async function loadSolicitudesForUser(user) {
   hideLoadError();
   ensureRequestLinkUiWired();
-  const business = await fetchBusinessForOwner(db, user.uid);
+  const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
   syncRequestLinkSection(business);
 

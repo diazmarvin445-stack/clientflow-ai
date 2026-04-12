@@ -9,7 +9,7 @@ import {
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
-  fetchBusinessForOwner,
+  resolveBusinessForUser,
   fetchTeamMembersForBusiness,
   formatBusinessMeta,
   initialsFromName,
@@ -463,7 +463,7 @@ onAuthStateChanged(auth, async (user) => {
   initDashShell(auth);
 
   try {
-    const business = await fetchBusinessForOwner(db, user.uid);
+    const business = await resolveBusinessForUser(db, user);
     if (!business) {
       showLoadError("No encontramos un negocio asociado a tu cuenta.");
       renderHeader(null);

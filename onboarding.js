@@ -194,7 +194,10 @@ if (form && successEl) {
       businessName: val("businessName"),
       businessDescription: val("businessDescription"),
       phone: val("phone"),
-      email: val("email"),
+      email: (() => {
+        const e = val("email").trim();
+        return e ? e.toLowerCase() : "";
+      })(),
       services: Array.from(services).map((c) => c.value),
       serviceOtherDetail: val("serviceOtherDetail"),
       serviceArea: val("serviceArea"),
