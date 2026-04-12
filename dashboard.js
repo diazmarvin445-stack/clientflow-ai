@@ -87,11 +87,33 @@ function trendLeadsVsYesterday(today, yesterday) {
   return { dir: "neutral", pill: "0%", note: "vs. ayer" };
 }
 
+function renderCampaignSummary(snapshot) {
+  const section = document.getElementById("dash-campaign-summary");
+  if (!section) return;
+  if (!snapshot) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  setText("dash-campaign-title", snapshot.title);
+  setText("dash-campaign-platform", snapshot.platform);
+  setText("dash-campaign-reach", snapshot.reachEstimate.toLocaleString("es"));
+  setText(
+    "dash-campaign-clicks",
+    snapshot.clicks != null ? String(snapshot.clicks) : "—",
+  );
+  setText("dash-campaign-leads", String(snapshot.leadsWeeklyEst));
+  const hint = document.getElementById("dash-campaign-hint");
+  if (hint) hint.hidden = !snapshot.usesHeuristicReach;
+}
+
 function renderMetrics(metrics) {
   setText("dash-metric-leads", String(metrics.leadsToday));
   setText("dash-metric-jobs", String(metrics.jobsConfirmed));
   setText("dash-metric-revenue", formatUsd(metrics.revenueSum));
   setText("dash-metric-campaigns", String(metrics.campaignsActive));
+
+  renderCampaignSummary(metrics.activeCampaignSnapshot ?? null);
 
   const ly = typeof metrics.leadsYesterday === "number" ? metrics.leadsYesterday : 0;
   const lt = trendLeadsVsYesterday(metrics.leadsToday, ly);
@@ -138,6 +160,7 @@ async function loadDashboardForUser(user) {
       jobsConfirmed: 0,
       revenueSum: 0,
       campaignsActive: 0,
+      activeCampaignSnapshot: null,
     });
     renderLeadsTable([]);
     return;
@@ -180,6 +203,7 @@ function boot() {
         jobsConfirmed: 0,
         revenueSum: 0,
         campaignsActive: 0,
+        activeCampaignSnapshot: null,
       });
       renderLeadsTable([]);
     });

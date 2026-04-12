@@ -147,10 +147,53 @@ export async function fetchDashboardMetrics(db, businessId) {
   });
 
   let campaignsActive = 0;
+  const activeCampaignRows = [];
   campaignsSnap.forEach((doc) => {
     const row = doc.data();
-    if (row.status === "active") campaignsActive += 1;
+    if (row.status === "active") {
+      campaignsActive += 1;
+      activeCampaignRows.push({ id: doc.id, data: row });
+    }
   });
+
+  activeCampaignRows.sort((a, b) => {
+    const ta = toDate(a.data.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.data.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+
+  /** Vista compacta de la campaña activa más reciente (panel ejecutivo). */
+  let activeCampaignSnapshot = null;
+  if (activeCampaignRows.length) {
+    const row = activeCampaignRows[0].data;
+    const leadsW = Number(row.estimatedLeads);
+    const leadsWeeklyEst = Number.isFinite(leadsW) && leadsW >= 0 ? Math.round(leadsW) : 0;
+    const reachRaw = Number(row.estimatedReach);
+    const usesHeuristicReach = !(Number.isFinite(reachRaw) && reachRaw > 0);
+    const reachEstimate = usesHeuristicReach
+      ? Math.max(160, Math.round(leadsWeeklyEst * 36))
+      : Math.round(reachRaw);
+    const clicksRaw = Number(row.clicks);
+    const clicks =
+      Number.isFinite(clicksRaw) && clicksRaw >= 0 ? Math.round(clicksRaw) : null;
+
+    const plat = typeof row.platform === "string" ? row.platform.toLowerCase() : "";
+    let platformLabel = "Facebook";
+    if (plat === "instagram") platformLabel = "Instagram";
+    else if (plat === "google") platformLabel = "Google Ads";
+
+    const title =
+      typeof row.title === "string" && row.title.trim() ? row.title.trim() : "Campaña activa";
+
+    activeCampaignSnapshot = {
+      title,
+      platform: platformLabel,
+      reachEstimate,
+      clicks,
+      leadsWeeklyEst,
+      usesHeuristicReach,
+    };
+  }
 
   return {
     leadsToday,
@@ -158,6 +201,7 @@ export async function fetchDashboardMetrics(db, businessId) {
     jobsConfirmed,
     revenueSum,
     campaignsActive,
+    activeCampaignSnapshot,
     /** Todas las solicitudes, más recientes primero (misma colección que `solicitar.html?businessId=`) */
     recentLeads: recentLeadDocs,
   };

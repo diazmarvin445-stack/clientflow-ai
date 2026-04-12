@@ -2568,6 +2568,117 @@ body.dash-menu-open {
   box-sizing: border-box;
 }
 
+.dash-page--summary {
+  max-width: min(920px, 100%);
+  padding-top: 1.5rem;
+  padding-bottom: 2.25rem;
+}
+
+.dash-body--summary .dash-main {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.65) 0%, var(--bg) 28%);
+}
+
+.dash-workspace--summary {
+  display: block;
+  max-width: 100%;
+}
+
+.dash-workspace--summary .dash-workspace-primary {
+  gap: 1.75rem;
+}
+
+.dash-campaign-compact {
+  padding: 0;
+  border-radius: var(--radius-lg);
+}
+
+.dash-campaign-compact-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.35rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    125deg,
+    rgba(37, 99, 235, 0.07) 0%,
+    rgba(255, 255, 255, 0.92) 42%,
+    rgba(16, 185, 129, 0.06) 100%
+  );
+}
+
+.dash-campaign-compact-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.dash-campaign-compact-title {
+  margin: 0 0 0.2rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.dash-campaign-compact-plat {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.dash-campaign-compact-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  padding: 1.05rem 1.35rem 1.15rem;
+}
+
+.dash-campaign-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.dash-campaign-metric-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.dash-campaign-metric-value {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.dash-campaign-compact-hint {
+  margin: 0;
+  padding: 0 1.35rem 1.1rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .dash-campaign-compact-metrics {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+}
+
 .dash-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(272px, 320px);
@@ -2996,6 +3107,10 @@ body.dash-menu-open {
 
 .dash-appt:last-child {
   border-bottom: none;
+}
+
+.dash-appt--solo .dash-appt-body {
+  padding-left: 0;
 }
 
 .dash-appt-time {

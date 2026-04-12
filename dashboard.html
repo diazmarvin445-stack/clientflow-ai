@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="dash-body">
+  <body class="dash-body dash-body--summary">
     <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
 
     <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
@@ -35,7 +35,7 @@
           <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
           Campañas IA
         </a>
-        <a href="#" class="dash-nav-link" data-cf-soon="Calendario">
+        <a href="calendario.html" class="dash-nav-link">
           <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
           Calendario
         </a>
@@ -103,175 +103,107 @@
       </header>
 
       <main class="dash-main" id="dash-main">
-        <div class="dash-page">
-          <div class="dash-workspace">
+        <div class="dash-page dash-page--summary">
+          <div class="dash-workspace dash-workspace--summary">
             <div class="dash-workspace-primary">
-            <section class="dash-stats" aria-label="Resumen">
-              <a href="solicitudes.html" class="dash-stat-card dash-stat-card--link">
-                <div class="dash-stat-head">
-                  <span class="dash-stat-label">Leads nuevos hoy</span>
-                  <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
-                </div>
-                <p class="dash-stat-value" id="dash-metric-leads">0</p>
-                <div class="dash-stat-foot" id="dash-trend-leads"></div>
-              </a>
-              <a
-                href="#"
-                class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
-                data-cf-soon="Pipeline de trabajos"
-                data-cf-soon-desc="Vista detallada de trabajos confirmados, asignación a equipo y seguimiento de ingresos por trabajo."
-              >
-                <div class="dash-stat-head">
-                  <span class="dash-stat-label">Trabajos programados</span>
-                  <span class="dash-stat-ico dash-stat-ico--check" aria-hidden="true"></span>
-                </div>
-                <p class="dash-stat-value" id="dash-metric-jobs">0</p>
-                <div class="dash-stat-foot" id="dash-trend-jobs"></div>
-              </a>
-              <a
-                href="#"
-                class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
-                data-cf-soon="Ingresos e informes"
-                data-cf-soon-desc="Gráficos de facturación, comparativas por servicio y exportación contable estarán disponibles pronto."
-              >
-                <div class="dash-stat-head">
-                  <span class="dash-stat-label">Ingresos proyectados</span>
-                  <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
-                </div>
-                <p class="dash-stat-value" id="dash-metric-revenue">$0</p>
-                <div class="dash-stat-foot" id="dash-trend-revenue"></div>
-              </a>
-              <a href="campanas.html" class="dash-stat-card dash-stat-card--link">
-                <div class="dash-stat-head">
-                  <span class="dash-stat-label">Campañas IA activas</span>
-                  <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
-                </div>
-                <p class="dash-stat-value" id="dash-metric-campaigns">0</p>
-                <div class="dash-stat-foot" id="dash-trend-campaigns"></div>
-              </a>
-            </section>
+              <section class="dash-stats" aria-label="Resumen">
+                <a href="solicitudes.html" class="dash-stat-card dash-stat-card--link">
+                  <div class="dash-stat-head">
+                    <span class="dash-stat-label">Leads nuevos hoy</span>
+                    <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
+                  </div>
+                  <p class="dash-stat-value" id="dash-metric-leads">0</p>
+                  <div class="dash-stat-foot" id="dash-trend-leads"></div>
+                </a>
+                <a
+                  href="#"
+                  class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
+                  data-cf-soon="Pipeline de trabajos"
+                  data-cf-soon-desc="Vista detallada de trabajos confirmados, asignación a equipo y seguimiento de ingresos por trabajo."
+                >
+                  <div class="dash-stat-head">
+                    <span class="dash-stat-label">Trabajos programados</span>
+                    <span class="dash-stat-ico dash-stat-ico--check" aria-hidden="true"></span>
+                  </div>
+                  <p class="dash-stat-value" id="dash-metric-jobs">0</p>
+                  <div class="dash-stat-foot" id="dash-trend-jobs"></div>
+                </a>
+                <a
+                  href="#"
+                  class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
+                  data-cf-soon="Ingresos e informes"
+                  data-cf-soon-desc="Gráficos de facturación, comparativas por servicio y exportación contable estarán disponibles pronto."
+                >
+                  <div class="dash-stat-head">
+                    <span class="dash-stat-label">Ingresos proyectados</span>
+                    <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
+                  </div>
+                  <p class="dash-stat-value" id="dash-metric-revenue">$0</p>
+                  <div class="dash-stat-foot" id="dash-trend-revenue"></div>
+                </a>
+                <a href="campanas.html" class="dash-stat-card dash-stat-card--link">
+                  <div class="dash-stat-head">
+                    <span class="dash-stat-label">Campañas IA activas</span>
+                    <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
+                  </div>
+                  <p class="dash-stat-value" id="dash-metric-campaigns">0</p>
+                  <div class="dash-stat-foot" id="dash-trend-campaigns"></div>
+                </a>
+              </section>
 
-            <section class="dash-panel dash-panel--table" id="recent-requests">
-              <div class="dash-panel-head">
-                <h2 class="dash-panel-title">Solicitudes recientes</h2>
-                <a href="solicitudes.html" class="dash-panel-link">Ver todas</a>
-              </div>
-              <div class="dash-table-wrap">
-                <table class="dash-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Cliente</th>
-                      <th scope="col">Servicio</th>
-                      <th scope="col">Estado</th>
-                      <th scope="col">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody id="dash-leads-tbody"></tbody>
-                </table>
-              </div>
-            </section>
+              <section
+                id="dash-campaign-summary"
+                class="dash-panel dash-campaign-compact"
+                hidden
+                aria-labelledby="dash-campaign-title"
+              >
+                <div class="dash-campaign-compact-head">
+                  <div class="dash-campaign-compact-intro">
+                    <p class="dash-campaign-compact-kicker">Rendimiento · campaña activa</p>
+                    <h2 class="dash-campaign-compact-title" id="dash-campaign-title">—</h2>
+                    <p class="dash-campaign-compact-plat" id="dash-campaign-platform">—</p>
+                  </div>
+                  <a href="campanas.html" class="dash-panel-link">Gestionar</a>
+                </div>
+                <div class="dash-campaign-compact-metrics" role="group" aria-label="Métricas de campaña">
+                  <div class="dash-campaign-metric">
+                    <span class="dash-campaign-metric-label">Personas alcanzadas (estim.)</span>
+                    <span class="dash-campaign-metric-value" id="dash-campaign-reach">—</span>
+                  </div>
+                  <div class="dash-campaign-metric">
+                    <span class="dash-campaign-metric-label">Clics (según plataforma)</span>
+                    <span class="dash-campaign-metric-value" id="dash-campaign-clicks">—</span>
+                  </div>
+                  <div class="dash-campaign-metric">
+                    <span class="dash-campaign-metric-label">Leads generados (estim. / sem.)</span>
+                    <span class="dash-campaign-metric-value" id="dash-campaign-leads">—</span>
+                  </div>
+                </div>
+                <p class="dash-campaign-compact-hint" id="dash-campaign-hint" hidden>
+                  El alcance es una estimación interna hasta conectar analíticas reales.
+                </p>
+              </section>
+
+              <section class="dash-panel dash-panel--table" id="recent-requests">
+                <div class="dash-panel-head">
+                  <h2 class="dash-panel-title">Solicitudes recientes</h2>
+                  <a href="solicitudes.html" class="dash-panel-link">Ver todas</a>
+                </div>
+                <div class="dash-table-wrap">
+                  <table class="dash-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Cliente</th>
+                        <th scope="col">Servicio</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Fecha</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-leads-tbody"></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-
-            <aside class="dash-workspace-aside" aria-label="Calendario y citas">
-              <div class="dash-aside-column">
-            <section class="dash-panel dash-panel--widget dash-panel--calendar">
-              <h2 class="dash-widget-title">Calendario semanal</h2>
-              <p class="dash-widget-sub">Semana del 7–13 abril 2026</p>
-              <div class="dash-cal" role="grid" aria-label="Vista semanal">
-                <div class="dash-cal-weekdays">
-                  <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
-                </div>
-                <div class="dash-cal-days">
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">7</button>
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">8</button>
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">9</button>
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">10</button>
-                  <button
-                    type="button"
-                    class="dash-cal-day is-today"
-                    aria-current="date"
-                    data-cf-soon="Calendario"
-                  >
-                    11
-                  </button>
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">12</button>
-                  <button type="button" class="dash-cal-day" data-cf-soon="Calendario">13</button>
-                </div>
-              </div>
-              <p class="dash-cal-hint">Hoy: 4 bloques ocupados</p>
-            </section>
-
-            <section class="dash-panel dash-panel--widget">
-              <div class="dash-panel-head dash-panel-head--compact">
-                <h2 class="dash-widget-title">Próximas citas</h2>
-                <span class="dash-widget-badge">5</span>
-              </div>
-              <ul class="dash-appointments">
-                <li class="dash-appt">
-                  <span class="dash-appt-time">09:00</span>
-                  <div class="dash-appt-body">
-                    <span class="dash-appt-title">Visita · María González</span>
-                    <span class="dash-appt-meta">Mantenimiento</span>
-                  </div>
-                </li>
-                <li class="dash-appt">
-                  <span class="dash-appt-time">11:30</span>
-                  <div class="dash-appt-body">
-                    <span class="dash-appt-title">Presupuesto · Residencial Norte</span>
-                    <span class="dash-appt-meta">Paisajismo</span>
-                  </div>
-                </li>
-                <li class="dash-appt">
-                  <span class="dash-appt-time">15:00</span>
-                  <div class="dash-appt-body">
-                    <span class="dash-appt-title">Instalación · Comunidad Los Pinos</span>
-                    <span class="dash-appt-meta">Riego</span>
-                  </div>
-                </li>
-                <li class="dash-appt dash-appt--more">
-                  <button type="button" class="dash-appt-link" data-cf-soon="Agenda completa">
-                    + 2 citas más esta semana
-                  </button>
-                </li>
-              </ul>
-            </section>
-
-            <section class="dash-panel dash-panel--widget dash-panel--quick" aria-label="Acciones rápidas">
-              <h2 class="dash-widget-title">Acciones rápidas</h2>
-              <p class="dash-widget-sub dash-widget-sub--tight">Lo que más usan los equipos en un día típico</p>
-              <div class="dash-quick-grid">
-                <a href="campanas.html" class="dash-quick-tile dash-quick-tile--accent">
-                  <span class="dash-quick-tile-ico dash-quick-tile-ico--spark" aria-hidden="true"></span>
-                  <span class="dash-quick-tile-text">
-                    <span class="dash-quick-tile-label">Crear campaña IA</span>
-                    <span class="dash-quick-tile-hint">Lanzar o revisar recomendaciones</span>
-                  </span>
-                </a>
-                <button type="button" class="dash-quick-tile" data-cf-soon="Agendar cita">
-                  <span class="dash-quick-tile-ico dash-quick-tile-ico--cal" aria-hidden="true"></span>
-                  <span class="dash-quick-tile-text">
-                    <span class="dash-quick-tile-label">Agendar cita</span>
-                    <span class="dash-quick-tile-hint">Calendario y recordatorios</span>
-                  </span>
-                </button>
-                <button type="button" class="dash-quick-tile" data-cf-soon="Nuevo cliente">
-                  <span class="dash-quick-tile-ico dash-quick-tile-ico--user" aria-hidden="true"></span>
-                  <span class="dash-quick-tile-text">
-                    <span class="dash-quick-tile-label">Nuevo cliente</span>
-                    <span class="dash-quick-tile-hint">Ficha y contacto</span>
-                  </span>
-                </button>
-                <a href="solicitudes.html" class="dash-quick-tile">
-                  <span class="dash-quick-tile-ico dash-quick-tile-ico--inbox" aria-hidden="true"></span>
-                  <span class="dash-quick-tile-text">
-                    <span class="dash-quick-tile-label">Nueva solicitud</span>
-                    <span class="dash-quick-tile-hint">Ver bandeja de entrada</span>
-                  </span>
-                </a>
-              </div>
-            </section>
-              </div>
-          </aside>
           </div>
         </div>
       </main>
