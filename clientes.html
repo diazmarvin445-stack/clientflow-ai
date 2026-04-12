@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clientes — ClientFlow AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="dash-body cli-page">
+    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
+
+    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
+      <div class="dash-sidebar-brand">
+        <a href="index.html" class="logo dash-logo">
+          <span class="logo-mark" aria-hidden="true"></span>
+          ClientFlow AI
+        </a>
+      </div>
+      <nav class="dash-nav" aria-label="Secciones">
+        <a href="dashboard.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
+          Dashboard
+        </a>
+        <a href="solicitudes.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
+          Solicitudes
+        </a>
+        <a href="campanas.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
+          Campañas IA
+        </a>
+        <a href="calendario.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
+          Calendario
+        </a>
+        <a href="clientes.html" class="dash-nav-link is-active" aria-current="page">
+          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
+          Clientes
+        </a>
+        <a href="#" class="dash-nav-link" data-cf-soon="Equipo">
+          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+          Equipo
+        </a>
+        <a href="settings.html" class="dash-nav-link">
+          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+          Configuración
+        </a>
+      </nav>
+      <div class="dash-sidebar-foot">
+        <div class="dash-sidebar-card">
+          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
+          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
+          <a
+            href="#"
+            class="dash-sidebar-card-link"
+            data-cf-soon="Centro de ayuda"
+            data-cf-soon-desc="Documentación, tutoriales en vídeo y chat con soporte llegarán en la próxima versión."
+            >Centro de ayuda</a
+          >
+        </div>
+      </div>
+    </aside>
+
+    <div class="dash-shell">
+      <header class="dash-topbar">
+        <button
+          type="button"
+          class="dash-menu-btn"
+          id="dash-menu-btn"
+          aria-label="Abrir menú"
+          aria-expanded="false"
+          aria-controls="dash-sidebar"
+        >
+          <span></span><span></span><span></span>
+        </button>
+        <div class="dash-topbar-title">
+          <h1 class="dash-business-name" id="dash-business-name">…</h1>
+          <span class="dash-business-meta" id="dash-business-meta">…</span>
+        </div>
+        <div class="dash-topbar-actions">
+          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
+            <span class="dash-notify-dot" aria-hidden="true"></span>
+          </button>
+          <button
+            type="button"
+            class="dash-avatar"
+            aria-label="Menú de cuenta"
+            aria-expanded="false"
+            aria-haspopup="true"
+          >
+            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="dash-main" id="dash-main">
+        <div class="dash-workspace dash-workspace--full cli-workspace">
+          <div class="dash-workspace-primary">
+            <p class="cli-load-error" id="cli-load-error" hidden role="alert"></p>
+
+            <section class="dash-panel cli-panel" aria-labelledby="cli-panel-title">
+              <div class="dash-panel-head">
+                <div>
+                  <h2 class="dash-panel-title" id="cli-panel-title">Clientes</h2>
+                  <p class="cli-panel-sub" id="cli-clients-meta">Cargando…</p>
+                </div>
+                <a href="solicitudes.html" class="dash-panel-link">Ir a solicitudes</a>
+              </div>
+
+              <div class="cli-toolbar">
+                <label for="cli-search" class="visually-hidden">Buscar clientes</label>
+                <input
+                  type="search"
+                  id="cli-search"
+                  class="cli-search"
+                  placeholder="Buscar por nombre, teléfono, dirección o servicio…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+
+              <div id="cli-clients-root" class="cli-clients"></div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="clientes.js"></script>
+  </body>
+</html>
