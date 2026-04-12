@@ -286,6 +286,16 @@ body {
   margin-bottom: 1rem;
 }
 
+.hero-actions--balanced {
+  align-items: stretch;
+}
+
+.hero-actions--balanced .btn {
+  flex: 1 1 180px;
+  min-height: 3rem;
+  justify-content: center;
+}
+
 .hero-actions-note {
   margin: 0 0 1rem;
   font-size: 0.9rem;
@@ -403,6 +413,8 @@ body {
 .stat-label {
   font-size: 0.8125rem;
   color: var(--text-muted);
+  max-width: 36ch;
+  line-height: 1.45;
 }
 
 /* Hero visual */
@@ -1081,6 +1093,18 @@ body {
   justify-content: center;
 }
 
+.cta-final-actions--balanced {
+  align-items: stretch;
+  max-width: 520px;
+  margin-inline: auto;
+}
+
+.cta-final-actions--balanced .btn {
+  flex: 1 1 200px;
+  min-height: 3rem;
+  justify-content: center;
+}
+
 .cta-final-note {
   margin: 1.25rem 0 0;
   font-size: 0.9375rem;
@@ -1414,16 +1438,39 @@ body {
 .footer-inner {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 1rem 1.5rem;
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.footer-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: min(100%, 280px);
 }
 
 .footer-brand {
   font-weight: 600;
   color: var(--text);
+}
+
+.footer-link-customer {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-decoration: none;
+  align-self: center;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.footer-link-customer:hover {
+  color: #047857;
+  border-bottom-color: rgba(4, 120, 87, 0.35);
 }
 
 /* Scroll reveal */
