@@ -2,147 +2,15 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="refresh" content="0;url=configuracion.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Configuración — ClientFlow AI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="styles.css" />
+    <title>Redirigiendo…</title>
+    <link rel="canonical" href="configuracion.html" />
+    <script>
+      window.location.replace("configuracion.html");
+    </script>
   </head>
-  <body class="dash-body settings-page">
-    <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
-
-    <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
-      <div class="dash-sidebar-brand">
-        <a href="index.html" class="logo dash-logo">
-          <span class="logo-mark" aria-hidden="true"></span>
-          ClientFlow AI
-        </a>
-      </div>
-      <nav class="dash-nav" aria-label="Secciones">
-        <a href="dashboard.html" class="dash-nav-link">
-          <span class="dash-nav-ico dash-nav-ico--home" aria-hidden="true"></span>
-          Dashboard
-        </a>
-        <a href="solicitudes.html" class="dash-nav-link">
-          <span class="dash-nav-ico dash-nav-ico--inbox" aria-hidden="true"></span>
-          Solicitudes
-        </a>
-        <a href="campanas.html" class="dash-nav-link">
-          <span class="dash-nav-ico dash-nav-ico--spark" aria-hidden="true"></span>
-          Campañas IA
-        </a>
-        <a href="calendario.html" class="dash-nav-link">
-          <span class="dash-nav-ico dash-nav-ico--cal" aria-hidden="true"></span>
-          Calendario
-        </a>
-        <a href="clientes.html" class="dash-nav-link">
-          <span class="dash-nav-ico dash-nav-ico--users" aria-hidden="true"></span>
-          Clientes
-        </a>
-        <a href="#" class="dash-nav-link" data-cf-soon="Equipo">
-          <span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
-          Equipo
-        </a>
-        <a href="settings.html" class="dash-nav-link is-active" aria-current="page">
-          <span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
-          Configuración
-        </a>
-      </nav>
-      <div class="dash-sidebar-foot">
-        <div class="dash-sidebar-card">
-          <p class="dash-sidebar-card-title">¿Necesitas ayuda?</p>
-          <p class="dash-sidebar-card-text">Guías y soporte para tu equipo.</p>
-          <a
-            href="#"
-            class="dash-sidebar-card-link"
-            data-cf-soon="Centro de ayuda"
-            data-cf-soon-desc="Documentación, tutoriales en vídeo y chat con soporte llegarán en la próxima versión."
-            >Centro de ayuda</a
-          >
-        </div>
-      </div>
-    </aside>
-
-    <div class="dash-shell">
-      <header class="dash-topbar">
-        <button
-          type="button"
-          class="dash-menu-btn"
-          id="dash-menu-btn"
-          aria-label="Abrir menú"
-          aria-expanded="false"
-          aria-controls="dash-sidebar"
-        >
-          <span></span><span></span><span></span>
-        </button>
-        <div class="dash-topbar-title">
-          <h1 class="dash-business-name" id="dash-business-name">…</h1>
-          <span class="dash-business-meta" id="dash-business-meta">…</span>
-        </div>
-        <div class="dash-topbar-actions">
-          <button type="button" class="dash-icon-btn dash-notify" aria-label="Notificaciones">
-            <span class="dash-notify-dot" aria-hidden="true"></span>
-          </button>
-          <button
-            type="button"
-            class="dash-avatar"
-            aria-label="Menú de cuenta"
-            aria-expanded="false"
-            aria-haspopup="true"
-          >
-            <span class="dash-avatar-inner" id="dash-avatar-initials" aria-hidden="true">…</span>
-          </button>
-        </div>
-      </header>
-
-      <main class="dash-main" id="dash-main">
-        <div class="settings-workspace">
-          <header class="settings-hero">
-            <h2 class="settings-hero-title">Configuración</h2>
-            <p class="settings-hero-sub">
-              Ajustes de cuenta, negocio e integraciones. Todo lo esencial en un solo lugar.
-            </p>
-          </header>
-
-          <div class="settings-grid">
-            <a href="profile.html" class="settings-card settings-card--link">
-              <span class="settings-card-kicker">Cuenta</span>
-              <h3 class="settings-card-title">Perfil y sesión</h3>
-              <p class="settings-card-desc">Correo, nombre visible y cierre de sesión.</p>
-              <span class="settings-card-cta">Abrir perfil →</span>
-            </a>
-
-            <a href="onboarding.html" class="settings-card settings-card--link">
-              <span class="settings-card-kicker">Negocio</span>
-              <h3 class="settings-card-title">Configuración del negocio</h3>
-              <p class="settings-card-desc">Servicios, zona, descripción y datos de contacto.</p>
-              <span class="settings-card-cta">Editar negocio →</span>
-            </a>
-
-            <article class="settings-card settings-card--soon" aria-labelledby="soon-int-title">
-              <span class="settings-soon-badge">Próximamente</span>
-              <span class="settings-card-kicker" id="soon-int-title">Integraciones</span>
-              <h3 class="settings-card-title">CRM y calendario</h3>
-              <p class="settings-card-desc">
-                Sincroniza solicitudes con Google Calendar, HubSpot y más.
-              </p>
-            </article>
-
-            <article class="settings-card settings-card--soon" aria-labelledby="soon-bill-title">
-              <span class="settings-soon-badge">Próximamente</span>
-              <span class="settings-card-kicker" id="soon-bill-title">Facturación</span>
-              <h3 class="settings-card-title">Plan y facturas</h3>
-              <p class="settings-card-desc">Gestiona tu suscripción y descarga recibos.</p>
-            </article>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <script type="module" src="settings.js"></script>
+  <body>
+    <p>Redirigiendo a <a href="configuracion.html">Configuración</a>…</p>
   </body>
 </html>

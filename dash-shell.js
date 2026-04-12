@@ -166,7 +166,7 @@ function initUserMenu(auth) {
     dropdown.setAttribute("role", "menu");
     dropdown.innerHTML = `
       <a href="profile.html" class="dash-user-dropdown-item" role="menuitem">Mi perfil</a>
-      <a href="settings.html" class="dash-user-dropdown-item" role="menuitem">Configuración</a>
+      <a href="configuracion.html" class="dash-user-dropdown-item" role="menuitem">Configuración</a>
       <a href="onboarding.html" class="dash-user-dropdown-item" role="menuitem">Configuración del negocio</a>
       <button type="button" class="dash-user-dropdown-item dash-user-dropdown-item--danger" role="menuitem" data-cf-signout>
         Cerrar sesión
