@@ -224,6 +224,51 @@ export async function fetchLeadsForBusiness(db, businessId) {
   return rows;
 }
 
+/**
+ * Clients in `businesses/{businessId}/clients`, newest `createdAt` first.
+ */
+export async function fetchClientsForBusiness(db, businessId) {
+  const snap = await getDocs(collection(db, "businesses", businessId, "clients"));
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data() });
+  });
+  rows.sort((a, b) => {
+    const ta = toDate(a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  return rows;
+}
+
+/**
+ * Fields for `addDoc` to `clients` when converting a lead (timestamps added by caller).
+ */
+export function buildClientPayloadFromLead(lead) {
+  const fullName =
+    (lead.customerName && String(lead.customerName).trim()) ||
+    (lead.clientName && String(lead.clientName).trim()) ||
+    (lead.name && String(lead.name).trim()) ||
+    "Cliente";
+  const phone = typeof lead.phone === "string" ? lead.phone.trim() : "";
+  const address = typeof lead.address === "string" ? lead.address.trim() : "";
+  const primaryService = typeof lead.service === "string" ? lead.service.trim() : "";
+  const notes = typeof lead.notes === "string" ? lead.notes : "";
+  const estimated = Number(lead.estimatedPrice);
+  const payload = {
+    fullName,
+    phone,
+    address,
+    primaryService,
+    notes,
+    sourceLeadId: typeof lead.id === "string" ? lead.id : String(lead.id || ""),
+  };
+  if (Number.isFinite(estimated) && estimated > 0) {
+    payload.totalValue = estimated;
+  }
+  return payload;
+}
+
 export const SERVICE_LABELS = {
   "lawn-care": "Lawn Care",
   landscaping: "Landscaping",
@@ -281,6 +326,8 @@ const LEGACY_STATUS_TO_CANONICAL = {
   confirmado: "scheduled",
   completed: "completed",
   completado: "completed",
+  won: "completed",
+  ganado: "completed",
   done: "completed",
   lost: "lost",
   perdido: "lost",

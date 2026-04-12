@@ -1,11 +1,14 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  addDoc,
+  collection,
   doc,
   serverTimestamp,
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
+  buildClientPayloadFromLead,
   fetchBusinessForOwner,
   fetchLeadsForBusiness,
   formatBusinessMeta,
@@ -115,8 +118,77 @@ function textNode(text) {
   return s;
 }
 
+function refreshConvertUI(article, businessId, leadRef) {
+  const old = article.querySelector(".sol-convert");
+  if (old) old.remove();
+  const el = buildConvertSection(article, businessId, leadRef);
+  const notes = article.querySelector(".sol-notes");
+  if (el && notes) article.insertBefore(el, notes);
+  else if (el) article.appendChild(el);
+}
+
+function buildConvertSection(article, businessId, leadRef) {
+  const convertedId =
+    typeof leadRef.convertedToClientId === "string"
+      ? leadRef.convertedToClientId.trim()
+      : "";
+  if (convertedId) {
+    const wrap = document.createElement("div");
+    wrap.className = "sol-convert sol-convert--done";
+    const a = document.createElement("a");
+    a.href = "clientes.html";
+    a.className = "sol-convert-link";
+    a.textContent = "Ver en Clientes";
+    wrap.appendChild(a);
+    return wrap;
+  }
+
+  const st = normalizeLeadStatus(leadRef.status);
+  if (st !== "completed") return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "sol-convert";
+  const hint = document.createElement("p");
+  hint.className = "sol-convert-hint";
+  hint.textContent =
+    "Copia los datos de esta solicitud a tu directorio de clientes para el seguimiento a largo plazo.";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "sol-convert-btn dash-quick-btn dash-quick-btn--primary";
+  btn.textContent = "Convertir en cliente";
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const payload = buildClientPayloadFromLead(leadRef);
+      const ref = await addDoc(collection(db, "businesses", businessId, "clients"), {
+        ...payload,
+        createdAt: serverTimestamp(),
+      });
+      await updateDoc(doc(db, "businesses", businessId, "leads", leadRef.id), {
+        convertedToClientId: ref.id,
+        updatedAt: serverTimestamp(),
+      });
+      leadRef.convertedToClientId = ref.id;
+      refreshConvertUI(article, businessId, leadRef);
+    } catch (err) {
+      console.error(err);
+      window.alert(
+        "No se pudo crear el cliente. Revisa la conexión y que las reglas de Firestore permitan escribir en clientes.",
+      );
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  wrap.append(hint, btn);
+  return wrap;
+}
+
 function buildLeadCard(businessId, lead) {
   const id = lead.id;
+  const leadRef = { ...lead, id };
   const name =
     (typeof lead.customerName === "string" && lead.customerName.trim()) ||
     (typeof lead.clientName === "string" && lead.clientName.trim()) ||
@@ -244,6 +316,9 @@ function buildLeadCard(businessId, lead) {
     article.appendChild(descBlock);
   }
 
+  const convertEl = buildConvertSection(article, businessId, leadRef);
+  if (convertEl) article.appendChild(convertEl);
+
   const details = document.createElement("details");
   details.className = "sol-notes";
   if (notesVal.trim().length > 0) details.open = true;
@@ -293,6 +368,8 @@ function buildLeadCard(businessId, lead) {
         updatedAt: serverTimestamp(),
       });
       select.dataset.lastSaved = next;
+      leadRef.status = next;
+      refreshConvertUI(article, businessId, leadRef);
     } catch (err) {
       console.error(err);
       select.value = prev;
