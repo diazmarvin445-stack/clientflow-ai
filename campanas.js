@@ -470,7 +470,7 @@ async function renderCampaignsPage(business) {
   genState.business = business;
 
   if (genState.prefillBusinessId !== business.id) {
-    applyGeneratorPrefillFromBusiness(data);
+    applyGeneratorPrefillFromBusiness(business.data);
     genState.prefillBusinessId = business.id;
   }
 
