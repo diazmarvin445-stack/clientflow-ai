@@ -21,7 +21,6 @@ import { initDashShell, openComingSoon } from "./dash-shell.js";
 const LOG_PREFIX = "[ClientFlow Campañas]";
 /** Set false to silence temporary generator wiring logs. */
 const DEBUG_CAMPAIGN_GENERATOR = true;
-const AI_CAMPAIGN_ENDPOINT = "https://generatecampaign-5laxqi2i4q-uc.a.run.app";
 
 /** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number, prefillBusinessId: string | null }} */
 const genState = {
@@ -733,7 +732,7 @@ function buildAIGeneratorPayload(inputs, businessData) {
 }
 
 async function generateCampaignWithAI(payload) {
-  const res = await fetch(AI_CAMPAIGN_ENDPOINT, {
+  const res = await fetch("https://generatecampaign-5laxqi2i4q-uc.a.run.app", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
