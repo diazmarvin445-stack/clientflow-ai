@@ -16,12 +16,12 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { generateCampaignRecommendations, formatUsd } from "./campanas-campaign-sim.js";
-import { mockGenerateCampaignFromInputs } from "./campanas-ai-generator.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
 /** Set false to silence temporary generator wiring logs. */
 const DEBUG_CAMPAIGN_GENERATOR = true;
+const AI_CAMPAIGN_ENDPOINT = "/api/ai/generate-campaign";
 
 /** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number, prefillBusinessId: string | null }} */
 const genState = {
@@ -612,6 +612,140 @@ function hashStringForDebug(s) {
   return String(Math.abs(h));
 }
 
+function parseBudgetNumber(raw) {
+  const cleaned = String(raw ?? "").trim().replace(/[^\d.]/g, "");
+  const n = Number.parseFloat(cleaned);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}
+
+function normalizePlatformKey(raw) {
+  const p = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (p === "facebook" || p === "instagram" || p === "google") return p;
+  return "facebook";
+}
+
+function lineList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean);
+  }
+  return String(value)
+    .split(/\r?\n|•|- /g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function normalizeAIResponse(raw) {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Respuesta de IA inválida: se esperaba un objeto JSON.");
+  }
+
+  const headline = String(raw.headline ?? "").trim();
+  const description = String(raw.description ?? "").trim();
+  const cta = String(raw.cta ?? "").trim();
+  const platform = normalizePlatformKey(raw.recommendedPlatform);
+  const budget = Number(raw.recommendedBudget);
+  const estimatedLeads = Number(raw.estimatedLeads);
+  const estimatedReach = Number(raw.estimatedReach);
+
+  if (!headline) throw new Error("Falta `headline` en la respuesta.");
+  if (!description) throw new Error("Falta `description` en la respuesta.");
+  if (!cta) throw new Error("Falta `cta` en la respuesta.");
+  if (!Number.isFinite(budget) || budget <= 0) {
+    throw new Error("`recommendedBudget` inválido en la respuesta.");
+  }
+  if (!Number.isFinite(estimatedLeads) || estimatedLeads < 0) {
+    throw new Error("`estimatedLeads` inválido en la respuesta.");
+  }
+
+  return {
+    headline,
+    description,
+    cta,
+    recommendedPlatform: platform,
+    recommendedBudget: Math.round(budget),
+    strategy: String(raw.strategy ?? "").trim(),
+    visualIdeas: lineList(raw.visualIdeas),
+    photoSuggestions: lineList(raw.photoSuggestions),
+    videoSuggestions: lineList(raw.videoSuggestions),
+    estimatedLeads: Math.round(estimatedLeads),
+    estimatedReach:
+      Number.isFinite(estimatedReach) && estimatedReach > 0
+        ? Math.round(estimatedReach)
+        : Math.max(160, Math.round(estimatedLeads * 36)),
+  };
+}
+
+function mapAIResponseToGeneratorOutput(ai) {
+  const strategyLine = ai.strategy ? `Estrategia: ${ai.strategy}` : "";
+  const visualLine = ai.visualIdeas.length ? `Visuales: ${ai.visualIdeas.join(" · ")}` : "";
+  const photoLine = ai.photoSuggestions.length ? `Fotos: ${ai.photoSuggestions.join(" · ")}` : "";
+  const videoLine = ai.videoSuggestions.length ? `Vídeo: ${ai.videoSuggestions.join(" · ")}` : "";
+  const blocks = [ai.description, strategyLine, visualLine, photoLine, videoLine].filter(Boolean);
+
+  return {
+    headline: ai.headline,
+    hook: ai.strategy || ai.description,
+    bodyText: blocks.join(" "),
+    cta: ai.cta,
+    platform: ai.recommendedPlatform,
+    platformDisplayLabel: campaignPlatformDisplayName(ai.recommendedPlatform),
+    suggestedBudgetWeekly: ai.recommendedBudget,
+    estimatedLeadsWeekly: ai.estimatedLeads,
+    estimatedReachWeekly: ai.estimatedReach,
+    creativeIdea:
+      ai.visualIdeas[0] ||
+      ai.photoSuggestions[0] ||
+      ai.videoSuggestions[0] ||
+      ai.strategy ||
+      ai.description,
+    strategy: ai.strategy,
+    visualIdeas: ai.visualIdeas,
+    photoSuggestions: ai.photoSuggestions,
+    videoSuggestions: ai.videoSuggestions,
+  };
+}
+
+function buildAIGeneratorPayload(inputs, businessData) {
+  const safeBusiness = businessData && typeof businessData === "object" ? businessData : {};
+  return {
+    campaignGoal: inputs.goal,
+    offer: inputs.offer,
+    targetLocation: inputs.location,
+    targetAudience: inputs.audience,
+    budget: parseBudgetNumber(inputs.budget),
+    platformPreference: inputs.platformPref,
+    businessProfile: {
+      businessId: genState.business?.id || null,
+      businessName: String(safeBusiness.businessName ?? "").trim(),
+      businessDescription: String(safeBusiness.businessDescription ?? "").trim(),
+      serviceArea: String(safeBusiness.serviceArea ?? "").trim(),
+      services: Array.isArray(safeBusiness.services) ? safeBusiness.services : [],
+      serviceOtherDetail: String(safeBusiness.serviceOtherDetail ?? "").trim(),
+      category: String(safeBusiness.category ?? "").trim(),
+    },
+  };
+}
+
+async function generateCampaignWithAI(payload) {
+  const res = await fetch(AI_CAMPAIGN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Backend AI error (${res.status}).`);
+  }
+  const json = await res.json();
+  return normalizeAIResponse(json);
+}
+
 function resetGeneratorUI() {
   genState.last = null;
   genState.genVariation = 0;
@@ -650,12 +784,17 @@ async function saveGeneratedCampaign(businessId, pack) {
     platform: data.platform,
     recommendedBudget: data.suggestedBudgetWeekly,
     estimatedLeads: data.estimatedLeadsWeekly,
+    estimatedReach: data.estimatedReachWeekly,
     audience: audienceLine,
     adDescription: data.bodyText,
     headline: data.headline,
     hook: data.hook,
     cta: data.cta,
     creativeIdea: data.creativeIdea,
+    strategy: data.strategy || "",
+    visualIdeas: Array.isArray(data.visualIdeas) ? data.visualIdeas : [],
+    photoSuggestions: Array.isArray(data.photoSuggestions) ? data.photoSuggestions : [],
+    videoSuggestions: Array.isArray(data.videoSuggestions) ? data.videoSuggestions : [],
     status: "active",
     sourceType: "ai-generator",
     generatorInputs: inputs,
@@ -687,8 +826,6 @@ function runCampaignGenerator() {
     });
   }
 
-  const displayName =
-    (typeof b.data.businessName === "string" && b.data.businessName.trim()) || "Tu negocio";
   if (genBtn) {
     genBtn.disabled = true;
     genBtn.setAttribute("aria-busy", "true");
@@ -701,29 +838,34 @@ function runCampaignGenerator() {
   if (outWrap) outWrap.hidden = false;
   if (hint) hint.textContent = "";
 
-  window.setTimeout(() => {
+  window.setTimeout(async () => {
     try {
       const fromDom = readGeneratorInputsFromDom();
       const diverged = JSON.stringify(fromDom) !== JSON.stringify(inputsAtEvent);
       const inputs = mergeCampaignGeneratorInputs(fromDom, profileDefaults);
       if (DEBUG_CAMPAIGN_GENERATOR) {
-        console.log(`${LOG_PREFIX} [gen] merged inputs → mockGenerateCampaignFromInputs`, {
+        console.log(`${LOG_PREFIX} [gen] merged inputs -> backend payload`, {
           fromDom,
           merged: inputs,
           reReadMatchesClick: !diverged,
         });
         if (diverged) {
-          console.warn(`${LOG_PREFIX} [gen] DOM at click vs pre-mock differ (IME/autofill?)`, {
+          console.warn(`${LOG_PREFIX} [gen] DOM at click vs pre-submit differ (IME/autofill?)`, {
             atClick: inputsAtEvent,
             preMock: fromDom,
           });
         }
       }
       genState.genVariation += 1;
-      const output = mockGenerateCampaignFromInputs(inputs, displayName, genState.genVariation);
+      const payload = buildAIGeneratorPayload(inputs, b.data);
+      if (DEBUG_CAMPAIGN_GENERATOR) {
+        console.log(`${LOG_PREFIX} [gen] payload -> generateCampaignWithAI`, payload);
+      }
+      const aiResponse = await generateCampaignWithAI(payload);
+      const output = mapAIResponseToGeneratorOutput(aiResponse);
       genState.last = { inputs, output };
       if (DEBUG_CAMPAIGN_GENERATOR) {
-        console.log(`${LOG_PREFIX} [gen] mock result digest`, {
+        console.log(`${LOG_PREFIX} [gen] ai result digest`, {
           headline: output.headline,
           hookPreview: output.hook.slice(0, 120),
           cta: output.cta,
@@ -731,13 +873,13 @@ function runCampaignGenerator() {
           platformDisplayLabel: output.platformDisplayLabel,
           suggestedBudgetWeekly: output.suggestedBudgetWeekly,
           estimatedLeadsWeekly: output.estimatedLeadsWeekly,
+          estimatedReachWeekly: output.estimatedReachWeekly,
           inputFingerprint: hashStringForDebug(JSON.stringify(inputs)),
         });
       }
       fillGeneratorOutput(output);
       if (note) {
-        note.textContent =
-          "Borrador de demostración a partir de tus datos. Los números son estimaciones orientativas.";
+        note.textContent = "Borrador generado por IA desde backend seguro.";
       }
       if (saveBtn) saveBtn.disabled = false;
       const resultCard = document.getElementById("camp-gen-result-card");
@@ -747,8 +889,8 @@ function runCampaignGenerator() {
         });
       }
     } catch (e) {
-      console.error(LOG_PREFIX, "Generator mock failed:", e);
-      if (note) note.textContent = "No se pudo generar. Inténtalo de nuevo.";
+      console.error(LOG_PREFIX, "Generator backend call failed:", e);
+      if (note) note.textContent = "No se pudo generar con IA backend. Inténtalo de nuevo.";
       if (outWrap) outWrap.hidden = true;
     } finally {
       if (genBtn) {
