@@ -2584,10 +2584,13 @@ body.dash-menu-open {
   box-sizing: border-box;
 }
 
+/* Dashboard home — use full width on large screens (not a narrow phone column) */
 .dash-page--summary {
-  max-width: min(920px, 100%);
-  padding-top: 1.5rem;
-  padding-bottom: 2.25rem;
+  max-width: min(1400px, 100%);
+  margin-inline: auto;
+  padding-inline: clamp(1.15rem, 4vw, 2.75rem);
+  padding-top: clamp(1.35rem, 2.2vw, 2rem);
+  padding-bottom: clamp(2rem, 4vw, 3rem);
 }
 
 .dash-body--summary .dash-main {
@@ -2600,7 +2603,65 @@ body.dash-menu-open {
 }
 
 .dash-workspace--summary .dash-workspace-primary {
-  gap: 1.75rem;
+  gap: clamp(1.5rem, 2.5vw, 2.25rem);
+}
+
+/* Dashboard home — stat grid: 4 columns desktop, 2 tablet, 1 mobile (base rules below apply globally) */
+.dash-body--summary .dash-stats {
+  gap: clamp(0.9rem, 2vw, 1.4rem);
+}
+
+@media (min-width: 1024px) {
+  .dash-body--summary .dash-stat-card {
+    padding: 1.25rem 1.35rem 1.15rem;
+    min-height: 7.25rem;
+  }
+
+  .dash-body--summary .dash-stat-value {
+    font-size: clamp(1.65rem, 2.2vw, 1.85rem);
+  }
+
+  .dash-body--summary .dash-panel-head {
+    padding: 1.35rem 1.5rem;
+  }
+
+  .dash-body--summary .dash-campaign-compact-head {
+    padding: 1.25rem 1.5rem 0.95rem;
+  }
+
+  .dash-body--summary .dash-campaign-compact-metrics {
+    padding: 1.15rem 1.5rem 1.25rem;
+    gap: 1.15rem 1.5rem;
+  }
+
+  .dash-body--summary .dash-campaign-compact-hint {
+    padding-inline: 1.5rem;
+  }
+
+  .dash-body--summary .dash-table th {
+    padding: 0.8rem 1.45rem;
+  }
+
+  .dash-body--summary .dash-table td {
+    padding: 1rem 1.45rem;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1199px) {
+  .dash-body--summary .dash-stat-card {
+    padding: 1.15rem 1.2rem 1.05rem;
+    min-height: 6.85rem;
+  }
+
+  .dash-body--summary .dash-page--summary {
+    padding-inline: clamp(1.25rem, 3.5vw, 2rem);
+  }
+}
+
+@media (max-width: 640px) {
+  .dash-body--summary .dash-page--summary {
+    padding-inline: 1.15rem;
+  }
 }
 
 .dash-campaign-compact {
