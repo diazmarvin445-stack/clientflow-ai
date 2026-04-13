@@ -5,16 +5,6 @@ import OpenAI from "openai";
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 
-/** Exact browser Origin values allowed for generateCampaign (manual CORS). */
-const GENERATE_CAMPAIGN_ALLOWED_ORIGINS = new Set([
-  "https://diazmarvin445-stack.github.io",
-  "http://localhost:5500",
-  "http://127.0.0.1:5500",
-]);
-
-const GENERATE_CAMPAIGN_CORS_METHODS = "POST, OPTIONS";
-const GENERATE_CAMPAIGN_CORS_HEADERS = "Content-Type, Authorization";
-
 const MODEL = "gpt-4o-mini";
 const MAX_FIELD_LEN = 500;
 const PLATFORM_SET = new Set(["facebook", "instagram", "google"]);
@@ -164,19 +154,6 @@ function sanitizeAiObject(raw, fallbackBudget) {
   return out;
 }
 
-function setGenerateCampaignCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-  const originStr = typeof origin === "string" ? origin : "";
-
-  res.set("Access-Control-Allow-Methods", GENERATE_CAMPAIGN_CORS_METHODS);
-  res.set("Access-Control-Allow-Headers", GENERATE_CAMPAIGN_CORS_HEADERS);
-
-  if (originStr && GENERATE_CAMPAIGN_ALLOWED_ORIGINS.has(originStr)) {
-    res.set("Access-Control-Allow-Origin", originStr);
-    res.set("Vary", "Origin");
-  }
-}
-
 async function generateCampaignFromOpenAI(input, openAiKey) {
   const client = new OpenAI({ apiKey: openAiKey });
   const completion = await client.chat.completions.create({
@@ -193,11 +170,24 @@ async function generateCampaignFromOpenAI(input, openAiKey) {
 export const generateCampaign = onRequest(
   { region: "us-central1", timeoutSeconds: 30, memory: "256MiB", secrets: [OPENAI_API_KEY] },
   async (req, res) => {
-    setGenerateCampaignCorsHeaders(req, res);
+    const GENERATE_CAMPAIGN_CORS_ALLOWED_ORIGINS = [
+      "https://diazmarvin445-stack.github.io",
+      "http://localhost:5500",
+      "http://127.0.0.1:5500",
+    ];
+
+    const origin = req.headers.origin || "";
+
+    res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (GENERATE_CAMPAIGN_CORS_ALLOWED_ORIGINS.includes(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Vary", "Origin");
+    }
 
     if (req.method === "OPTIONS") {
-      res.status(204).send("");
-      return;
+      return res.status(204).send("");
     }
 
     if (req.method !== "POST") {
