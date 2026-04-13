@@ -2,6 +2,7 @@
  * Shared dashboard chrome: sidebar mobile menu, coming-soon modal, topbar menu.
  */
 import { signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import { clearStoredPrimaryBusiness } from "./dashboard-data.js";
 
 let modalHost = null;
 let modalBackdrop = null;
@@ -198,6 +199,7 @@ function initUserMenu(auth) {
   if (signOutBtn && auth) {
     signOutBtn.addEventListener("click", async () => {
       try {
+        clearStoredPrimaryBusiness();
         await signOut(auth);
         window.location.href = "login.html";
       } catch (err) {
