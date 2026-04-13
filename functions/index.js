@@ -4,7 +4,16 @@ import { logger } from "firebase-functions";
 import OpenAI from "openai";
 
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
-const ALLOWED_ORIGINS = defineSecret("ALLOWED_ORIGINS");
+
+/** Exact browser Origin values allowed for generateCampaign (manual CORS). */
+const GENERATE_CAMPAIGN_ALLOWED_ORIGINS = new Set([
+  "https://diazmarvin445-stack.github.io",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+]);
+
+const GENERATE_CAMPAIGN_CORS_METHODS = "POST, OPTIONS";
+const GENERATE_CAMPAIGN_CORS_HEADERS = "Content-Type, Authorization";
 
 const MODEL = "gpt-4o-mini";
 const MAX_FIELD_LEN = 500;
@@ -155,22 +164,17 @@ function sanitizeAiObject(raw, fallbackBudget) {
   return out;
 }
 
-function applyCors(req, res, allowedOriginsCsv) {
-  const origin = String(req.headers.origin || "");
-  const allowed = String(allowedOriginsCsv || "")
-    .split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+function setGenerateCampaignCorsHeaders(req, res) {
+  const origin = req.headers.origin;
+  const originStr = typeof origin === "string" ? origin : "";
 
-  if (!allowed.length || allowed.includes("*")) {
-    res.set("Access-Control-Allow-Origin", origin || "*");
-  } else if (allowed.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
+  res.set("Access-Control-Allow-Methods", GENERATE_CAMPAIGN_CORS_METHODS);
+  res.set("Access-Control-Allow-Headers", GENERATE_CAMPAIGN_CORS_HEADERS);
+
+  if (originStr && GENERATE_CAMPAIGN_ALLOWED_ORIGINS.has(originStr)) {
+    res.set("Access-Control-Allow-Origin", originStr);
     res.set("Vary", "Origin");
   }
-
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 async function generateCampaignFromOpenAI(input, openAiKey) {
@@ -187,9 +191,10 @@ async function generateCampaignFromOpenAI(input, openAiKey) {
 }
 
 export const generateCampaign = onRequest(
-  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB", secrets: [OPENAI_API_KEY, ALLOWED_ORIGINS] },
+  { region: "us-central1", timeoutSeconds: 30, memory: "256MiB", secrets: [OPENAI_API_KEY] },
   async (req, res) => {
-    applyCors(req, res, ALLOWED_ORIGINS.value());
+    setGenerateCampaignCorsHeaders(req, res);
+
     if (req.method === "OPTIONS") {
       res.status(204).send("");
       return;
