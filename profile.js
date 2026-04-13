@@ -1,6 +1,11 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
+import {
+  resolveBusinessForUser,
+  formatBusinessMeta,
+  initialsFromName,
+  clearStoredPrimaryBusiness,
+} from "./dashboard-data.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 function renderHeader(business) {
@@ -53,6 +58,7 @@ function boot() {
   if (signOutBtn) {
     signOutBtn.addEventListener("click", async () => {
       try {
+        clearStoredPrimaryBusiness();
         await signOut(auth);
         window.location.href = "login.html";
       } catch (err) {

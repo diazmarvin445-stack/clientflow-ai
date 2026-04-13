@@ -1,4 +1,5 @@
 import { db, auth } from "./firebase.js";
+import { setSessionPrimaryBusinessId } from "./dashboard-data.js";
 import {
   collection,
   addDoc,
@@ -325,6 +326,8 @@ if (form && successEl) {
         "[ClientFlow onboarding] Enlace público de solicitudes:",
         `solicitar.html?businessId=${businessRef.id}`,
       );
+
+      setSessionPrimaryBusinessId(uid, businessRef.id);
 
       try {
         localStorage.setItem("clientflow_onboarding_v1", JSON.stringify(raw));

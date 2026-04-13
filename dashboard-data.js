@@ -164,12 +164,95 @@ function toDate(value) {
   return new Date(value);
 }
 
+const PRIMARY_BUSINESS_SESSION_KEY = "clientflow_primary_business_v1";
+
+/** In-flight coalescing: same-tab concurrent resolves share one Firestore read + one pick. */
+const inflightFetchByOwner = new Map();
+
+/** Full user resolution (including email claim) coalesced per uid. */
+const inflightResolveByUid = new Map();
+
+/**
+ * Clear after sign-out so the next account never inherits another uid’s business id.
+ */
+export function clearStoredPrimaryBusiness() {
+  try {
+    sessionStorage.removeItem(PRIMARY_BUSINESS_SESSION_KEY);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+/**
+ * Call after creating a business (e.g. onboarding) so the session pin matches the new doc
+ * before the next navigation. Resolution still re-validates against Firestore rules.
+ *
+ * @param {string} ownerUid
+ * @param {string} businessId
+ */
+export function setSessionPrimaryBusinessId(ownerUid, businessId) {
+  const uid = typeof ownerUid === "string" ? ownerUid.trim() : "";
+  const bid = typeof businessId === "string" ? businessId.trim() : "";
+  if (!uid || !bid) return;
+  try {
+    sessionStorage.setItem(PRIMARY_BUSINESS_SESSION_KEY, JSON.stringify({ uid, businessId: bid }));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function readSessionPrimaryBusinessId(ownerUid) {
+  const uid = typeof ownerUid === "string" ? ownerUid.trim() : "";
+  if (!uid) return null;
+  try {
+    const raw = sessionStorage.getItem(PRIMARY_BUSINESS_SESSION_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    if (!o || o.uid !== uid || typeof o.businessId !== "string") return null;
+    return o.businessId.trim();
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Explicit primary in Firestore (any one wins; if several, newest by createdAt + id). */
+function rawIsMarkedPrimaryBusiness(raw) {
+  if (!raw || typeof raw !== "object") return false;
+  if (raw.isPrimary === true) return true;
+  if (raw.primary === true) return true;
+  if (raw.primaryBusiness === true) return true;
+  return false;
+}
+
+function compareBusinessCandidates(a, b) {
+  const ta = toDate(a.raw.createdAt)?.getTime() ?? 0;
+  const tb = toDate(b.raw.createdAt)?.getTime() ?? 0;
+  if (tb !== ta) return tb - ta;
+  return String(b.id).localeCompare(String(a.id));
+}
+
+/**
+ * One canonical row: prefer docs marked primary; else newest by createdAt; stable tie-break on id.
+ *
+ * @param {{ id: string, raw: Record<string, unknown> }[]} rows
+ */
+function pickPrimaryBusinessRow(rows) {
+  if (!rows.length) return null;
+  const marked = rows.filter((r) => rawIsMarkedPrimaryBusiness(r.raw));
+  const pool = marked.length ? marked : rows;
+  return [...pool].sort(compareBusinessCandidates)[0];
+}
+
 /**
  * Owner may have more than one `businesses` doc (e.g. repeated onboarding). `limit(1)` was
  * non-deterministic — Dashboard/Solicitudes could read a different doc than the one used in
- * `solicitar.html?businessId=…`, so leads looked “missing”. We always prefer the newest by `createdAt`.
+ * `solicitar.html?businessId=…`, so leads looked “missing”.
+ *
+ * Selection: explicit `isPrimary` / `primary` / `primaryBusiness` if present; else newest `createdAt`;
+ * ties broken by document id (lexicographic) so the choice is stable across modules and reloads.
+ * The chosen id is stored in `sessionStorage` for the browser tab session (keyed by uid).
  */
-export async function fetchBusinessForOwner(db, ownerUid) {
+async function fetchBusinessForOwnerImpl(db, ownerUid) {
   const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid));
   /** Prefer servidor para ver documentos recién creados (evita caché local vacía tras onboarding). */
   let snap;
@@ -184,15 +267,32 @@ export async function fetchBusinessForOwner(db, ownerUid) {
   }
   if (snap.empty) return null;
   const rows = snap.docs.map((d) => ({ id: d.id, raw: d.data() }));
-  rows.sort((a, b) => {
-    const ta = toDate(a.raw.createdAt)?.getTime() ?? 0;
-    const tb = toDate(b.raw.createdAt)?.getTime() ?? 0;
-    return tb - ta;
-  });
-  const best = rows[0];
+  const best = pickPrimaryBusinessRow(rows);
+  if (!best) return null;
+
+  const sessionHint = readSessionPrimaryBusinessId(ownerUid);
+  const ids = new Set(rows.map((r) => r.id));
+  if (sessionHint && ids.has(sessionHint) && sessionHint !== best.id) {
+    console.warn(
+      "[ClientFlow] Session had a different business id; using deterministic primary.",
+      { sessionBusinessId: sessionHint, deterministicId: best.id },
+    );
+  }
+
+  try {
+    sessionStorage.setItem(
+      PRIMARY_BUSINESS_SESSION_KEY,
+      JSON.stringify({ uid: ownerUid, businessId: best.id }),
+    );
+  } catch (_) {
+    /* ignore */
+  }
+
+  console.log("Selected primary business:", best.id);
+
   if (rows.length > 1) {
     console.warn(
-      `[ClientFlow] fetchBusinessForOwner: ${rows.length} business(es) for uid; using id=${best.id} (latest createdAt). Leads must use solicitar.html?businessId=${best.id} to match.`,
+      `[ClientFlow] fetchBusinessForOwner: ${rows.length} business(es) for uid; primary rules → id=${best.id}. Public leads link must use solicitar.html?businessId=${best.id}.`,
     );
   } else {
     console.log(
@@ -200,6 +300,18 @@ export async function fetchBusinessForOwner(db, ownerUid) {
     );
   }
   return { id: best.id, data: normalizeBusinessDocument(best.raw) };
+}
+
+export async function fetchBusinessForOwner(db, ownerUid) {
+  if (!ownerUid || typeof ownerUid !== "string") return null;
+  if (inflightFetchByOwner.has(ownerUid)) {
+    return inflightFetchByOwner.get(ownerUid);
+  }
+  const promise = fetchBusinessForOwnerImpl(db, ownerUid).finally(() => {
+    inflightFetchByOwner.delete(ownerUid);
+  });
+  inflightFetchByOwner.set(ownerUid, promise);
+  return promise;
 }
 
 function rawBusinessUnclaimed(raw) {
@@ -266,11 +378,20 @@ async function tryClaimUnownedBusinessByEmail(db, uid, authEmail) {
  */
 export async function resolveBusinessForUser(db, user) {
   if (!user || typeof user.uid !== "string") return null;
-  const primary = await fetchBusinessForOwner(db, user.uid);
-  if (primary) return primary;
-  const em = typeof user.email === "string" ? user.email.trim() : "";
-  if (!em) return null;
-  return tryClaimUnownedBusinessByEmail(db, user.uid, em);
+  const uid = user.uid;
+  if (inflightResolveByUid.has(uid)) return inflightResolveByUid.get(uid);
+
+  const promise = (async () => {
+    const primary = await fetchBusinessForOwner(db, uid);
+    if (primary) return primary;
+    const em = typeof user.email === "string" ? user.email.trim() : "";
+    if (!em) return null;
+    return tryClaimUnownedBusinessByEmail(db, uid, em);
+  })();
+
+  inflightResolveByUid.set(uid, promise);
+  promise.finally(() => inflightResolveByUid.delete(uid));
+  return promise;
 }
 
 function startOfLocalDay(d = new Date()) {
