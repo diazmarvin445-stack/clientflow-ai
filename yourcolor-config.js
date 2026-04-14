@@ -142,3 +142,23 @@ NO es $21.50 el precio del paquete de 6.
 
 ${JSON.stringify(YOURCOLOR_BUSINESS, null, 2)}`;
 }
+
+/**
+ * System prompt para el chat: catálogo YourColor + datos Firebase + capacidades del asistente.
+ * @param {Record<string, unknown>} firebaseContext
+ */
+export function getYourColorChatSystemPrompt(firebaseContext = {}) {
+  const base = getYourColorSystemPrompt();
+  const ctx =
+    firebaseContext && typeof firebaseContext === "object" ? firebaseContext : {};
+  return `${base}
+
+--- DATOS EN TIEMPO REAL (Firebase; úsalos como fuente de verdad para este negocio) ---
+${JSON.stringify(ctx, null, 2)}
+
+CAPACIDADES: Puedes dar consejos de negocio local, calcular presupuestos y precios con el catálogo
+(rango de cantidad → precio por pieza; total = cantidad × precio; depósito y logo según reglas),
+analizar tendencias o estacionalidad cuando aplique, y sugerir estrategias de marketing o seguimiento
+apoyándote en clientes, órdenes y campañas guardadas. Responde en español salvo que pidan otro idioma.
+Si faltan datos en Firebase, dilo claramente y no inventes cifras.`;
+}

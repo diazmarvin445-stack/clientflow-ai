@@ -220,10 +220,46 @@ function initUserMenu(auth) {
 }
 
 /**
+ * Inserta «Chat IA» tras «Campañas IA» si no existe; marca activo en `chat.html`.
+ */
+export function ensureChatNavLink() {
+  const nav = document.querySelector("#dash-sidebar .dash-nav");
+  if (!nav) return;
+  let chatLink = nav.querySelector('a[href="chat.html"]');
+  if (!chatLink) {
+    chatLink = document.createElement("a");
+    chatLink.id = "dash-nav-chat-link";
+    chatLink.href = "chat.html";
+    chatLink.className = "dash-nav-link";
+    chatLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--chat" aria-hidden="true"></span>
+        Chat IA`;
+    const camp = nav.querySelector('a[href="campanas.html"]');
+    if (camp && camp.nextSibling) {
+      camp.parentNode.insertBefore(chatLink, camp.nextSibling);
+    } else if (camp) {
+      camp.parentNode.appendChild(chatLink);
+    } else {
+      nav.appendChild(chatLink);
+    }
+  }
+  const path = window.location.pathname || "";
+  const onChat = /(^|\/)chat\.html$/i.test(path) || path.endsWith("/chat");
+  if (onChat) {
+    nav.querySelectorAll(".dash-nav-link").forEach((el) => {
+      el.classList.remove("is-active");
+      el.removeAttribute("aria-current");
+    });
+    chatLink.classList.add("is-active");
+    chatLink.setAttribute("aria-current", "page");
+  }
+}
+
+/**
  * @param {{ auth?: import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").Auth }} opts
  */
 export function initDashShell(opts = {}) {
   const { auth } = opts;
+  ensureChatNavLink();
   initSidebar();
   bindComingSoonTriggers();
   if (auth) initUserMenu(auth);

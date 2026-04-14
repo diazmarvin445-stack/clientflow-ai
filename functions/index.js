@@ -1,7 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import cors from "cors";
-import { getYourColorSystemPrompt } from "./yourcolor-config.js";
+import { getYourColorSystemPrompt, getYourColorChatSystemPrompt } from "./yourcolor-config.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
@@ -139,6 +139,93 @@ export const generateCampaign = onRequest(
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return res.status(500).json({ error: "Failed to generate campaign.", details: message });
+      }
+    });
+  },
+);
+
+function asChatMessages(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const m of raw) {
+    if (!m || typeof m !== "object") continue;
+    const role = m.role === "assistant" ? "assistant" : m.role === "user" ? "user" : null;
+    const content = typeof m.content === "string" ? m.content.trim() : "";
+    if (!role || !content) continue;
+    out.push({ role, content });
+  }
+  return out;
+}
+
+export const chatWithAI = onRequest(
+  { secrets: [ANTHROPIC_KEY] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+
+      if (req.method !== "POST") {
+        return res.status(405).json({ error: "Method not allowed. Use POST." });
+      }
+
+      try {
+        const apiKey = ANTHROPIC_KEY.value();
+        if (!apiKey) {
+          return res.status(500).json({
+            error: "Missing ANTHROPIC_KEY secret",
+          });
+        }
+
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const messages = asChatMessages(body.messages);
+        const firebaseContext =
+          body.firebaseContext && typeof body.firebaseContext === "object" ? body.firebaseContext : {};
+
+        if (!messages.length) {
+          return res.status(400).json({ error: "Se requiere al menos un mensaje de usuario." });
+        }
+        if (messages[messages.length - 1].role !== "user") {
+          return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
+        }
+
+        const system = getYourColorChatSystemPrompt(firebaseContext);
+
+        const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 4096,
+            system,
+            messages,
+          }),
+        });
+
+        const anthropicBody = await anthropicResponse.json();
+        if (!anthropicResponse.ok) {
+          const message = asText(anthropicBody?.error?.message, "Anthropic API request failed.");
+          return res.status(anthropicResponse.status).json({ error: message });
+        }
+
+        const textContent = Array.isArray(anthropicBody?.content)
+          ? anthropicBody.content
+              .filter((item) => item?.type === "text")
+              .map((item) => item?.text || "")
+              .join("\n")
+          : "";
+
+        return res.status(200).json({
+          reply: textContent,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return res.status(500).json({ error: "Chat request failed.", details: message });
       }
     });
   },
