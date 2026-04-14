@@ -645,80 +645,63 @@ function normalizeAIResponse(raw) {
   }
 
   const headline = String(raw.headline ?? "").trim();
-  const description = String(raw.description ?? "").trim();
+  const bodyText = String(raw.bodyText ?? "").trim();
+  const hook = String(raw.hook ?? "").trim();
   const cta = String(raw.cta ?? "").trim();
-  const platform = normalizePlatformKey(raw.recommendedPlatform);
-  const budget = Number(raw.recommendedBudget);
-  const estimatedLeads = Number(raw.estimatedLeads);
-  const estimatedReach = Number(raw.estimatedReach);
+  const platform = normalizePlatformKey(raw.platform);
+  const budget = Number(raw.suggestedBudgetWeekly);
+  const estimatedLeads = Number(raw.estimatedLeadsWeekly);
 
   if (!headline) throw new Error("Falta `headline` en la respuesta.");
-  if (!description) throw new Error("Falta `description` en la respuesta.");
+  if (!bodyText) throw new Error("Falta `bodyText` en la respuesta.");
   if (!cta) throw new Error("Falta `cta` en la respuesta.");
   if (!Number.isFinite(budget) || budget <= 0) {
-    throw new Error("`recommendedBudget` inválido en la respuesta.");
+    throw new Error("`suggestedBudgetWeekly` inválido en la respuesta.");
   }
   if (!Number.isFinite(estimatedLeads) || estimatedLeads < 0) {
-    throw new Error("`estimatedLeads` inválido en la respuesta.");
+    throw new Error("`estimatedLeadsWeekly` inválido en la respuesta.");
   }
 
   return {
     headline,
-    description,
+    hook,
+    bodyText,
     cta,
-    recommendedPlatform: platform,
-    recommendedBudget: Math.round(budget),
-    strategy: String(raw.strategy ?? "").trim(),
-    visualIdeas: lineList(raw.visualIdeas),
-    photoSuggestions: lineList(raw.photoSuggestions),
-    videoSuggestions: lineList(raw.videoSuggestions),
-    estimatedLeads: Math.round(estimatedLeads),
-    estimatedReach:
-      Number.isFinite(estimatedReach) && estimatedReach > 0
-        ? Math.round(estimatedReach)
-        : Math.max(160, Math.round(estimatedLeads * 36)),
+    platform,
+    suggestedBudgetWeekly: Math.round(budget),
+    estimatedLeadsWeekly: Math.round(estimatedLeads),
+    creativeIdea: String(raw.creativeIdea ?? "").trim(),
   };
 }
 
 function mapAIResponseToGeneratorOutput(ai) {
-  const strategyLine = ai.strategy ? `Estrategia: ${ai.strategy}` : "";
-  const visualLine = ai.visualIdeas.length ? `Visuales: ${ai.visualIdeas.join(" · ")}` : "";
-  const photoLine = ai.photoSuggestions.length ? `Fotos: ${ai.photoSuggestions.join(" · ")}` : "";
-  const videoLine = ai.videoSuggestions.length ? `Vídeo: ${ai.videoSuggestions.join(" · ")}` : "";
-  const blocks = [ai.description, strategyLine, visualLine, photoLine, videoLine].filter(Boolean);
-
   return {
     headline: ai.headline,
-    hook: ai.strategy || ai.description,
-    bodyText: blocks.join(" "),
+    hook: ai.hook || ai.bodyText,
+    bodyText: ai.bodyText,
     cta: ai.cta,
-    platform: ai.recommendedPlatform,
-    platformDisplayLabel: campaignPlatformDisplayName(ai.recommendedPlatform),
-    suggestedBudgetWeekly: ai.recommendedBudget,
-    estimatedLeadsWeekly: ai.estimatedLeads,
-    estimatedReachWeekly: ai.estimatedReach,
-    creativeIdea:
-      ai.visualIdeas[0] ||
-      ai.photoSuggestions[0] ||
-      ai.videoSuggestions[0] ||
-      ai.strategy ||
-      ai.description,
-    strategy: ai.strategy,
-    visualIdeas: ai.visualIdeas,
-    photoSuggestions: ai.photoSuggestions,
-    videoSuggestions: ai.videoSuggestions,
+    platform: ai.platform,
+    platformDisplayLabel: campaignPlatformDisplayName(ai.platform),
+    suggestedBudgetWeekly: ai.suggestedBudgetWeekly,
+    estimatedLeadsWeekly: ai.estimatedLeadsWeekly,
+    estimatedReachWeekly: Math.max(160, Math.round(ai.estimatedLeadsWeekly * 36)),
+    creativeIdea: ai.creativeIdea || ai.bodyText,
+    strategy: "",
+    visualIdeas: [],
+    photoSuggestions: [],
+    videoSuggestions: [],
   };
 }
 
 function buildAIGeneratorPayload(inputs, businessData) {
   const safeBusiness = businessData && typeof businessData === "object" ? businessData : {};
   return {
-    campaignGoal: inputs.goal,
+    goal: inputs.goal,
     offer: inputs.offer,
-    targetLocation: inputs.location,
-    targetAudience: inputs.audience,
-    budget: parseBudgetNumber(inputs.budget),
-    platformPreference: inputs.platformPref,
+    location: inputs.location,
+    budget: inputs.budget,
+    audience: inputs.audience,
+    platformPref: inputs.platformPref,
     businessProfile: {
       businessId: genState.business?.id || null,
       businessName: String(safeBusiness.businessName ?? "").trim(),

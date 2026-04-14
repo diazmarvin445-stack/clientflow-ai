@@ -1,0 +1,9 @@
+import { writeFileSync } from 'fs';
+import { createInterface } from 'readline';
+
+const rl = createInterface({ input: process.stdin, output: process.stdout });
+rl.question('Pega tu llave API: ', (key) => {
+  writeFileSync('.env', `ANTHROPIC_API_KEY=${key.trim()}\n`);
+  console.log('Llave guardada correctamente');
+  rl.close();
+});
