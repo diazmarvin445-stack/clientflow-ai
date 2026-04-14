@@ -3164,6 +3164,11 @@ body.dash-menu-open {
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
 }
 
+.dash-cal-day.has-delivery:not(.is-today) {
+  box-shadow: inset 0 -3px 0 #10b981;
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
 .dash-cal-hint {
   margin: 0.85rem 0 0;
   font-size: 0.75rem;
@@ -6988,4 +6993,127 @@ body.cf-modal-open {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+.yc-chat-toast {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.65rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.yc-chat-toast[hidden] {
+  display: none !important;
+}
+
+.yc-msg-inner-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.yc-msg--assistant {
+  max-width: 96%;
+}
+
+.yc-quote-card {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(145deg, #fff 0%, #f8fafc 100%);
+  padding: 0.75rem 0.85rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.yc-quote-title {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+}
+
+.yc-quote-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.yc-quote-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  font-size: 0.8125rem;
+}
+
+.yc-quote-row dt {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.yc-quote-row dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+  text-align: right;
+}
+
+.yc-quote-row--accent dd {
+  color: var(--blue);
+  font-size: 0.875rem;
+}
+
+.yc-msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0 0.1rem 0.15rem;
+}
+
+.yc-msg-action-btn {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.yc-msg-action-btn:hover {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+.yc-msg-action-btn--primary {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(8, 145, 178, 0.08) 100%);
+  color: var(--blue);
+}
+
+.yc-msg-action-btn--primary:hover {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.14) 0%, rgba(8, 145, 178, 0.12) 100%);
+}
+
+.yc-msg-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dash-appt--delivery .dash-appt-time {
+  color: #059669;
 }
