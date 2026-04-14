@@ -72,29 +72,32 @@ function extractMayaOrderFromReply(raw) {
   return { text: visible, order };
 }
 
-async function sendTwilioWhatsApp(accountSid, authToken, params) {
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const auth = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-  const body = new URLSearchParams(params).toString();
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Twilio ${res.status}: ${errText}`);
-  }
-  return res.json();
-}
-
 function truncateWhatsApp(s, max = 1500) {
   const t = asText(s);
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
+}
+
+/** Escapa texto para insertarlo dentro de `<Message>` (TwiML). */
+function escapeXmlForTwiml(text) {
+  return String(text ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * TwiML con un único mensaje de salida (WhatsApp/SMS vía webhook).
+ * @param {import("firebase-functions").https.Response} res
+ * @param {string} respuesta
+ */
+function sendTwimlMessageResponse(res, respuesta) {
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>${escapeXmlForTwiml(truncateWhatsApp(respuesta))}</Message>
+</Response>`;
+  res.set("Content-Type", "text/xml; charset=utf-8");
+  res.status(200).send(twiml);
 }
 
 function asText(value, fallback = "") {
@@ -359,18 +362,6 @@ export const whatsappWebhook = onRequest(
     const emptyTwiml =
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
-    async function replyErrorToUser(from, to, msg) {
-      try {
-        await sendTwilioWhatsApp(accountSid, authToken, {
-          To: from,
-          From: to,
-          Body: truncateWhatsApp(msg),
-        });
-      } catch (e) {
-        console.error("[whatsappWebhook] Twilio error reply", e);
-      }
-    }
-
     if (!accountSid || !authToken) {
       console.error("[whatsappWebhook] Missing Twilio secrets");
       res.status(500).type("text/xml").send(emptyTwiml);
@@ -456,14 +447,12 @@ export const whatsappWebhook = onRequest(
       if (!anthropicResponse.ok) {
         const message = asText(anthropicBody?.error?.message, "Anthropic API failed");
         console.error("[whatsappWebhook] Anthropic", message);
-        await replyErrorToUser(
-          from,
-          to,
+        sendTwimlMessageResponse(
+          res,
           "Ahora mismo no puedo responder. Escríbenos al " +
             YOURCOLOR_BUSINESS.phone +
             " o intenta de nuevo en unos minutos.",
         );
-        res.status(200).type("text/xml").send(emptyTwiml);
         return;
       }
 
@@ -475,12 +464,10 @@ export const whatsappWebhook = onRequest(
         : "";
     } catch (e) {
       console.error("[whatsappWebhook] Anthropic fetch", e);
-      await replyErrorToUser(
-        from,
-        to,
+      sendTwimlMessageResponse(
+        res,
         "Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone,
       );
-      res.status(200).type("text/xml").send(emptyTwiml);
       return;
     }
 
@@ -578,19 +565,7 @@ export const whatsappWebhook = onRequest(
       console.warn("[whatsappWebhook] session write", e);
     }
 
-    try {
-      await sendTwilioWhatsApp(accountSid, authToken, {
-        To: from,
-        From: to,
-        Body: truncateWhatsApp(outbound),
-      });
-    } catch (e) {
-      console.error("[whatsappWebhook] Twilio send", e);
-      res.status(500).type("text/xml").send(emptyTwiml);
-      return;
-    }
-
-    res.status(200).type("text/xml").send(emptyTwiml);
+    sendTwimlMessageResponse(res, outbound);
   },
 );
 
