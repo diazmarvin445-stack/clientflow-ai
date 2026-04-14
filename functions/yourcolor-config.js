@@ -176,6 +176,22 @@ ${JSON.stringify(YOURCOLOR_BUSINESS, null, 2)}`;
 }
 
 /**
+ * Mismo núcleo que {@link getYourColorSystemPrompt} + reglas para webhook Twilio/WhatsApp y registro de pedidos.
+ */
+export function getYourColorWhatsAppWebhookPrompt() {
+  return `${getYourColorSystemPrompt()}
+
+--- WhatsApp (Twilio) ---
+Respondes en español, tono cordial, mensajes breves.
+
+CONFIRMACIÓN DE PEDIDO: solo si el cliente confirma explícitamente producto y cantidad acordados, agrega al FINAL una sola línea exacta (sin markdown):
+MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE","quantity":N,"customerName":"opcional"}
+
+productKey debe ser: mangaLargaPoliester, mangaLargaAlgodon, mangaCortaAlgodon, mangaCortaPoliester, capuchaPoliester, polo, gorras o tarjetas.
+Si no hay pedido confirmado, NO incluyas MAYA_ORDER_JSON.`;
+}
+
+/**
  * System prompt para el chat: catálogo YourColor + datos Firebase + capacidades del asistente.
  * @param {Record<string, unknown>} firebaseContext
  */

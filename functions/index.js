@@ -8,7 +8,7 @@ import cors from "cors";
 import {
   getYourColorSystemPrompt,
   getYourColorChatSystemPrompt,
-  getMayaWhatsAppSystemPrompt,
+  getYourColorWhatsAppWebhookPrompt,
   computeValidatedMayaOrder,
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
@@ -447,7 +447,7 @@ export const whatsappWebhook = onRequest(
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 2048,
-          system: getMayaWhatsAppSystemPrompt(),
+          system: getYourColorWhatsAppWebhookPrompt(),
           messages: messagesForClaude,
         }),
       });
@@ -459,7 +459,7 @@ export const whatsappWebhook = onRequest(
         await replyErrorToUser(
           from,
           to,
-          "Hola, soy Maya. Ahora mismo no puedo responder. Escríbenos al " +
+          "Ahora mismo no puedo responder. Escríbenos al " +
             YOURCOLOR_BUSINESS.phone +
             " o intenta de nuevo en unos minutos.",
         );
@@ -478,7 +478,7 @@ export const whatsappWebhook = onRequest(
       await replyErrorToUser(
         from,
         to,
-        "Hola, soy Maya. Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone,
+        "Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone,
       );
       res.status(200).type("text/xml").send(emptyTwiml);
       return;
@@ -507,7 +507,7 @@ export const whatsappWebhook = onRequest(
             : "Cliente WhatsApp";
 
         const description = [
-          `Pedido confirmado vía Maya (WhatsApp).`,
+          `Pedido confirmado vía WhatsApp (YourColor).`,
           `Producto: ${productLabel}`,
           `Cantidad: ${qty}`,
           calc.isTarjetas
@@ -532,7 +532,7 @@ export const whatsappWebhook = onRequest(
             estimatedPrice: calc.total,
             depositAmount: calc.deposit,
             depositPercent: YOURCOLOR_BUSINESS.rules.depositPercent,
-            source: "whatsapp-maya",
+            source: "whatsapp-yourcolor",
             whatsappFrom: from,
             productKey: orderPayload.productKey,
             quantity: qty,
