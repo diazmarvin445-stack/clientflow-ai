@@ -15,7 +15,6 @@ import {
   getCampaignGeneratorProfileDefaults,
   initialsFromName,
 } from "./dashboard-data.js";
-import { generateCampaignRecommendations, formatUsd } from "./campanas-campaign-sim.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
@@ -29,6 +28,11 @@ const genState = {
   genVariation: 0,
   prefillBusinessId: null,
 };
+
+function formatUsd(n) {
+  const v = Number(n) || 0;
+  return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
 
 function logProfileDebug(business) {
   if (!business?.data) {
@@ -131,11 +135,8 @@ function liveCampaignStatusPresentation(status) {
 }
 
 function reachForCampaignRow(row) {
-  const el = Number(row.estimatedLeads);
-  const leadsPart = Number.isFinite(el) && el >= 0 ? Math.round(el) : 0;
   const er = Number(row.estimatedReach);
-  if (Number.isFinite(er) && er > 0) return Math.round(er);
-  return Math.max(160, Math.round(leadsPart * 36));
+  return Number.isFinite(er) && er > 0 ? Math.round(er) : null;
 }
 
 function renderHubStats(agg) {
@@ -238,7 +239,7 @@ function renderLiveCampaignCard(row) {
   if (isGenerator && ctaLine) {
     addRow("CTA sugerido", ctaLine);
   }
-  addRow("Alcance estimado", reachN.toLocaleString("es"));
+  addRow("Alcance estimado", reachN != null ? reachN.toLocaleString("es") : "—");
   addRow("Leads generados (est.)", leadsStr);
   addRow("Inicio", startStr);
 
@@ -410,7 +411,7 @@ function renderRecommendationSummary(summary) {
   if (!summary) return;
   setText(
     "camp-reco-summary-line",
-    `Vista previa orientativa · ${formatUsd(summary.totalBudgetWeekly)}/sem · ~${summary.estimatedLeadsWeekly} leads/semana estimados · plataforma ${summary.bestPlatformLabel}`,
+    `Recomendaciones IA · ${formatUsd(summary.totalBudgetWeekly)}/sem en total · ~${summary.estimatedLeadsWeekly} leads/semana · plataformas sugeridas: ${summary.platforms.join(", ")}`,
   );
 }
 
@@ -439,6 +440,46 @@ function hideFirestoreError() {
 function setHubVisible(show) {
   const root = document.getElementById("camp-hub-root");
   if (root) root.hidden = !show;
+}
+
+function hasCompleteBusinessProfile(data) {
+  if (!data || typeof data !== "object") return false;
+  const name = typeof data.businessName === "string" ? data.businessName.trim() : "";
+  const area = typeof data.serviceArea === "string" ? data.serviceArea.trim() : "";
+  const services = Array.isArray(data.services) ? data.services.filter(Boolean) : [];
+  return Boolean(name && area && services.length);
+}
+
+function toRecommendationCardModel(ai, idx, inputs) {
+  const platformLabel = campaignPlatformDisplayName(ai.platform);
+  return {
+    id: `claude-${idx + 1}-${hashStringForDebug(`${ai.headline}|${ai.platform}|${inputs.goal}`)}`,
+    name: ai.headline,
+    platform: ai.platform,
+    platformLabel,
+    budgetWeekly: ai.suggestedBudgetWeekly,
+    estimatedLeadsWeekly: ai.estimatedLeadsWeekly,
+    audience: inputs.audience || "Segmentación según perfil del negocio",
+    adDescription: ai.bodyText,
+  };
+}
+
+async function generateThreeRecommendationsWithClaude(business) {
+  const profileDefaults = getCampaignGeneratorProfileDefaults(business.data);
+  const base = mergeCampaignGeneratorInputs(readGeneratorInputsFromDom(), profileDefaults);
+  const variants = [
+    { ...base, platformPref: "facebook" },
+    { ...base, platformPref: "instagram" },
+    { ...base, platformPref: "google" },
+  ];
+  const responses = await Promise.all(
+    variants.map((inputs) => generateCampaignWithAI(buildAIGeneratorPayload(inputs, business.data))),
+  );
+  const cards = responses.map((ai, idx) => toRecommendationCardModel(ai, idx, variants[idx]));
+  const totalBudgetWeekly = cards.reduce((acc, c) => acc + (Number(c.budgetWeekly) || 0), 0);
+  const estimatedLeadsWeekly = cards.reduce((acc, c) => acc + (Number(c.estimatedLeadsWeekly) || 0), 0);
+  const platforms = Array.from(new Set(cards.map((c) => c.platformLabel)));
+  return { campaigns: cards, summary: { totalBudgetWeekly, estimatedLeadsWeekly, platforms } };
 }
 
 async function renderCampaignsPage(business) {
@@ -495,24 +536,35 @@ async function renderCampaignsPage(business) {
     setHubLoading(false);
   }
 
-  const { data } = business;
-  let result;
-  try {
-    result = generateCampaignRecommendations(data);
-  } catch (e) {
-    console.error(LOG_PREFIX, "generateCampaignRecommendations failed:", e);
+  let result = null;
+  if (hasCompleteBusinessProfile(business.data)) {
+    try {
+      result = await generateThreeRecommendationsWithClaude(business);
+    } catch (e) {
+      console.error(LOG_PREFIX, "Claude recommendations failed:", e);
+      showFirestoreError(
+        "No se pudieron generar recomendaciones automáticas con IA. Revisa conexión/función e inténtalo de nuevo.",
+      );
+    }
+  } else {
     showFirestoreError(
-      "No se pudo calcular la sugerencia a partir del perfil. Revisa la consola o vuelve a guardar el onboarding.",
+      "Completa perfil del negocio (nombre, zona y servicios) para generar recomendaciones automáticas con IA.",
     );
+  }
+
+  if (!result || !Array.isArray(result.campaigns) || !result.campaigns.length) {
     listEl.hidden = true;
     listEl.innerHTML = "";
     setText("camp-reco-summary-line", "");
+    if (noteEl) {
+      noteEl.textContent = "Las recomendaciones se generan con Claude cuando el perfil del negocio está completo.";
+    }
     return;
   }
 
   listEl.hidden = false;
-  listEl.setAttribute("data-campaign-source", "firebase-profile");
-  listEl.setAttribute("data-vertical", result.vertical);
+  listEl.setAttribute("data-campaign-source", "claude");
+  listEl.removeAttribute("data-vertical");
   listEl.innerHTML = "";
 
   let launchedIds = new Set();
@@ -529,8 +581,7 @@ async function renderCampaignsPage(business) {
   renderRecommendationSummary(result.summary);
 
   if (noteEl) {
-    noteEl.textContent =
-      "El generador usa tus campos; la sugerencia inferior resume tu perfil guardado. Ambas son orientativas (demostración).";
+    noteEl.textContent = "Recomendaciones automáticas generadas con Claude a partir de tu perfil real.";
   }
 }
 

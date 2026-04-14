@@ -97,14 +97,17 @@ function renderCampaignSummary(snapshot) {
   section.hidden = false;
   setText("dash-campaign-title", snapshot.title);
   setText("dash-campaign-platform", snapshot.platform);
-  setText("dash-campaign-reach", snapshot.reachEstimate.toLocaleString("es"));
+  setText(
+    "dash-campaign-reach",
+    snapshot.reachEstimate != null ? snapshot.reachEstimate.toLocaleString("es") : "—",
+  );
   setText(
     "dash-campaign-clicks",
     snapshot.clicks != null ? String(snapshot.clicks) : "—",
   );
   setText("dash-campaign-leads", String(snapshot.leadsWeeklyEst));
   const hint = document.getElementById("dash-campaign-hint");
-  if (hint) hint.hidden = !snapshot.usesHeuristicReach;
+  if (hint) hint.hidden = true;
 }
 
 function renderMetrics(metrics) {

@@ -497,10 +497,8 @@ export async function fetchDashboardMetrics(db, businessId, ownerUidForMergedLea
     const leadsW = Number(row.estimatedLeads);
     const leadsWeeklyEst = Number.isFinite(leadsW) && leadsW >= 0 ? Math.round(leadsW) : 0;
     const reachRaw = Number(row.estimatedReach);
-    const usesHeuristicReach = !(Number.isFinite(reachRaw) && reachRaw > 0);
-    const reachEstimate = usesHeuristicReach
-      ? Math.max(160, Math.round(leadsWeeklyEst * 36))
-      : Math.round(reachRaw);
+    const reachEstimate =
+      Number.isFinite(reachRaw) && reachRaw > 0 ? Math.round(reachRaw) : null;
     const clicksRaw = Number(row.clicks);
     const clicks =
       Number.isFinite(clicksRaw) && clicksRaw >= 0 ? Math.round(clicksRaw) : null;
@@ -519,7 +517,7 @@ export async function fetchDashboardMetrics(db, businessId, ownerUidForMergedLea
       reachEstimate,
       clicks,
       leadsWeeklyEst,
-      usesHeuristicReach,
+      usesHeuristicReach: false,
     };
   }
 
@@ -654,7 +652,6 @@ export async function fetchCampaignsListAndStats(db, businessId) {
 
     const er = Number(row.estimatedReach);
     if (Number.isFinite(er) && er > 0) totalReach += Math.round(er);
-    else totalReach += Math.max(160, Math.round(leadsPart * 36));
 
     const conv = Number(row.conversions);
     const clk = Number(row.clicks);
@@ -663,7 +660,7 @@ export async function fetchCampaignsListAndStats(db, businessId) {
   }
 
   if (totalConv === 0 && totalLeads > 0) {
-    totalConv = Math.max(1, Math.round(totalLeads * 0.1));
+    totalConv = 0;
   }
 
   return {
