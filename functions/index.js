@@ -86,11 +86,12 @@ export const generateCampaign = onRequest(
   { secrets: [ANTHROPIC_KEY], cors: true },
   async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set("Access-Control-Allow-Methods", "GET, POST");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
-    return res.status(204).send("");
+    res.status(204).send("");
+    return;
   }
 
   if (req.method !== "POST") {
