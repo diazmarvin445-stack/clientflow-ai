@@ -128,6 +128,38 @@ export function calculateOrderTotal(productKey, quantity) {
   };
 }
 
+/**
+ * Totales validados para Maya/WhatsApp (tarjetas = precio fijo del rango, no × cantidad).
+ * @returns {null | object}
+ */
+export function computeValidatedMayaOrder(productKey, quantity) {
+  const q = Number(quantity);
+  if (!Number.isFinite(q) || q < 1) return null;
+
+  if (productKey === "tarjetas") {
+    const product = YOURCOLOR_BUSINESS.products.tarjetas;
+    const range = product.pricePerPiece.find(
+      (r) => q >= r.minQty && q <= r.maxQty && r.price != null,
+    );
+    if (!range) return null;
+    const total = range.price;
+    return {
+      quantity: q,
+      pricePerPiece: null,
+      subtotal: total,
+      logoFee: 0,
+      total,
+      deposit: total * 0.5,
+      deliveryDays: YOURCOLOR_BUSINESS.rules.deliveryDays,
+      isTarjetas: true,
+    };
+  }
+
+  const calc = calculateOrderTotal(productKey, q);
+  if (!calc || typeof calc !== "object" || "needsQuote" in calc) return null;
+  return { ...calc, isTarjetas: false };
+}
+
 export function getYourColorSystemPrompt() {
   return `Eres el asistente de YourColor, negocio de 
 personalización de ropa para empresas en Fort Pierce, FL.
@@ -161,4 +193,35 @@ CAPACIDADES: Puedes dar consejos de negocio local, calcular presupuestos y preci
 analizar tendencias o estacionalidad cuando aplique, y sugerir estrategias de marketing o seguimiento
 apoyándote en clientes, órdenes y campañas guardadas. Responde en español salvo que pidan otro idioma.
 Si faltan datos en Firebase, dilo claramente y no inventes cifras.`;
+}
+
+/**
+ * Maya — asistente WhatsApp (Twilio). Catálogo completo + reglas de precio.
+ * La función HTTP valida montos con calculateOrderTotal antes de guardar en Firestore.
+ */
+export function getMayaWhatsAppSystemPrompt() {
+  return `Eres Maya, la asistente virtual de YourColor por WhatsApp.
+Personalización de ropa para empresas · Fort Pierce, FL · Contacto negocio: ${YOURCOLOR_BUSINESS.phone}
+
+Tono: cordial, profesional, mensajes cortos (WhatsApp). Español por defecto.
+
+CATÁLOGO Y PRECIOS (obligatorio usar estos datos):
+${JSON.stringify(YOURCOLOR_BUSINESS, null, 2)}
+
+REGLAS DE PRECIOS:
+- El precio del catálogo es POR PIEZA según el rango de cantidad (minQty–maxQty).
+- Total prendas = cantidad × precio_por_pieza. NO es el precio del "lote mínimo".
+- Si subtotal de prendas < ${YOURCOLOR_BUSINESS.rules.logoFreeThreshold}, suma logo $${YOURCOLOR_BUSINESS.rules.logoDesignCost}; si no, logo $0.
+- Total = subtotal prendas + logo. Depósito = ${YOURCOLOR_BUSINESS.rules.depositPercent}% del total (redondea a centavos al explicar).
+- Métodos de pago del depósito: ${YOURCOLOR_BUSINESS.rules.paymentMethods.join(", ")}.
+- Tarjetas de presentación: el precio del rango es TOTAL del pedido, no por pieza (ver notas en catálogo).
+
+PEDIDOS CONFIRMADOS — MUY IMPORTANTE:
+Solo cuando el cliente confirme claramente el pedido (cantidad + producto acordados), al FINAL de tu mensaje agrega UNA sola línea exacta (sin markdown):
+MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE_PRODUCTO","quantity":N,"customerName":"Nombre opcional"}
+
+productKey debe ser una de estas claves exactas: mangaLargaPoliester, mangaLargaAlgodon, mangaCortaAlgodon, mangaCortaPoliester, capuchaPoliester, polo, gorras, tarjetas.
+Si NO hay confirmación de pedido, NO incluyas MAYA_ORDER_JSON.
+
+Si la cantidad no califica en ningún rango o requiere cotización especial, NO pongas confirmed:true; explica y ofrece seguir por teléfono ${YOURCOLOR_BUSINESS.phone}.`;
 }
