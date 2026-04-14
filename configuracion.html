@@ -151,16 +151,44 @@
                     <span class="cfg-label">Tipo de negocio o sector</span>
                     <select id="cfg-industry" class="cfg-input">
                       <option value="">Seleccionar…</option>
-                      <option value="landscaping">Jardinería y paisajismo</option>
-                      <option value="cleaning">Limpieza</option>
-                      <option value="construction">Construcción y reformas</option>
-                      <option value="home-services">Servicios para el hogar</option>
-                      <option value="pressure-washing">Hidrolimpieza</option>
-                      <option value="roofing">Techos y cubiertas</option>
-                      <option value="retail">Retail / tienda local</option>
+                      <option value="lawn-care">Lawn Care / Cuidado de Pasto</option>
+                      <option value="roofing">Roofing / Techos</option>
+                      <option value="cleaning">Limpieza / Cleaning</option>
+                      <option value="drywall-construction">Drywall / Construcción</option>
+                      <option value="custom-apparel">Ropa Personalizada / Custom Apparel</option>
+                      <option value="caps-accessories">Gorras y Accesorios</option>
+                      <option value="cards-graphic-design">Tarjetas y Diseño Gráfico</option>
+                      <option value="plumbing">Plomería</option>
+                      <option value="electricity">Electricidad</option>
+                      <option value="painting">Pintura</option>
+                      <option value="landscaping">Paisajismo / Landscaping</option>
                       <option value="other">Otro</option>
                     </select>
                   </label>
+                  <div id="cfg-custom-apparel-fields" class="cfg-field cfg-field--full" hidden>
+                    <div class="cfg-grid cfg-grid--2">
+                      <label class="cfg-field cfg-field--full">
+                        <span class="cfg-label">Productos que ofreces</span>
+                        <textarea id="cfg-custom-products" class="cfg-input cfg-textarea" rows="2"></textarea>
+                      </label>
+                      <label class="cfg-field">
+                        <span class="cfg-label">Precio mínimo por pieza</span>
+                        <input type="number" id="cfg-custom-min-price" class="cfg-input" min="0" step="0.01" />
+                      </label>
+                      <label class="cfg-field">
+                        <span class="cfg-label">Cantidad mínima de pedido</span>
+                        <input type="number" id="cfg-custom-min-qty" class="cfg-input" min="1" step="1" />
+                      </label>
+                      <label class="cfg-field">
+                        <span class="cfg-label">Tiempo de entrega</span>
+                        <input type="text" id="cfg-custom-delivery-time" class="cfg-input" />
+                      </label>
+                      <label class="cfg-field">
+                        <span class="cfg-label">Método de pago</span>
+                        <input type="text" id="cfg-custom-payment-method" class="cfg-input" />
+                      </label>
+                    </div>
+                  </div>
                   <label class="cfg-field">
                     <span class="cfg-label">Teléfono principal</span>
                     <input type="tel" id="cfg-phone" class="cfg-input" autocomplete="tel" />

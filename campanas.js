@@ -16,6 +16,7 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
+import { YOURCOLOR_BUSINESS } from "./yourcolor-config.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
 /** Set false to silence temporary generator wiring logs. */
@@ -753,6 +754,7 @@ function buildAIGeneratorPayload(inputs, businessData) {
     budget: inputs.budget,
     audience: inputs.audience,
     platformPref: inputs.platformPref,
+    yourColorBusiness: YOURCOLOR_BUSINESS,
     businessProfile: {
       businessId: genState.business?.id || null,
       businessName: String(safeBusiness.businessName ?? "").trim(),

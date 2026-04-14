@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import cors from "cors";
+import { getYourColorSystemPrompt } from "./yourcolor-config.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
@@ -48,30 +49,13 @@ function parsePayload(raw) {
   };
 }
 
-function buildSystemPrompt(profile) {
-  const businessName = asText(profile.businessName, "Tu negocio");
-  const services = Array.isArray(profile.services) ? profile.services : [];
-  const serviceArea = asText(profile.serviceArea, "No especificado");
-
-  return `
-Eres un experto en marketing digital para negocios locales y conoces el negocio del usuario.
-Debes generar campanas hiper-especificas para ESTE negocio, evitando mensajes genericos.
-
-Perfil del negocio (fuente: Firebase):
-- businessName: ${businessName}
-- services: ${services.length ? services.join(", ") : "No especificado"}
-- serviceArea: ${serviceArea}
-- businessProfileFullJson: ${JSON.stringify(profile)}
-
-Responde SOLO con JSON valido y accionable.
-`.trim();
-}
-
 function buildUserPrompt(input, businessName) {
+  const profileJson = JSON.stringify(input.businessProfile ?? {});
   return `
 Genera una propuesta de campana para este negocio local:
 
 - businessName: ${asText(businessName, "Tu negocio")}
+- businessProfile (Firebase): ${profileJson}
 - goal: ${input.goal}
 - offer: ${input.offer}
 - location: ${input.location}
@@ -119,7 +103,7 @@ export const generateCampaign = onRequest(
           body: JSON.stringify({
             model: MODEL,
             max_tokens: 1000,
-            system: buildSystemPrompt(businessProfile),
+            system: getYourColorSystemPrompt(),
             messages: [{ role: "user", content: buildUserPrompt(input, businessName) }],
           }),
         });

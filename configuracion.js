@@ -19,6 +19,7 @@ let businessId = null;
 let businessData = null;
 /** @type {string | null} */
 let pendingLogoDataUrl = null;
+const CUSTOM_APPAREL_VALUE = "custom-apparel";
 
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
@@ -97,6 +98,14 @@ function renderIntegrationCards() {
   });
 }
 
+function syncIndustryCustomFields() {
+  const industryEl = document.getElementById("cfg-industry");
+  const customFields = document.getElementById("cfg-custom-apparel-fields");
+  if (!industryEl || !customFields) return;
+  const selected = String(industryEl.value || "").trim();
+  customFields.hidden = selected !== CUSTOM_APPAREL_VALUE;
+}
+
 function servicesToTextarea(services) {
   if (!Array.isArray(services) || !services.length) return "";
   return services.map((s) => SERVICE_LABELS[s] || s).join(", ");
@@ -108,6 +117,17 @@ function applyFormFromBusiness(data) {
 
   setVal("cfg-business-name", data.businessName || "");
   setVal("cfg-industry", typeof data.industry === "string" ? data.industry : "");
+  setVal("cfg-custom-products", data.customProducts || "");
+  setVal(
+    "cfg-custom-min-price",
+    data.customMinPrice != null && data.customMinPrice !== "" ? String(data.customMinPrice) : "",
+  );
+  setVal(
+    "cfg-custom-min-qty",
+    data.customMinQty != null && data.customMinQty !== "" ? String(data.customMinQty) : "",
+  );
+  setVal("cfg-custom-delivery-time", data.customDeliveryTime || "");
+  setVal("cfg-custom-payment-method", data.customPaymentMethod || "");
   setVal("cfg-phone", data.phone || "");
   setVal("cfg-email", data.email || "");
   setVal("cfg-address", data.commercialAddress || "");
@@ -155,6 +175,7 @@ function applyFormFromBusiness(data) {
   });
 
   renderIntegrationCards();
+  syncIndustryCustomFields();
 }
 
 async function saveSection(section) {
@@ -165,10 +186,19 @@ async function saveSection(section) {
 
   try {
     if (section === "business") {
+      const rawMinPrice = val("cfg-custom-min-price").trim();
+      const rawMinQty = val("cfg-custom-min-qty").trim();
+      const minPrice = rawMinPrice === "" ? null : Number(rawMinPrice);
+      const minQty = rawMinQty === "" ? null : Number(rawMinQty);
       await updateDoc(ref, {
         ...base,
         businessName: val("cfg-business-name").trim(),
         industry: val("cfg-industry").trim(),
+        customProducts: val("cfg-custom-products").trim(),
+        customMinPrice: Number.isFinite(minPrice) ? minPrice : null,
+        customMinQty: Number.isFinite(minQty) ? Math.round(minQty) : null,
+        customDeliveryTime: val("cfg-custom-delivery-time").trim(),
+        customPaymentMethod: val("cfg-custom-payment-method").trim(),
         phone: val("cfg-phone").trim(),
         email: val("cfg-email").trim().toLowerCase(),
         commercialAddress: val("cfg-address").trim(),
@@ -298,6 +328,13 @@ function wireSaveButtons() {
   });
 }
 
+function wireIndustrySelector() {
+  const industryEl = document.getElementById("cfg-industry");
+  if (!industryEl) return;
+  industryEl.addEventListener("change", syncIndustryCustomFields);
+  syncIndustryCustomFields();
+}
+
 function wireIntegrations() {
   document.querySelectorAll(".cfg-int-card").forEach((card) => {
     const key = card.getAttribute("data-int-key");
@@ -343,6 +380,7 @@ function boot() {
   wireLogoFile();
   wireSaveButtons();
   wireIntegrations();
+  wireIndustrySelector();
 
   onAuthStateChanged(auth, (user) => {
     if (!user) {
