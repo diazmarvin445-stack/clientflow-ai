@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { parse as parseQuery } from "node:querystring";
 import { initializeApp, getApps } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import cors from "cors";
@@ -10,6 +10,7 @@ import {
   getYourColorChatSystemPrompt,
   getYourColorWhatsAppWebhookPrompt,
   computeValidatedMayaOrder,
+  computeValidatedMayaCombinedOrder,
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
@@ -51,25 +52,70 @@ function parseTwilioFormBody(req) {
 }
 
 /**
- * Extrae MAYA_ORDER_JSON y devuelve texto visible para el cliente.
+ * Extrae MAYA_* JSON finales y devuelve texto visible para el cliente.
  * @param {string} raw
- * @returns {{ text: string, order: Record<string, unknown> | null }}
+ * @returns {{ text: string, order: Record<string, unknown> | null, deposit: Record<string, unknown> | null, meeting: Record<string, unknown> | null, specialRequest: Record<string, unknown> | null }}
  */
 function extractMayaOrderFromReply(raw) {
-  const text = asText(raw);
-  const re = /MAYA_ORDER_JSON:\s*(\{[\s\S]*?\})\s*$/m;
-  const m = text.match(re);
-  if (!m) {
-    return { text, order: null };
-  }
+  let visible = asText(raw);
   let order = null;
-  try {
-    order = JSON.parse(m[1]);
-  } catch {
-    order = null;
+  let deposit = null;
+  let meeting = null;
+  let specialRequest = null;
+  const depRe = /MAYA_DEPOSIT_JSON:\s*(\{[\s\S]*?\})\s*$/m;
+  const orderRe = /MAYA_ORDER_JSON:\s*(\{[\s\S]*?\})\s*$/m;
+  const meetingRe = /MAYA_MEETING_JSON:\s*(\{[\s\S]*?\})\s*$/m;
+  const specialRe = /MAYA_SPECIAL_REQUEST_JSON:\s*(\{[\s\S]*?\})\s*$/m;
+
+  let m = visible.match(depRe);
+  if (m) {
+    try {
+      deposit = JSON.parse(m[1]);
+    } catch {
+      deposit = null;
+    }
+    visible = visible.replace(depRe, "").trim();
   }
-  const visible = text.replace(re, "").trim();
-  return { text: visible, order };
+  m = visible.match(orderRe);
+  if (m) {
+    try {
+      order = JSON.parse(m[1]);
+    } catch {
+      order = null;
+    }
+    visible = visible.replace(orderRe, "").trim();
+  }
+  m = visible.match(meetingRe);
+  if (m) {
+    try {
+      meeting = JSON.parse(m[1]);
+    } catch {
+      meeting = null;
+    }
+    visible = visible.replace(meetingRe, "").trim();
+  }
+  m = visible.match(specialRe);
+  if (m) {
+    try {
+      specialRequest = JSON.parse(m[1]);
+    } catch {
+      specialRequest = null;
+    }
+    visible = visible.replace(specialRe, "").trim();
+  }
+  return { text: visible, order, deposit, meeting, specialRequest };
+}
+
+/** Entrega = fecha actual + N días hábiles (lun–vie). */
+function deliveryDateAfterBusinessDays(start, businessDays) {
+  const d = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 12, 0, 0, 0);
+  let added = 0;
+  while (added < businessDays) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+  return d;
 }
 
 function truncateWhatsApp(s, max = 1500) {
@@ -333,10 +379,39 @@ const MAYA_PRODUCT_KEYS = new Set([
   "polo",
   "gorras",
   "tarjetas",
+  "magnetosVehiculo",
+  "letrerosYarda",
 ]);
 
+/**
+ * Pedido MAYA_ORDER_JSON: un producto o varios vía `items`.
+ * @param {Record<string, unknown> | null} payload
+ */
+function isValidMayaOrderPayload(payload) {
+  if (!payload || payload.confirmed !== true) return false;
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    return payload.items.every(
+      (it) =>
+        it &&
+        typeof it === "object" &&
+        typeof it.productKey === "string" &&
+        MAYA_PRODUCT_KEYS.has(it.productKey) &&
+        Number.isFinite(Number(it.quantity)) &&
+        Number(it.quantity) >= 1,
+    );
+  }
+  return (
+    typeof payload.productKey === "string" &&
+    MAYA_PRODUCT_KEYS.has(payload.productKey) &&
+    Number.isFinite(Number(payload.quantity)) &&
+    Number(payload.quantity) >= 1
+  );
+}
+
+/** Webhook Twilio (WhatsApp) → Claude (YourColor) → respuesta TwiML. */
 export const whatsappWebhook = onRequest(
   {
+    region: "us-central1",
     secrets: [
       ANTHROPIC_KEY,
       TWILIO_ACCOUNT_SID,
@@ -402,10 +477,15 @@ export const whatsappWebhook = onRequest(
       .doc(sessionId);
 
     let priorMessages = [];
+    /** Último lead de esta sesión WhatsApp (para confirmación de depósito). */
+    let sessionLastLeadId = null;
     try {
       const sessionSnap = await sessionRef.get();
       if (sessionSnap.exists) {
         const data = sessionSnap.data();
+        if (typeof data?.lastLeadId === "string" && data.lastLeadId.trim()) {
+          sessionLastLeadId = data.lastLeadId.trim();
+        }
         const arr = Array.isArray(data?.messages) ? data.messages : [];
         priorMessages = arr
           .filter(
@@ -471,45 +551,108 @@ export const whatsappWebhook = onRequest(
       return;
     }
 
-    const { text: visibleReply, order: orderPayload } = extractMayaOrderFromReply(assistantRaw);
-    let outbound = visibleReply || "Gracias por escribir a YourColor.";
-    /** Historial sin MAYA_ORDER_JSON para siguientes turnos con Claude. */
-    let assistantForSession = visibleReply || assistantRaw;
+    const {
+      text: visibleReply,
+      order: orderPayload,
+      deposit: depositPayload,
+      meeting: meetingPayload,
+      specialRequest: specialRequestPayload,
+    } = extractMayaOrderFromReply(assistantRaw);
+    const defaultWhatsAppReply = "Gracias por escribir a YourColor.";
+    let outbound = visibleReply || defaultWhatsAppReply;
+    /** Historial sin líneas MAYA_* JSON para siguientes turnos con Claude. */
+    let assistantForSession = (visibleReply || assistantRaw || defaultWhatsAppReply).trim();
 
-    const confirmed =
-      orderPayload &&
-      orderPayload.confirmed === true &&
-      typeof orderPayload.productKey === "string" &&
-      MAYA_PRODUCT_KEYS.has(orderPayload.productKey);
-    const qty = Number(orderPayload?.quantity);
+    const confirmed = orderPayload && isValidMayaOrderPayload(orderPayload);
 
-    if (confirmed && Number.isFinite(qty) && qty >= 1) {
-      const calc = computeValidatedMayaOrder(orderPayload.productKey, qty);
-      if (calc) {
-        const product = YOURCOLOR_BUSINESS.products[orderPayload.productKey];
-        const productLabel = product?.name || orderPayload.productKey;
-        const customerName =
-          typeof orderPayload.customerName === "string" && orderPayload.customerName.trim()
-            ? orderPayload.customerName.trim()
-            : "Cliente WhatsApp";
+    if (confirmed) {
+      const customerName =
+        typeof orderPayload.customerName === "string" && orderPayload.customerName.trim()
+          ? orderPayload.customerName.trim()
+          : "Cliente WhatsApp";
 
-        const description = [
-          `Pedido confirmado vía WhatsApp (YourColor).`,
-          `Producto: ${productLabel}`,
-          `Cantidad: ${qty}`,
-          calc.isTarjetas
-            ? `Total (paquete): ${formatUsd(calc.total)}`
-            : `Precio por pieza: ${formatUsd(calc.pricePerPiece)} · Subtotal prendas: ${formatUsd(calc.subtotal)}`,
-          calc.logoFee > 0 ? `Logo/arte: ${formatUsd(calc.logoFee)}` : null,
-          `Total: ${formatUsd(calc.total)}`,
-          `Depósito ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)}`,
-          `Métodos: ${YOURCOLOR_BUSINESS.rules.paymentMethods.join(", ")}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
+      /** @type {null | ReturnType<typeof computeValidatedMayaOrder> | ReturnType<typeof computeValidatedMayaCombinedOrder>} */
+      let calc = null;
+      let description = "";
+      /** @type {Record<string, unknown>} */
+      let leadPayload = {};
 
-        try {
-          await db.collection("businesses").doc(businessId).collection("leads").add({
+      if (Array.isArray(orderPayload.items) && orderPayload.items.length > 0) {
+        calc = computeValidatedMayaCombinedOrder(
+          orderPayload.items.map((it) => ({
+            productKey: it.productKey,
+            quantity: Number(it.quantity),
+          })),
+        );
+        if (calc) {
+          const lineParts = calc.lines.map((ln) => {
+            const product = YOURCOLOR_BUSINESS.products[ln.productKey];
+            const productLabel = product?.name || ln.productKey;
+            if (ln.isTarjetas) {
+              return `${productLabel}: ${ln.quantity} unidades → ${formatUsd(ln.subtotal)} (total paquete)`;
+            }
+            return `${productLabel}: ${ln.quantity} × ${formatUsd(ln.pricePerPiece)} = ${formatUsd(ln.subtotal)}`;
+          });
+          description = [
+            `Pedido confirmado vía WhatsApp (YourColor) — varios productos.`,
+            ...lineParts,
+            calc.logoFee > 0 ? `Logo/arte: ${formatUsd(calc.logoFee)}` : null,
+            `Total: ${formatUsd(calc.total)}`,
+            `Depósito ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)}`,
+            `Métodos: ${YOURCOLOR_BUSINESS.rules.paymentMethods.join(", ")}`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          leadPayload = {
+            customerName,
+            phone: from.replace(/^whatsapp:/i, ""),
+            address: "",
+            service: `Pedido múltiple (${orderPayload.items.length} líneas)`,
+            description,
+            status: "new",
+            estimatedPrice: calc.total,
+            depositAmount: calc.deposit,
+            depositPercent: YOURCOLOR_BUSINESS.rules.depositPercent,
+            source: "whatsapp-yourcolor",
+            whatsappFrom: from,
+            productKey: "multi",
+            quantity: calc.lines.reduce((s, l) => s + l.quantity, 0),
+            mayaOrder: {
+              items: orderPayload.items,
+              lines: calc.lines,
+              logoFee: calc.logoFee,
+              subtotal: calc.subtotal,
+              total: calc.total,
+              deposit: calc.deposit,
+              isCombined: true,
+            },
+            createdAt: FieldValue.serverTimestamp(),
+          };
+        }
+      } else {
+        const qty = Number(orderPayload.quantity);
+        calc = computeValidatedMayaOrder(orderPayload.productKey, qty);
+        if (calc) {
+          const product = YOURCOLOR_BUSINESS.products[orderPayload.productKey];
+          const productLabel = product?.name || orderPayload.productKey;
+
+          description = [
+            `Pedido confirmado vía WhatsApp (YourColor).`,
+            `Producto: ${productLabel}`,
+            `Cantidad: ${qty}`,
+            calc.isTarjetas
+              ? `Total (paquete): ${formatUsd(calc.total)}`
+              : `Precio por pieza: ${formatUsd(calc.pricePerPiece)} · Subtotal prendas: ${formatUsd(calc.subtotal)}`,
+            calc.logoFee > 0 ? `Logo/arte: ${formatUsd(calc.logoFee)}` : null,
+            `Total: ${formatUsd(calc.total)}`,
+            `Depósito ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)}`,
+            `Métodos: ${YOURCOLOR_BUSINESS.rules.paymentMethods.join(", ")}`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          leadPayload = {
             customerName,
             phone: from.replace(/^whatsapp:/i, ""),
             address: "",
@@ -532,7 +675,14 @@ export const whatsappWebhook = onRequest(
               isTarjetas: Boolean(calc.isTarjetas),
             },
             createdAt: FieldValue.serverTimestamp(),
-          });
+          };
+        }
+      }
+
+      if (calc) {
+        try {
+          const leadDocRef = await db.collection("businesses").doc(businessId).collection("leads").add(leadPayload);
+          sessionLastLeadId = leadDocRef.id;
 
           outbound = `${outbound}\n\n✅ Pedido registrado. Total ${formatUsd(calc.total)}. Depósito del ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)} (${YOURCOLOR_BUSINESS.rules.paymentMethods.join(" o ")}).`;
           assistantForSession = outbound;
@@ -547,20 +697,154 @@ export const whatsappWebhook = onRequest(
       }
     }
 
+    if (
+      depositPayload &&
+      depositPayload.confirmed === true &&
+      typeof sessionLastLeadId === "string" &&
+      sessionLastLeadId.trim()
+    ) {
+      const leadId = sessionLastLeadId.trim();
+      try {
+        const leadRef = db.collection("businesses").doc(businessId).collection("leads").doc(leadId);
+        const leadSnap = await leadRef.get();
+        if (leadSnap.exists) {
+          const leadData = leadSnap.data() || {};
+          const currentStatus = typeof leadData.status === "string" ? leadData.status : "";
+
+          if (currentStatus !== "deposit_confirmed") {
+            const phoneClean = from.replace(/^whatsapp:/i, "");
+            const customerName =
+              typeof leadData.customerName === "string" && leadData.customerName.trim()
+                ? leadData.customerName.trim()
+                : "Cliente WhatsApp";
+            const productLabel =
+              typeof leadData.service === "string" && leadData.service.trim()
+                ? leadData.service.trim()
+                : "Pedido";
+            const mayaOrder =
+              leadData.mayaOrder && typeof leadData.mayaOrder === "object"
+                ? leadData.mayaOrder
+                : {};
+            const qtyLead = Number(leadData.quantity);
+            const total = Number(mayaOrder.total ?? leadData.estimatedPrice);
+            const depositPaid = Number(mayaOrder.deposit ?? leadData.depositAmount);
+
+            const now = new Date();
+            const delivery = deliveryDateAfterBusinessDays(now, 12);
+            const deliveryTs = Timestamp.fromDate(delivery);
+
+            await leadRef.update({
+              status: "deposit_confirmed",
+              depositConfirmedAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+
+            const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
+            const calCol = db.collection("businesses").doc(businessId).collection("calendar");
+
+            const dupClient = await clientsCol.where("sourceLeadId", "==", leadId).limit(1).get();
+            if (dupClient.empty) {
+              await clientsCol.add({
+                fullName: customerName,
+                name: customerName,
+                phone: phoneClean,
+                product: productLabel,
+                quantity: Number.isFinite(qtyLead) ? qtyLead : 0,
+                total: Number.isFinite(total) ? total : 0,
+                deposit: Number.isFinite(depositPaid) ? depositPaid : 0,
+                deliveryDate: deliveryTs,
+                status: "in_production",
+                sourceLeadId: leadId,
+                source: "whatsapp-yourcolor-deposit",
+                createdAt: FieldValue.serverTimestamp(),
+              });
+            }
+
+            const dupCal = await calCol.where("sourceLeadId", "==", leadId).limit(1).get();
+            if (dupCal.empty) {
+              await calCol.add({
+                title: `Entrega: ${customerName} - ${productLabel}`,
+                date: deliveryTs,
+                clientName: customerName,
+                phone: phoneClean,
+                product: productLabel,
+                quantity: Number.isFinite(qtyLead) ? qtyLead : 0,
+                sourceLeadId: leadId,
+                createdAt: FieldValue.serverTimestamp(),
+              });
+            }
+
+            outbound = `${outbound}\n\n✅ Depósito recibido. Tu pedido está en producción. Entrega orientativa (12 días hábiles desde hoy): ${delivery.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.`;
+            assistantForSession = outbound;
+          }
+        }
+      } catch (e) {
+        console.error("[whatsappWebhook] deposit confirmation", e);
+      }
+    }
+
+    if (meetingPayload && typeof meetingPayload === "object") {
+      const city = asText(meetingPayload.city);
+      const preferredTime = asText(
+        meetingPayload.preferredTime || meetingPayload.time || meetingPayload.slot,
+      );
+      const clientName = asText(
+        meetingPayload.clientName || meetingPayload.name || meetingPayload.customerName,
+        "Cliente WhatsApp",
+      );
+      const phoneClean = from.replace(/^whatsapp:/i, "");
+
+      if (city && preferredTime) {
+        try {
+          await db.collection("businesses").doc(businessId).collection("meetingRequests").add({
+            clientName,
+            phone: phoneClean,
+            city,
+            preferredTime,
+            status: "pending",
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        } catch (e) {
+          console.error("[whatsappWebhook] meetingRequests write", e);
+        }
+      }
+    }
+
+    if (
+      specialRequestPayload &&
+      specialRequestPayload.confirmed === true &&
+      typeof specialRequestPayload.description === "string" &&
+      asText(specialRequestPayload.description)
+    ) {
+      try {
+        await db.collection("businesses").doc(businessId).collection("specialRequests").add({
+          description: asText(specialRequestPayload.description),
+          whatsappFrom: from,
+          source: "whatsapp-maya",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        console.error("[whatsappWebhook] specialRequests write", e);
+        outbound = `${outbound}\n\n(No pude registrar tu solicitud en el sistema. Llama al ${YOURCOLOR_BUSINESS.phone}.)`;
+        assistantForSession = outbound;
+      }
+    }
+
     const nextMessages = [...messagesForClaude, { role: "assistant", content: assistantForSession }].slice(
       -40,
     );
 
     try {
-      await sessionRef.set(
-        {
-          messages: nextMessages,
-          lastWhatsAppFrom: from,
-          lastWhatsAppTo: to,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
+      const sessionUpdate = {
+        messages: nextMessages,
+        lastWhatsAppFrom: from,
+        lastWhatsAppTo: to,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (sessionLastLeadId) {
+        sessionUpdate.lastLeadId = sessionLastLeadId;
+      }
+      await sessionRef.set(sessionUpdate, { merge: true });
     } catch (e) {
       console.warn("[whatsappWebhook] session write", e);
     }

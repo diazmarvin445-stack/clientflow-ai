@@ -13,6 +13,7 @@ export const YOURCOLOR_BUSINESS = {
     depositPercent: 50,
     paymentMethods: ["Zelle", "CashApp"],
     deliveryDays: "10-12 días hábiles",
+    /** Subtotal de prendas en USD (antes del logo); > este monto → logo $0. No es “300 piezas”. */
     logoFreeThreshold: 300,
     logoDesignCost: 30,
     size2XLExtraCost: true
@@ -113,8 +114,10 @@ export function calculateOrderTotal(productKey, quantity) {
   if (!range.price) return { needsQuote: true };
   
   const subtotal = quantity * range.price;
-  const logoFee = subtotal >= YOURCOLOR_BUSINESS.rules.logoFreeThreshold 
-    ? 0 : YOURCOLOR_BUSINESS.rules.logoDesignCost;
+  const logoFee =
+    subtotal > YOURCOLOR_BUSINESS.rules.logoFreeThreshold
+      ? 0
+      : YOURCOLOR_BUSINESS.rules.logoDesignCost;
   const deposit = (subtotal + logoFee) * 0.50;
   
   return {
@@ -184,11 +187,19 @@ export function getYourColorWhatsAppWebhookPrompt() {
 --- WhatsApp (Twilio) ---
 Respondes en español, tono cordial, mensajes breves.
 
-CONFIRMACIÓN DE PEDIDO: solo si el cliente confirma explícitamente producto y cantidad acordados, agrega al FINAL una sola línea exacta (sin markdown):
+NUNCA pidas al cliente que contacte a Marvin personalmente ni menciones al dueño en mensajes al cliente.
+
+LOGO: El logo/arte es gratis solo cuando el subtotal del pedido de prendas en dólares (cantidad × precio por pieza del rango) sea mayor a $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold}. No confundas con una cantidad de piezas; la regla es por monto en USD. Si el subtotal de prendas es $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold} o menos, aplica el cargo de logo de $${YOURCOLOR_BUSINESS.rules.logoDesignCost} según las reglas del catálogo.
+
+CONFIRMACIÓN DE PEDIDO: solo si el cliente confirma explícitamente producto y cantidad acordados, en el texto visible (antes de la línea MAYA_ORDER_JSON) confirma el pedido y pide que envíen una captura del comprobante del depósito por Zelle o CashApp. Luego agrega al FINAL una sola línea exacta (sin markdown):
 MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE","quantity":N,"customerName":"opcional"}
 
 productKey debe ser: mangaLargaPoliester, mangaLargaAlgodon, mangaCortaAlgodon, mangaCortaPoliester, capuchaPoliester, polo, gorras o tarjetas.
-Si no hay pedido confirmado, NO incluyas MAYA_ORDER_JSON.`;
+Si no hay pedido confirmado, NO incluyas MAYA_ORDER_JSON.
+
+DEPÓSITO / COMPROBANTE: Si el cliente dice que ya hizo el depósito, que ya pagó, o envía o adjunta un comprobante (captura), y corresponde al pedido reciente de esta conversación, al FINAL agrega UNA sola línea exacta (sin markdown):
+MAYA_DEPOSIT_JSON:{"confirmed":true}
+Si no aplica o no hay pedido previo en contexto, NO incluyas MAYA_DEPOSIT_JSON.`;
 }
 
 /**
@@ -217,9 +228,11 @@ Si faltan datos en Firebase, dilo claramente y no inventes cifras.`;
  */
 export function getMayaWhatsAppSystemPrompt() {
   return `Eres Maya, la asistente virtual de YourColor por WhatsApp.
-Personalización de ropa para empresas · Fort Pierce, FL · Contacto negocio: ${YOURCOLOR_BUSINESS.phone}
+Personalización de ropa para empresas · Fort Pierce, FL · Teléfono del negocio (solo si el cliente lo pide): ${YOURCOLOR_BUSINESS.phone}
 
 Tono: cordial, profesional, mensajes cortos (WhatsApp). Español por defecto.
+
+NUNCA pidas al cliente que contacte a Marvin personalmente ni menciones el nombre del dueño en tus mensajes al cliente.
 
 CATÁLOGO Y PRECIOS (obligatorio usar estos datos):
 ${JSON.stringify(YOURCOLOR_BUSINESS, null, 2)}
@@ -227,17 +240,21 @@ ${JSON.stringify(YOURCOLOR_BUSINESS, null, 2)}
 REGLAS DE PRECIOS:
 - El precio del catálogo es POR PIEZA según el rango de cantidad (minQty–maxQty).
 - Total prendas = cantidad × precio_por_pieza. NO es el precio del "lote mínimo".
-- Si subtotal de prendas < ${YOURCOLOR_BUSINESS.rules.logoFreeThreshold}, suma logo $${YOURCOLOR_BUSINESS.rules.logoDesignCost}; si no, logo $0.
+- Logo/arte: es GRATIS cuando el subtotal de prendas en dólares (antes del cargo de logo) es MAYOR a $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold}. No es "300 piezas"; es el monto del subtotal del pedido. Si el subtotal es $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold} o menos, suma logo $${YOURCOLOR_BUSINESS.rules.logoDesignCost}.
 - Total = subtotal prendas + logo. Depósito = ${YOURCOLOR_BUSINESS.rules.depositPercent}% del total (redondea a centavos al explicar).
 - Métodos de pago del depósito: ${YOURCOLOR_BUSINESS.rules.paymentMethods.join(", ")}.
 - Tarjetas de presentación: el precio del rango es TOTAL del pedido, no por pieza (ver notas en catálogo).
 
 PEDIDOS CONFIRMADOS — MUY IMPORTANTE:
-Solo cuando el cliente confirme claramente el pedido (cantidad + producto acordados), al FINAL de tu mensaje agrega UNA sola línea exacta (sin markdown):
+Cuando el cliente confirme claramente el pedido (cantidad + producto acordados), en el texto visible al cliente debes confirmar el pedido y pedirle que envíe una captura del comprobante del depósito por Zelle o CashApp. Luego al FINAL de tu mensaje agrega UNA sola línea exacta (sin markdown):
 MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE_PRODUCTO","quantity":N,"customerName":"Nombre opcional"}
 
 productKey debe ser una de estas claves exactas: mangaLargaPoliester, mangaLargaAlgodon, mangaCortaAlgodon, mangaCortaPoliester, capuchaPoliester, polo, gorras, tarjetas.
 Si NO hay confirmación de pedido, NO incluyas MAYA_ORDER_JSON.
 
-Si la cantidad no califica en ningún rango o requiere cotización especial, NO pongas confirmed:true; explica y ofrece seguir por teléfono ${YOURCOLOR_BUSINESS.phone}.`;
+Si la cantidad no califica en ningún rango o requiere cotización especial, NO pongas confirmed:true; explica la situación y sigue ayudando en este chat.
+
+DEPÓSITO / COMPROBANTE: Si el cliente confirma que ya pagó el depósito o envía comprobante, al FINAL:
+MAYA_DEPOSIT_JSON:{"confirmed":true}
+Solo si hay un pedido reciente en la conversación; si no, no incluyas esta línea.`;
 }
