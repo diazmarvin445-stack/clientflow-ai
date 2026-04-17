@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat IA — YourColor · ClientFlow AI</title>
+    <title>Centro de Control Maya — YourColor · ClientFlow AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="dash-body yc-chat-page">
+  <body class="dash-body yc-chat-page maya-cc-page">
     <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
 
     <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
@@ -104,46 +104,249 @@
       </header>
 
       <main class="dash-main" id="dash-main">
-        <div class="yc-chat-wrap">
-          <header class="yc-chat-hero">
-            <h2 class="yc-chat-hero-title">Asistente YourColor</h2>
-            <p class="yc-chat-hero-sub">
-              Pregunta por precios, campañas, clientes u órdenes. Los datos de tu negocio se cargan al
-              abrir esta página para respuestas personalizadas.
-            </p>
-          </header>
+        <div class="maya-cc" aria-label="Centro de Control Maya">
+          <!-- Zona 1: Chat Marvin ↔ Maya (40%) -->
+          <details class="maya-cc-zone maya-cc-zone--chat" open>
+            <summary class="maya-cc-zone__cap">
+              <span class="maya-cc-zone__cap-main">
+                <span class="maya-cc-zone__title">💬 Chat Maya</span>
+                <span class="maya-cc-zone__badge">Dueño</span>
+              </span>
+              <span class="maya-cc-zone__cap-meta">Instrucciones, métricas y control</span>
+              <span class="maya-cc-zone__chev" aria-hidden="true"></span>
+            </summary>
+            <div class="maya-cc-zone__scroll">
+              <section class="maya-cc-alerts" aria-label="Alertas">
+                <div class="maya-cc-alerts__head">
+                  <span class="maya-cc-alerts__title">Alertas</span>
+                  <span class="maya-cc-alerts__sub">Maya puede pedirte ayuda</span>
+                </div>
+                <ul class="maya-cc-alerts__list">
+                  <li>
+                    <button type="button" class="maya-cc-alert" data-maya-open-conversation="demo-1">
+                      <span class="maya-cc-alert__ico" aria-hidden="true">⚠️</span>
+                      <span class="maya-cc-alert__text"
+                        >Juan Pérez pide pancartas (fuera de catálogo), ¿qué le respondo?</span
+                      >
+                      <span class="maya-cc-alert__hint">Abrir en WhatsApp →</span>
+                    </button>
+                  </li>
+                  <li>
+                    <button type="button" class="maya-cc-alert maya-cc-alert--soft" data-maya-open-conversation="demo-2">
+                      <span class="maya-cc-alert__ico" aria-hidden="true">💬</span>
+                      <span class="maya-cc-alert__text">Cliente en +1 772… pregunta por plazo de entrega urgente.</span>
+                      <span class="maya-cc-alert__hint">Abrir en WhatsApp →</span>
+                    </button>
+                  </li>
+                </ul>
+              </section>
 
-          <div id="yc-chat-error" class="yc-chat-error" hidden role="alert"></div>
-          <div id="yc-chat-toast" class="yc-chat-toast" hidden role="status" aria-live="polite"></div>
+              <div class="yc-chat-wrap">
+                <header class="yc-chat-hero">
+                  <h2 class="yc-chat-hero-title">Asistente YourColor</h2>
+                  <p class="yc-chat-hero-sub">
+                    Pregunta por precios, campañas, clientes u órdenes. Los datos de tu negocio se cargan al abrir esta
+                    página para respuestas personalizadas.
+                  </p>
+                </header>
 
-          <div class="yc-chat-panel" id="yc-chat-panel" aria-live="polite">
-            <div class="yc-chat-toolbar">
-              <span class="yc-chat-toolbar-title">YourColor · Claude</span>
-              <span class="yc-chat-toolbar-meta" id="yc-chat-context-meta">Sincronizando datos…</span>
+                <div id="yc-chat-error" class="yc-chat-error" hidden role="alert"></div>
+                <div id="yc-chat-toast" class="yc-chat-toast" hidden role="status" aria-live="polite"></div>
+
+                <div class="yc-chat-panel" id="yc-chat-panel" aria-live="polite">
+                  <div class="yc-chat-toolbar">
+                    <span class="yc-chat-toolbar-title">YourColor · Claude</span>
+                    <span class="yc-chat-toolbar-meta" id="yc-chat-context-meta">Sincronizando datos…</span>
+                  </div>
+
+                  <div id="yc-chat-loading" class="yc-chat-loading">
+                    <span>Cargando datos de Firebase</span>
+                    <span class="yc-chat-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+                  </div>
+
+                  <div id="yc-chat-stream" class="yc-chat-stream" hidden></div>
+
+                  <div class="yc-chat-composer">
+                    <label class="visually-hidden" for="yc-chat-input">Escribe un mensaje</label>
+                    <textarea
+                      id="yc-chat-input"
+                      class="yc-chat-input"
+                      rows="1"
+                      placeholder="Escribe un mensaje…"
+                      autocomplete="off"
+                      disabled
+                    ></textarea>
+                    <button type="button" class="yc-chat-send" id="yc-chat-send" disabled>Enviar</button>
+                  </div>
+                </div>
+              </div>
             </div>
+          </details>
 
-            <div id="yc-chat-loading" class="yc-chat-loading">
-              <span>Cargando datos de Firebase</span>
-              <span class="yc-chat-dots" aria-hidden="true"
-                ><span></span><span></span><span></span
-              ></span>
+          <!-- Zona 2: WhatsApp (40%) — UI lista + hilo (datos después) -->
+          <details class="maya-cc-zone maya-cc-zone--wa" open>
+            <summary class="maya-cc-zone__cap">
+              <span class="maya-cc-zone__cap-main">
+                <span class="maya-cc-zone__title">📱 Conversaciones WhatsApp</span>
+                <span class="maya-cc-zone__badge maya-cc-zone__badge--wa">Clientes</span>
+              </span>
+              <span class="maya-cc-zone__cap-meta">Firebase: conversations/{tel}</span>
+              <span class="maya-cc-zone__chev" aria-hidden="true"></span>
+            </summary>
+            <div class="maya-cc-zone__scroll maya-cc-zone__scroll--wa">
+              <div class="maya-cc-wa-meta-pending" role="status">
+                <div class="maya-cc-wa-meta-pending__inner">
+                  <span class="maya-cc-wa-meta-pending__ico" aria-hidden="true">📱</span>
+                  <p class="maya-cc-wa-meta-pending__title">Esperando aprobación de Meta…</p>
+                  <p class="maya-cc-wa-meta-pending__text">
+                    Cuando la app de WhatsApp esté activa, las conversaciones en vivo aparecerán aquí.
+                  </p>
+                </div>
+              </div>
+
+              <div class="maya-cc-wa-split" aria-hidden="true">
+                <aside class="maya-cc-wa-list" aria-label="Lista de conversaciones">
+                  <div class="maya-cc-wa-list__toolbar">
+                    <span class="maya-cc-wa-list__label">Vista previa de diseño</span>
+                  </div>
+                  <button type="button" class="maya-cc-conv is-active" disabled>
+                    <span class="maya-cc-conv__top">
+                      <span class="maya-cc-conv__name">📱 María López</span>
+                      <span class="maya-cc-conv__time">10:42</span>
+                    </span>
+                    <span class="maya-cc-conv__preview">Perfecto, entonces son 12 polos para el viernes…</span>
+                    <span class="maya-cc-conv__status maya-cc-conv__status--green">🟢 Activa</span>
+                  </button>
+                  <button type="button" class="maya-cc-conv" disabled>
+                    <span class="maya-cc-conv__top">
+                      <span class="maya-cc-conv__name">+1 772-555-0142</span>
+                      <span class="maya-cc-conv__time">Ayer</span>
+                    </span>
+                    <span class="maya-cc-conv__preview">¿Me mandan foto del logo?</span>
+                    <span class="maya-cc-conv__status maya-cc-conv__status--yellow">🟡 Esperando cliente</span>
+                  </button>
+                  <button type="button" class="maya-cc-conv" disabled>
+                    <span class="maya-cc-conv__top">
+                      <span class="maya-cc-conv__name">Pedro Ruiz</span>
+                      <span class="maya-cc-conv__time">Lun</span>
+                    </span>
+                    <span class="maya-cc-conv__preview">Listo, hago el depósito hoy.</span>
+                    <span class="maya-cc-conv__status maya-cc-conv__status--ok">✅ Orden confirmada</span>
+                  </button>
+                  <button type="button" class="maya-cc-conv" disabled>
+                    <span class="maya-cc-conv__top">
+                      <span class="maya-cc-conv__name">Ana — Gorras</span>
+                      <span class="maya-cc-conv__time">Lun</span>
+                    </span>
+                    <span class="maya-cc-conv__preview">Necesito algo que no vi en el catálogo…</span>
+                    <span class="maya-cc-conv__status maya-cc-conv__status--warn">⚠️ Necesita a Marvin</span>
+                  </button>
+                </aside>
+
+                <section class="maya-cc-wa-thread" aria-label="Historial de la conversación">
+                  <div class="maya-cc-wa-thread__toolbar">
+                    <span class="maya-cc-wa-thread__title">María López</span>
+                    <div class="maya-cc-wa-thread__actions">
+                      <button type="button" class="maya-cc-wa-btn" disabled>🎤 Intervenir</button>
+                      <button type="button" class="maya-cc-wa-btn" disabled>🤖 Soltar</button>
+                      <button type="button" class="maya-cc-wa-btn maya-cc-wa-btn--ghost" disabled>✏️ Nota interna</button>
+                    </div>
+                  </div>
+                  <div class="maya-cc-wa-msgs">
+                    <div class="maya-cc-msg maya-cc-msg--client">
+                      <span class="maya-cc-msg__who">Cliente</span>
+                      <p class="maya-cc-msg__body">Hola, necesito cotización de 12 polos bordados para el viernes.</p>
+                    </div>
+                    <div class="maya-cc-msg maya-cc-msg--maya">
+                      <span class="maya-cc-msg__who">Maya</span>
+                      <p class="maya-cc-msg__body">
+                        ¡Hola! Con gusto. ¿Los polos serían 100% poliéster y tienes el logo listo?
+                      </p>
+                    </div>
+                    <div class="maya-cc-msg maya-cc-msg--client">
+                      <span class="maya-cc-msg__who">Cliente</span>
+                      <p class="maya-cc-msg__body">Sí, poliéster y ya tengo el PNG del logo.</p>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
+          </details>
 
-            <div id="yc-chat-stream" class="yc-chat-stream" hidden></div>
+          <!-- Zona 3: Estadísticas (20%) -->
+          <details class="maya-cc-zone maya-cc-zone--stats" open>
+            <summary class="maya-cc-zone__cap">
+              <span class="maya-cc-zone__cap-main">
+                <span class="maya-cc-zone__title">📊 Estadísticas</span>
+                <span class="maya-cc-zone__badge maya-cc-zone__badge--muted">En vivo</span>
+              </span>
+              <span class="maya-cc-zone__cap-meta">Resumen operativo</span>
+              <span class="maya-cc-zone__chev" aria-hidden="true"></span>
+            </summary>
+            <div class="maya-cc-zone__scroll maya-cc-zone__scroll--stats">
+              <section class="maya-cc-stat-group" aria-label="Métricas de hoy">
+                <h3 class="maya-cc-stat-group__title">📅 HOY</h3>
+                <dl class="maya-cc-stat-list">
+                  <div class="maya-cc-stat-row">
+                    <dt>💬 Chats activos</dt>
+                    <dd><span data-maya-stat="chats-active-today">0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>✅ Ventas cerradas</dt>
+                    <dd><span data-maya-stat="sales-closed-today">0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>💰 Total ventas</dt>
+                    <dd><span data-maya-stat="sales-total-today">$0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>🔔 Pendientes</dt>
+                    <dd><span data-maya-stat="pending-today">0</span></dd>
+                  </div>
+                </dl>
+              </section>
 
-            <div class="yc-chat-composer">
-              <label class="visually-hidden" for="yc-chat-input">Escribe un mensaje</label>
-              <textarea
-                id="yc-chat-input"
-                class="yc-chat-input"
-                rows="1"
-                placeholder="Escribe un mensaje…"
-                autocomplete="off"
-                disabled
-              ></textarea>
-              <button type="button" class="yc-chat-send" id="yc-chat-send" disabled>Enviar</button>
+              <section class="maya-cc-stat-group" aria-label="Métricas de la semana">
+                <h3 class="maya-cc-stat-group__title">📊 ESTA SEMANA</h3>
+                <dl class="maya-cc-stat-list">
+                  <div class="maya-cc-stat-row">
+                    <dt>Chats totales</dt>
+                    <dd><span data-maya-stat="chats-week">0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>Ventas</dt>
+                    <dd><span data-maya-stat="sales-week">0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>$ Vendido</dt>
+                    <dd><span data-maya-stat="revenue-week">$0</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>Tasa conversión</dt>
+                    <dd><span data-maya-stat="conversion-week">0%</span></dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section class="maya-cc-stat-group" aria-label="Rendimiento de Maya">
+                <h3 class="maya-cc-stat-group__title">🎯 MAYA PERFORMANCE</h3>
+                <dl class="maya-cc-stat-list">
+                  <div class="maya-cc-stat-row">
+                    <dt>Respuestas automáticas</dt>
+                    <dd><span data-maya-stat="auto-reply-pct">0%</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>Escaladas a Marvin</dt>
+                    <dd><span data-maya-stat="escalated-pct">0%</span></dd>
+                  </div>
+                  <div class="maya-cc-stat-row">
+                    <dt>Tiempo medio respuesta</dt>
+                    <dd><span data-maya-stat="avg-response-min">0 min</span></dd>
+                  </div>
+                </dl>
+              </section>
             </div>
-          </div>
+          </details>
         </div>
       </main>
     </div>
