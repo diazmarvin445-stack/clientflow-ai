@@ -49,6 +49,59 @@ function formatMoney(n) {
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** @param {unknown} v */
+function isTruthyLogoProvided(v) {
+  return v === true || v === "true" || v === 1;
+}
+
+/**
+ * Logo $0 si el cliente ya tiene logo, o si el subtotal de prendas (antes del logo) supera el umbral.
+ * @param {number} prendasSubtotalUsd subtotal de líneas que cuentan para el umbral (excl. tarjetas en pedidos mixtos)
+ * @param {Record<string, unknown> | null | undefined} orderPayload MAYA_ORDER_JSON parseado
+ */
+function computeEffectiveLogoFee(prendasSubtotalUsd, orderPayload) {
+  const threshold = YOURCOLOR_BUSINESS.rules.logoFreeThreshold;
+  const design = YOURCOLOR_BUSINESS.rules.logoDesignCost;
+  if (orderPayload && isTruthyLogoProvided(orderPayload.logo_provided)) return 0;
+  if (Number.isFinite(prendasSubtotalUsd) && prendasSubtotalUsd > threshold) return 0;
+  return design;
+}
+
+/**
+ * Precio de una línea de pedido (misma lógica que calculateOrderTotal por línea).
+ * @returns {{ subtotal: number, isTarjetas: boolean, productLabel: string, pricePerPiece: number | null, quantity: number, productKey: string } | null}
+ */
+function getQuoteLinePricing(productKey, quantity) {
+  const product = YOURCOLOR_BUSINESS.products[productKey];
+  if (!product) return null;
+  const q = Number(quantity);
+  if (!Number.isFinite(q) || q < 1) return null;
+
+  if (productKey === "tarjetas") {
+    const range = product.pricePerPiece.find((r) => q >= r.minQty && q <= r.maxQty && r.price != null);
+    if (!range) return null;
+    return {
+      subtotal: range.price,
+      isTarjetas: true,
+      productLabel: product.name,
+      pricePerPiece: null,
+      quantity: q,
+      productKey,
+    };
+  }
+
+  const range = product.pricePerPiece.find((r) => q >= r.minQty && q <= r.maxQty && r.price != null);
+  if (!range || range.price == null) return null;
+  return {
+    subtotal: q * range.price,
+    isTarjetas: false,
+    productLabel: product.name,
+    pricePerPiece: range.price,
+    quantity: q,
+    productKey,
+  };
+}
+
 /**
  * Intenta detectar producto del catálogo en el texto del asistente.
  * @param {string} text
@@ -96,8 +149,104 @@ function detectQuantity(text) {
   return null;
 }
 
-/** @param {string} text */
-function tryBuildQuoteFromAssistantText(text) {
+/**
+ * @param {string} text
+ * @param {Record<string, unknown> | null} [orderPayload] MAYA_ORDER_JSON si existe
+ */
+function tryBuildQuoteFromAssistantText(text, orderPayload = null) {
+  if (orderPayload && orderPayload.confirmed === true && Array.isArray(orderPayload.items) && orderPayload.items.length > 0) {
+    /** @type {{ label: string, detail: string }[]} */
+    const multiLines = [];
+    let prendasSubtotal = 0;
+    let sumSubtotal = 0;
+    for (const it of orderPayload.items) {
+      if (!it || typeof it !== "object") return null;
+      const pk = /** @type {{ productKey?: string, quantity?: unknown }} */ (it).productKey;
+      const qn = Number(/** @type {{ quantity?: unknown }} */ (it).quantity);
+      const line = getQuoteLinePricing(typeof pk === "string" ? pk : "", qn);
+      if (!line) return null;
+      sumSubtotal += line.subtotal;
+      if (!line.isTarjetas) prendasSubtotal += line.subtotal;
+      if (line.isTarjetas) {
+        multiLines.push({
+          label: line.productLabel,
+          detail: `${line.quantity} tarjetas (paquete) → ${formatMoney(line.subtotal)}`,
+        });
+      } else {
+        multiLines.push({
+          label: line.productLabel,
+          detail: `${line.quantity} × ${formatMoney(line.pricePerPiece ?? 0)} = ${formatMoney(line.subtotal)}`,
+        });
+      }
+    }
+    const logoFee = computeEffectiveLogoFee(prendasSubtotal, orderPayload);
+    const total = sumSubtotal + logoFee;
+    const deposit = total * (YOURCOLOR_BUSINESS.rules.depositPercent / 100);
+    return {
+      isMulti: true,
+      multiLines,
+      productKey: "multi",
+      productLabel: "Varios productos",
+      quantity: orderPayload.items.length,
+      pricePerPiece: null,
+      priceLabel: "",
+      subtotal: sumSubtotal,
+      prendasSubtotal,
+      logoFee,
+      total,
+      deposit,
+      isTarjetas: false,
+    };
+  }
+
+  if (orderPayload && orderPayload.confirmed === true) {
+    const pk =
+      typeof orderPayload.productKey === "string" ? orderPayload.productKey : detectProductKey(text);
+    const qn = Number(orderPayload.quantity);
+    const qty = Number.isFinite(qn) && qn >= 1 ? qn : detectQuantity(text);
+    if (pk && qty != null && qty >= 1) {
+      if (pk === "tarjetas") {
+        const line = getQuoteLinePricing(pk, qty);
+        if (!line) return null;
+        const total = line.subtotal;
+        const deposit = total * (YOURCOLOR_BUSINESS.rules.depositPercent / 100);
+        return {
+          productKey: pk,
+          productLabel: line.productLabel,
+          quantity: qty,
+          pricePerPiece: null,
+          priceLabel: "Precio total (paquete)",
+          subtotal: total,
+          logoFee: 0,
+          total,
+          deposit,
+          isTarjetas: true,
+          isMulti: false,
+        };
+      }
+      const calc = calculateOrderTotal(pk, qty);
+      if (!calc || typeof calc !== "object" || ("needsQuote" in calc && calc.needsQuote)) return null;
+      const product = YOURCOLOR_BUSINESS.products[pk];
+      const productLabel = product ? product.name : pk;
+      const logoFee = computeEffectiveLogoFee(calc.subtotal, orderPayload);
+      const total = calc.subtotal + logoFee;
+      const deposit = total * (YOURCOLOR_BUSINESS.rules.depositPercent / 100);
+      return {
+        productKey: pk,
+        productLabel,
+        quantity: calc.quantity,
+        pricePerPiece: calc.pricePerPiece,
+        priceLabel: "Precio por pieza",
+        subtotal: calc.subtotal,
+        logoFee,
+        total,
+        deposit,
+        isTarjetas: false,
+        isMulti: false,
+      };
+    }
+  }
+
   const productKey = detectProductKey(text);
   const qty = detectQuantity(text);
   if (!productKey || qty == null || qty < 1) return null;
@@ -107,7 +256,7 @@ function tryBuildQuoteFromAssistantText(text) {
     const range = product.pricePerPiece.find((r) => qty >= r.minQty && qty <= r.maxQty && r.price != null);
     if (!range) return null;
     const total = range.price;
-    const deposit = total * 0.5;
+    const deposit = total * (YOURCOLOR_BUSINESS.rules.depositPercent / 100);
     return {
       productKey,
       productLabel: product.name,
@@ -119,6 +268,7 @@ function tryBuildQuoteFromAssistantText(text) {
       total,
       deposit,
       isTarjetas: true,
+      isMulti: false,
     };
   }
 
@@ -129,6 +279,10 @@ function tryBuildQuoteFromAssistantText(text) {
   const product = YOURCOLOR_BUSINESS.products[productKey];
   const productLabel = product ? product.name : productKey;
 
+  const logoFee = computeEffectiveLogoFee(calc.subtotal, orderPayload);
+  const total = calc.subtotal + logoFee;
+  const deposit = total * (YOURCOLOR_BUSINESS.rules.depositPercent / 100);
+
   return {
     productKey,
     productLabel,
@@ -136,10 +290,11 @@ function tryBuildQuoteFromAssistantText(text) {
     pricePerPiece: calc.pricePerPiece,
     priceLabel: "Precio por pieza",
     subtotal: calc.subtotal,
-    logoFee: calc.logoFee,
-    total: calc.total,
-    deposit: calc.deposit,
+    logoFee,
+    total,
+    deposit,
     isTarjetas: false,
+    isMulti: false,
   };
 }
 
@@ -164,19 +319,31 @@ function buildQuoteCardEl(quote) {
     dl.appendChild(row);
   };
 
-  addRow("Producto", quote.productLabel);
-  addRow("Cantidad", String(quote.quantity));
-  if (quote.isTarjetas) {
-    addRow("Precio (paquete)", formatMoney(quote.total));
-  } else {
-    addRow("Precio por pieza", formatMoney(quote.pricePerPiece));
+  const depPct = YOURCOLOR_BUSINESS.rules.depositPercent;
+
+  if (quote.isMulti && Array.isArray(quote.multiLines)) {
+    addRow("Producto", quote.productLabel);
+    for (const row of quote.multiLines) {
+      addRow(row.label, row.detail);
+    }
     if (quote.logoFee > 0) {
-      addRow("Subtotal prendas", formatMoney(quote.subtotal));
       addRow("Logo / arte", formatMoney(quote.logoFee));
+    }
+  } else {
+    addRow("Producto", quote.productLabel);
+    addRow("Cantidad", String(quote.quantity));
+    if (quote.isTarjetas) {
+      addRow("Precio (paquete)", formatMoney(quote.total));
+    } else {
+      addRow("Precio por pieza", formatMoney(quote.pricePerPiece));
+      if (quote.logoFee > 0) {
+        addRow("Subtotal prendas", formatMoney(quote.subtotal));
+        addRow("Logo / arte", formatMoney(quote.logoFee));
+      }
     }
   }
   addRow("Total", formatMoney(quote.total), true);
-  addRow("Depósito (50%)", formatMoney(quote.deposit), true);
+  addRow(`Depósito (${depPct}%)`, formatMoney(quote.deposit), true);
 
   card.append(h, dl);
   return card;
@@ -266,8 +433,7 @@ function appendAssistantBubble(content, opts = {}) {
   const stream = document.getElementById("yc-chat-stream");
   if (!stream) return empty;
 
-  const { visible, actionPayload } = stripMayaActionJson(content);
-  const displayText = visible;
+  const { displayText, orderPayload, actionPayload } = stripMayaPanelMetadata(content);
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -285,7 +451,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   col.appendChild(bubble);
 
-  const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(displayText) : null;
+  const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(displayText, orderPayload) : null;
   if (quote) {
     try {
       wrap.dataset.quoteJson = JSON.stringify(quote);
@@ -404,45 +570,67 @@ function conversationSnippet(maxLen = 4000) {
     .slice(0, maxLen);
 }
 
+const MAYA_ORDER_PREFIX = "MAYA_ORDER_JSON:";
 const MAYA_ACTION_PREFIX = "MAYA_ACTION_JSON:";
 
 /**
- * Quita MAYA_ACTION_JSON del final y parsea el objeto (soporta JSON anidado en `data`).
- * @param {string} raw
- * @returns {{ visible: string, actionPayload: { action?: string, data?: Record<string, unknown> } | null }}
+ * Extrae un bloque JSON tras `prefix` y lo elimina del texto (llaves anidadas).
+ * @param {string} text
+ * @param {string} prefix
+ * @returns {{ text: string, payload: Record<string, unknown> | null }}
  */
-function stripMayaActionJson(raw) {
-  const text = String(raw ?? "").trim();
-  const idx = text.indexOf(MAYA_ACTION_PREFIX);
-  if (idx < 0) return { visible: text, actionPayload: null };
-
-  const visible = text.slice(0, idx).trim();
-  const after = text.slice(idx + MAYA_ACTION_PREFIX.length).trim();
-  const jsonStart = after.indexOf("{");
-  if (jsonStart < 0) return { visible: text, actionPayload: null };
-
+function extractAndRemoveMayaJsonLine(text, prefix) {
+  const idx = text.indexOf(prefix);
+  if (idx < 0) return { text, payload: null };
+  const afterPrefix = text.slice(idx + prefix.length).trimStart();
+  const jsonStartInAfter = afterPrefix.indexOf("{");
+  if (jsonStartInAfter < 0) return { text, payload: null };
+  const fromBrace = afterPrefix.slice(jsonStartInAfter);
   let depth = 0;
-  let i = jsonStart;
-  for (; i < after.length; i += 1) {
-    const c = after[i];
+  let end = -1;
+  for (let i = 0; i < fromBrace.length; i += 1) {
+    const c = fromBrace[i];
     if (c === "{") depth += 1;
     else if (c === "}") {
       depth -= 1;
-      if (depth === 0) break;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
     }
   }
-  if (depth !== 0) return { visible: text, actionPayload: null };
-
-  const jsonStr = after.slice(jsonStart, i + 1);
+  if (end < 0) return { text, payload: null };
+  const jsonStr = fromBrace.slice(0, end + 1);
+  let payload = null;
   try {
     const parsed = JSON.parse(jsonStr);
-    if (parsed && typeof parsed === "object" && typeof parsed.action === "string") {
-      return { visible, actionPayload: /** @type {{ action: string, data?: Record<string, unknown> }} */ (parsed) };
-    }
+    if (parsed && typeof parsed === "object") payload = /** @type {Record<string, unknown>} */ (parsed);
   } catch {
-    /* ignore */
+    return { text, payload: null };
   }
-  return { visible: text, actionPayload: null };
+  const removeEnd = idx + prefix.length + afterPrefix.slice(0, jsonStartInAfter).length + end + 1;
+  const newText = (text.slice(0, idx) + text.slice(removeEnd)).replace(/\n{3,}/g, "\n\n").trim();
+  return { text: newText, payload };
+}
+
+/**
+ * Quita MAYA_ORDER_JSON y MAYA_ACTION_JSON del mensaje (no deben verse en el chat).
+ * @param {string} raw
+ * @returns {{ displayText: string, orderPayload: Record<string, unknown> | null, actionPayload: { action?: string, data?: Record<string, unknown> } | null }}
+ */
+function stripMayaPanelMetadata(raw) {
+  let t = String(raw ?? "").trim();
+  let orderPayload = null;
+  let actionPayload = null;
+  const rOrder = extractAndRemoveMayaJsonLine(t, MAYA_ORDER_PREFIX);
+  t = rOrder.text;
+  orderPayload = rOrder.payload;
+  const rAct = extractAndRemoveMayaJsonLine(t, MAYA_ACTION_PREFIX);
+  t = rAct.text;
+  if (rAct.payload && typeof rAct.payload.action === "string") {
+    actionPayload = /** @type {{ action: string, data?: Record<string, unknown> }} */ (rAct.payload);
+  }
+  return { displayText: t, orderPayload, actionPayload };
 }
 
 /**
