@@ -51,7 +51,14 @@ function formatMoney(n) {
 
 /** @param {unknown} v */
 function isTruthyLogoProvided(v) {
-  return v === true || v === "true" || v === 1;
+  if (v === true) return true;
+  if (v === false || v == null) return false;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") {
+    const normalized = v.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "si";
+  }
+  return false;
 }
 
 /**
