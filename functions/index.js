@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { parse as parseQuery } from "node:querystring";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
@@ -7,8 +6,8 @@ import { defineSecret } from "firebase-functions/params";
 import cors from "cors";
 import {
   getYourColorSystemPrompt,
-  getYourColorChatSystemPrompt,
-  getYourColorWhatsAppWebhookPrompt,
+  getMayaWhatsAppSystemPrompt,
+  getMayaInternalChatPrompt,
   computeValidatedMayaOrder,
   computeValidatedMayaCombinedOrder,
   YOURCOLOR_BUSINESS,
@@ -16,10 +15,14 @@ import {
 
 const MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
-const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
-const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
+/** Token de la API de WhatsApp Cloud (Meta) para enviar mensajes. */
+const META_ACCESS_TOKEN = defineSecret("META_ACCESS_TOKEN");
 /** ID del documento `businesses/{id}` de YourColor (Firestore). */
 const YOURCOLOR_BUSINESS_ID = defineSecret("YOURCOLOR_BUSINESS_ID");
+
+/** Phone Number ID de WhatsApp Cloud API (Meta). */
+const META_WHATSAPP_PHONE_NUMBER_ID = "1009366522268908";
+const META_GRAPH_API_VERSION = "v18.0";
 const corsHandler = cors({ origin: true });
 
 function getAdminDb() {
@@ -30,25 +33,81 @@ function getAdminDb() {
 }
 
 /**
- * Twilio envía `application/x-www-form-urlencoded`; normaliza a objeto plano.
+ * Cuerpo JSON del POST (Meta a veces entrega rawBody).
  * @param {import("firebase-functions").https.Request} req
  */
-function parseTwilioFormBody(req) {
+function getNormalizedJsonBody(req) {
   const b = req.body;
-  if (b && typeof b === "object" && !Buffer.isBuffer(b) && typeof b.Body !== "undefined") {
-    return /** @type {Record<string, string>} */ (b);
+  if (b && typeof b === "object" && !Buffer.isBuffer(b)) {
+    return b;
   }
   const raw = req.rawBody;
   if (Buffer.isBuffer(raw)) {
-    return /** @type {Record<string, string>} */ (parseQuery(raw.toString("utf8")));
+    try {
+      return JSON.parse(raw.toString("utf8"));
+    } catch {
+      return null;
+    }
   }
-  if (typeof raw === "string") {
-    return /** @type {Record<string, string>} */ (parseQuery(raw));
+  return null;
+}
+
+/**
+ * Meta WhatsApp: `req.body.entry[0].changes[0].value`, texto en `messages[0].text.body`, remitente en `messages[0].from`.
+ * @returns {{ value: Record<string, unknown>, from: string, inboundBody: string } | null}
+ */
+function parseMetaWhatsAppWebhook(req) {
+  const body = getNormalizedJsonBody(req);
+  if (!body || typeof body !== "object") return null;
+  const entry = body.entry;
+  if (!Array.isArray(entry) || !entry[0] || typeof entry[0] !== "object") return null;
+  const changes = entry[0].changes;
+  if (!Array.isArray(changes) || !changes[0] || typeof changes[0] !== "object") return null;
+  const value = changes[0].value;
+  if (!value || typeof value !== "object") return null;
+
+  const messages = value.messages;
+  const msg =
+    Array.isArray(messages) && messages[0] && typeof messages[0] === "object" ? messages[0] : null;
+  const from = msg && typeof msg.from === "string" ? msg.from.trim() : "";
+  let inboundBody = "";
+  if (msg && msg.type === "text" && msg.text && typeof msg.text === "object") {
+    const bodyText = /** @type {{ body?: string }} */ (msg.text).body;
+    if (typeof bodyText === "string") inboundBody = asText(bodyText);
   }
-  if (typeof b === "string") {
-    return /** @type {Record<string, string>} */ (parseQuery(b));
+
+  return { value: /** @type {Record<string, unknown>} */ (value), from, inboundBody };
+}
+
+/**
+ * Envía un mensaje de texto por WhatsApp Cloud API (Meta).
+ * @returns {Promise<boolean>}
+ */
+async function sendWhatsAppViaMetaGraph(accessToken, toPhone, textBody) {
+  const url = `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${META_WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const to = String(toPhone ?? "").replace(/^\+/, "").trim();
+  if (!to || !accessToken) return false;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: truncateWhatsApp(textBody, 4096) },
+    }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[whatsappWebhook] Meta Graph API error", res.status, json);
+    return false;
   }
-  return {};
+  return true;
 }
 
 /**
@@ -122,28 +181,6 @@ function truncateWhatsApp(s, max = 1500) {
   const t = asText(s);
   if (t.length <= max) return t;
   return `${t.slice(0, max - 1)}…`;
-}
-
-/** Escapa texto para insertarlo dentro de `<Message>` (TwiML). */
-function escapeXmlForTwiml(text) {
-  return String(text ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-/**
- * TwiML con un único mensaje de salida (WhatsApp/SMS vía webhook).
- * @param {import("firebase-functions").https.Response} res
- * @param {string} respuesta
- */
-function sendTwimlMessageResponse(res, respuesta) {
-  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>${escapeXmlForTwiml(truncateWhatsApp(respuesta))}</Message>
-</Response>`;
-  res.set("Content-Type", "text/xml; charset=utf-8");
-  res.status(200).send(twiml);
 }
 
 function asText(value, fallback = "") {
@@ -329,7 +366,11 @@ export const chatWithAI = onRequest(
           return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
         }
 
-        const system = getYourColorChatSystemPrompt(firebaseContext);
+        const system =
+          getMayaInternalChatPrompt() +
+          "\n\n" +
+          "CONTEXTO DEL NEGOCIO:\n" +
+          JSON.stringify(firebaseContext, null, 2);
 
         const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
@@ -408,63 +449,77 @@ function isValidMayaOrderPayload(payload) {
   );
 }
 
-/** Webhook Twilio (WhatsApp) → Claude (YourColor) → respuesta TwiML. */
+/** Webhook Meta WhatsApp Cloud API → Claude (YourColor) → respuesta vía Graph API (JSON). */
 export const whatsappWebhook = onRequest(
   {
     region: "us-central1",
-    secrets: [
-      ANTHROPIC_KEY,
-      TWILIO_ACCOUNT_SID,
-      TWILIO_AUTH_TOKEN,
-      YOURCOLOR_BUSINESS_ID,
-    ],
+    secrets: [ANTHROPIC_KEY, META_ACCESS_TOKEN, YOURCOLOR_BUSINESS_ID],
     timeoutSeconds: 120,
     memory: "512MiB",
   },
   async (req, res) => {
     res.set("Cache-Control", "no-store");
 
+    if (req.method === "GET") {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+
+      if (mode === "subscribe" && token === "yourcolor2026") {
+        res.status(200).send(challenge);
+        return;
+      } else {
+        res.status(403).send("Forbidden");
+        return;
+      }
+    }
+
     if (req.method !== "POST") {
-      res.status(405).type("text/plain").send("Method Not Allowed");
+      res.status(405).type("application/json").send({ error: "Method not allowed" });
       return;
     }
 
-    const accountSid = TWILIO_ACCOUNT_SID.value();
-    const authToken = TWILIO_AUTH_TOKEN.value();
+    const metaToken = META_ACCESS_TOKEN.value();
     const businessId = YOURCOLOR_BUSINESS_ID.value();
     const apiKey = ANTHROPIC_KEY.value();
 
-    const emptyTwiml =
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
-
-    if (!accountSid || !authToken) {
-      console.error("[whatsappWebhook] Missing Twilio secrets");
-      res.status(500).type("text/xml").send(emptyTwiml);
+    if (!metaToken) {
+      console.error("[whatsappWebhook] Missing META_ACCESS_TOKEN");
+      res.status(200).type("application/json").send({ ok: false, error: "missing_meta_token" });
       return;
     }
     if (!businessId) {
       console.error("[whatsappWebhook] Missing YOURCOLOR_BUSINESS_ID secret");
-      res.status(500).type("text/xml").send(emptyTwiml);
+      res.status(200).type("application/json").send({ ok: false, error: "missing_business_id" });
       return;
     }
     if (!apiKey) {
       console.error("[whatsappWebhook] Missing ANTHROPIC_KEY");
-      res.status(500).type("text/xml").send(emptyTwiml);
+      res.status(200).type("application/json").send({ ok: false, error: "missing_anthropic_key" });
       return;
     }
 
-    const fields = parseTwilioFormBody(req);
-    const inboundBody = asText(fields.Body);
-    const from = asText(fields.From);
-    const to = asText(fields.To);
-
-    if (!from || !to) {
-      res.status(200).type("text/xml").send(emptyTwiml);
+    const parsed = parseMetaWhatsAppWebhook(req);
+    if (!parsed) {
+      res.status(200).type("application/json").send({ received: true, ignored: true });
       return;
     }
 
-    if (!inboundBody) {
-      res.status(200).type("text/xml").send(emptyTwiml);
+    const { from, inboundBody } = parsed;
+
+    if (!from) {
+      res.status(200).type("application/json").send({ received: true, ignored: "no_sender" });
+      return;
+    }
+
+    let effectiveInbound = inboundBody;
+    if (!effectiveInbound) {
+      await sendWhatsAppViaMetaGraph(
+        metaToken,
+        from,
+        "Por ahora solo puedo ayudarte con mensajes de texto. Escríbenos en texto cuando puedas.",
+      );
+      res.status(200).type("application/json").send({ received: true, skipped: "non_text" });
       return;
     }
 
@@ -503,7 +558,7 @@ export const whatsappWebhook = onRequest(
       console.warn("[whatsappWebhook] session read", e);
     }
 
-    const userMessage = { role: "user", content: inboundBody };
+    const userMessage = { role: "user", content: effectiveInbound };
     const messagesForClaude = [...priorMessages, userMessage];
 
     let assistantRaw = "";
@@ -518,7 +573,7 @@ export const whatsappWebhook = onRequest(
         body: JSON.stringify({
           model: MODEL,
           max_tokens: 2048,
-          system: getYourColorWhatsAppWebhookPrompt(),
+          system: getMayaWhatsAppSystemPrompt(),
           messages: messagesForClaude,
         }),
       });
@@ -527,12 +582,14 @@ export const whatsappWebhook = onRequest(
       if (!anthropicResponse.ok) {
         const message = asText(anthropicBody?.error?.message, "Anthropic API failed");
         console.error("[whatsappWebhook] Anthropic", message);
-        sendTwimlMessageResponse(
-          res,
+        await sendWhatsAppViaMetaGraph(
+          metaToken,
+          from,
           "Ahora mismo no puedo responder. Escríbenos al " +
             YOURCOLOR_BUSINESS.phone +
             " o intenta de nuevo en unos minutos.",
         );
+        res.status(200).type("application/json").send({ ok: true, fallback: "anthropic_error" });
         return;
       }
 
@@ -544,10 +601,12 @@ export const whatsappWebhook = onRequest(
         : "";
     } catch (e) {
       console.error("[whatsappWebhook] Anthropic fetch", e);
-      sendTwimlMessageResponse(
-        res,
+      await sendWhatsAppViaMetaGraph(
+        metaToken,
+        from,
         "Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone,
       );
+      res.status(200).type("application/json").send({ ok: true, fallback: "anthropic_exception" });
       return;
     }
 
@@ -838,7 +897,7 @@ export const whatsappWebhook = onRequest(
       const sessionUpdate = {
         messages: nextMessages,
         lastWhatsAppFrom: from,
-        lastWhatsAppTo: to,
+        lastWhatsAppTo: META_WHATSAPP_PHONE_NUMBER_ID,
         updatedAt: FieldValue.serverTimestamp(),
       };
       if (sessionLastLeadId) {
@@ -849,7 +908,8 @@ export const whatsappWebhook = onRequest(
       console.warn("[whatsappWebhook] session write", e);
     }
 
-    sendTwimlMessageResponse(res, outbound);
+    const graphSent = await sendWhatsAppViaMetaGraph(metaToken, from, outbound);
+    res.status(200).type("application/json").send({ ok: true, sent: graphSent });
   },
 );
 

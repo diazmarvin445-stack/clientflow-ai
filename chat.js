@@ -259,10 +259,15 @@ function appendUserBubble(content) {
 /**
  * @param {string} content
  * @param {{ isWelcome?: boolean }} [opts]
+ * @returns {{ visible: string, actionPayload: { action?: string, data?: Record<string, unknown> } | null }}
  */
 function appendAssistantBubble(content, opts = {}) {
+  const empty = { visible: String(content ?? "").trim(), actionPayload: null };
   const stream = document.getElementById("yc-chat-stream");
-  if (!stream) return;
+  if (!stream) return empty;
+
+  const { visible, actionPayload } = stripMayaActionJson(content);
+  const displayText = visible;
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -272,7 +277,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   const bubble = document.createElement("div");
   bubble.className = "yc-msg-bubble";
-  bubble.textContent = content;
+  bubble.textContent = displayText;
 
   const time = document.createElement("div");
   time.className = "yc-msg-time";
@@ -280,7 +285,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   col.appendChild(bubble);
 
-  const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(content) : null;
+  const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(displayText) : null;
   if (quote) {
     try {
       wrap.dataset.quoteJson = JSON.stringify(quote);
@@ -300,7 +305,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnCopy.textContent = "Copiar";
     btnCopy.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(content);
+        await navigator.clipboard.writeText(displayText);
         showToast("Copiado al portapapeles");
       } catch {
         showToast("No se pudo copiar", true);
@@ -311,7 +316,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnOrder.type = "button";
     btnOrder.className = "yc-msg-action-btn yc-msg-action-btn--primary";
     btnOrder.textContent = "Convertir a orden";
-    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, content));
+    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, displayText));
 
     actions.append(btnCopy, btnOrder);
     col.appendChild(actions);
@@ -322,6 +327,25 @@ function appendAssistantBubble(content, opts = {}) {
   wrap.appendChild(col);
   stream.appendChild(wrap);
   stream.scrollTop = stream.scrollHeight;
+
+  if (!opts.isWelcome && actionPayload?.action === "save_client") {
+    if (activeBusiness?.id) {
+      void (async () => {
+        try {
+          await executeMayaActionFromChat(activeBusiness.id, actionPayload);
+          showToast("✅ Cliente guardado correctamente");
+          await loadFirebaseContext(activeBusiness);
+        } catch (e) {
+          console.error("[YourColor Chat] save_client", e);
+          showToast(e instanceof Error ? e.message : "No se pudo guardar el cliente.", true);
+        }
+      })();
+    } else {
+      showToast("No hay negocio activo para guardar el cliente.", true);
+    }
+  }
+
+  return { visible: displayText, actionPayload };
 }
 
 function showToast(message, isError = false) {
@@ -378,6 +402,127 @@ function conversationSnippet(maxLen = 4000) {
     .map((m) => `${m.role}: ${m.content}`)
     .join("\n\n")
     .slice(0, maxLen);
+}
+
+const MAYA_ACTION_PREFIX = "MAYA_ACTION_JSON:";
+
+/**
+ * Quita MAYA_ACTION_JSON del final y parsea el objeto (soporta JSON anidado en `data`).
+ * @param {string} raw
+ * @returns {{ visible: string, actionPayload: { action?: string, data?: Record<string, unknown> } | null }}
+ */
+function stripMayaActionJson(raw) {
+  const text = String(raw ?? "").trim();
+  const idx = text.indexOf(MAYA_ACTION_PREFIX);
+  if (idx < 0) return { visible: text, actionPayload: null };
+
+  const visible = text.slice(0, idx).trim();
+  const after = text.slice(idx + MAYA_ACTION_PREFIX.length).trim();
+  const jsonStart = after.indexOf("{");
+  if (jsonStart < 0) return { visible: text, actionPayload: null };
+
+  let depth = 0;
+  let i = jsonStart;
+  for (; i < after.length; i += 1) {
+    const c = after[i];
+    if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  if (depth !== 0) return { visible: text, actionPayload: null };
+
+  const jsonStr = after.slice(jsonStart, i + 1);
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === "object" && typeof parsed.action === "string") {
+      return { visible, actionPayload: /** @type {{ action: string, data?: Record<string, unknown> }} */ (parsed) };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { visible: text, actionPayload: null };
+}
+
+/**
+ * @param {string} businessId
+ * @param {{ action: string, data?: Record<string, unknown> }} payload
+ */
+async function executeMayaActionFromChat(businessId, payload) {
+  const data = payload.data && typeof payload.data === "object" ? payload.data : {};
+
+  if (payload.action === "save_client") {
+    const name = typeof data.name === "string" ? data.name.trim() : "";
+    await addDoc(collection(db, "businesses", businessId, "clients"), {
+      fullName: name || "Cliente",
+      name: name || "Cliente",
+      phone: typeof data.phone === "string" ? data.phone.trim() : "",
+      email: typeof data.email === "string" ? data.email.trim() : "",
+      source: "chat-maya",
+      createdAt: serverTimestamp(),
+    });
+    return "save_client";
+  }
+
+  if (payload.action === "create_order") {
+    const qty = Number(data.quantity);
+    const total = Number(data.total);
+    const clientName = typeof data.clientName === "string" ? data.clientName.trim() : "";
+    const product = typeof data.product === "string" ? data.product.trim() : "";
+    await addDoc(collection(db, "businesses", businessId, "jobs"), {
+      status: "Pendiente",
+      title: clientName && product ? `${clientName} — ${product}` : "Pedido desde Chat IA",
+      clientName,
+      product,
+      quantity: Number.isFinite(qty) ? qty : 0,
+      total: Number.isFinite(total) ? total : 0,
+      amount: Number.isFinite(total) ? total : 0,
+      estimatedAmount: Number.isFinite(total) ? total : 0,
+      source: "chat-maya",
+      createdAt: serverTimestamp(),
+    });
+    return "create_order";
+  }
+
+  if (payload.action === "schedule_delivery") {
+    const clientName = typeof data.clientName === "string" ? data.clientName.trim() : "";
+    const product = typeof data.product === "string" ? data.product.trim() : "";
+    const rawDate = data.deliveryDate;
+    let dateTs = Timestamp.now();
+    if (rawDate != null) {
+      const d = new Date(
+        typeof rawDate === "string" || typeof rawDate === "number" ? rawDate : String(rawDate),
+      );
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(12, 0, 0, 0);
+        dateTs = Timestamp.fromDate(d);
+      }
+    }
+    await addDoc(collection(db, "businesses", businessId, "calendar"), {
+      title:
+        clientName && product
+          ? `Entrega: ${clientName} — ${product}`
+          : "Entrega programada (Chat IA)",
+      date: dateTs,
+      clientName,
+      product,
+      deliveryDate:
+        rawDate == null ? "" : typeof rawDate === "string" ? rawDate : String(rawDate),
+      source: "chat-maya",
+      createdAt: serverTimestamp(),
+    });
+    return "schedule_delivery";
+  }
+
+  return null;
+}
+
+function mayaActionCompletedLabel(kind) {
+  if (kind === "save_client") return "guardar cliente";
+  if (kind === "create_order") return "crear orden";
+  if (kind === "schedule_delivery") return "programar entrega";
+  return "acción";
 }
 
 /**
@@ -497,9 +642,25 @@ async function sendToClaude() {
     if (!reply) {
       throw new Error("Respuesta vacía del asistente.");
     }
-    apiConversation.push({ role: "assistant", content: reply });
+
+    const { visible: assistantVisible, actionPayload } = appendAssistantBubble(reply);
+    apiConversation.push({ role: "assistant", content: assistantVisible });
     trimApiMessages();
-    appendAssistantBubble(reply);
+
+    if (actionPayload && activeBusiness?.id && actionPayload.action !== "save_client") {
+      try {
+        const kind = await executeMayaActionFromChat(activeBusiness.id, actionPayload);
+        if (kind) {
+          showToast(`✅ ${mayaActionCompletedLabel(kind)} completada`);
+          await loadFirebaseContext(activeBusiness);
+        }
+      } catch (e) {
+        console.error("[YourColor Chat] MAYA_ACTION_JSON", e);
+        showToast(e instanceof Error ? e.message : "No se pudo ejecutar la acción.", true);
+      }
+    } else if (actionPayload && !activeBusiness?.id && actionPayload.action !== "save_client") {
+      showToast("No hay negocio activo para ejecutar la acción.", true);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al contactar el asistente.";
     showError(msg);
