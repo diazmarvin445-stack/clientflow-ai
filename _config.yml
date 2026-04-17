@@ -1,0 +1,9 @@
+exclude:
+  - CONTEXT_APRIL2026.md
+  - PROJECT_SUMMARY.md
+  - README.md
+  - node_modules
+  - functions
+  - .firebaserc
+  - firebase.json
+  - "*.md"
