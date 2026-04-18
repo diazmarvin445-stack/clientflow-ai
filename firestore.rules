@@ -50,11 +50,6 @@ service cloud.firestore {
             'estimatedPrice',
             'createdAt'
           ])
-          && request.resource.data.customerName is string
-          && request.resource.data.phone is string
-          && request.resource.data.address is string
-          && request.resource.data.service is string
-          && request.resource.data.description is string
           && request.resource.data.status == 'new'
           && request.resource.data.estimatedPrice == 0;
 
