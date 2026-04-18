@@ -121,24 +121,10 @@
                   <span class="maya-cc-alerts__title">Alertas</span>
                   <span class="maya-cc-alerts__sub">Maya puede pedirte ayuda</span>
                 </div>
-                <ul class="maya-cc-alerts__list">
-                  <li>
-                    <button type="button" class="maya-cc-alert" data-maya-open-conversation="demo-1">
-                      <span class="maya-cc-alert__ico" aria-hidden="true">⚠️</span>
-                      <span class="maya-cc-alert__text"
-                        >Juan Pérez pide pancartas (fuera de catálogo), ¿qué le respondo?</span
-                      >
-                      <span class="maya-cc-alert__hint">Abrir en WhatsApp →</span>
-                    </button>
-                  </li>
-                  <li>
-                    <button type="button" class="maya-cc-alert maya-cc-alert--soft" data-maya-open-conversation="demo-2">
-                      <span class="maya-cc-alert__ico" aria-hidden="true">💬</span>
-                      <span class="maya-cc-alert__text">Cliente en +1 772… pregunta por plazo de entrega urgente.</span>
-                      <span class="maya-cc-alert__hint">Abrir en WhatsApp →</span>
-                    </button>
-                  </li>
-                </ul>
+                <ul class="maya-cc-alerts__list" id="maya-cc-alerts-list"></ul>
+                <p class="maya-cc-alerts__empty" id="maya-cc-alerts-empty" hidden>
+                  No hay conversaciones que requieran tu atención ahora mismo.
+                </p>
               </section>
 
               <div class="yc-chat-wrap">
@@ -194,80 +180,36 @@
               <span class="maya-cc-zone__chev" aria-hidden="true"></span>
             </summary>
             <div class="maya-cc-zone__scroll maya-cc-zone__scroll--wa">
-              <div class="maya-cc-wa-meta-pending" role="status">
+              <div class="maya-cc-wa-meta-pending" id="maya-cc-wa-empty" role="status">
                 <div class="maya-cc-wa-meta-pending__inner">
                   <span class="maya-cc-wa-meta-pending__ico" aria-hidden="true">📱</span>
-                  <p class="maya-cc-wa-meta-pending__title">Esperando aprobación de Meta…</p>
+                  <p class="maya-cc-wa-meta-pending__title">Esperando primera conversación de WhatsApp…</p>
                   <p class="maya-cc-wa-meta-pending__text">
-                    Cuando la app de WhatsApp esté activa, las conversaciones en vivo aparecerán aquí.
+                    Cuando Meta apruebe el número, las conversaciones aparecerán aquí en tiempo real desde Firebase.
                   </p>
                 </div>
               </div>
 
-              <div class="maya-cc-wa-split" aria-hidden="true">
+              <div class="maya-cc-wa-split" id="maya-cc-wa-split" hidden>
                 <aside class="maya-cc-wa-list" aria-label="Lista de conversaciones">
                   <div class="maya-cc-wa-list__toolbar">
-                    <span class="maya-cc-wa-list__label">Vista previa de diseño</span>
+                    <span class="maya-cc-wa-list__label" id="maya-cc-wa-list-label">Conversaciones</span>
                   </div>
-                  <button type="button" class="maya-cc-conv is-active" disabled>
-                    <span class="maya-cc-conv__top">
-                      <span class="maya-cc-conv__name">📱 María López</span>
-                      <span class="maya-cc-conv__time">10:42</span>
-                    </span>
-                    <span class="maya-cc-conv__preview">Perfecto, entonces son 12 polos para el viernes…</span>
-                    <span class="maya-cc-conv__status maya-cc-conv__status--green">🟢 Activa</span>
-                  </button>
-                  <button type="button" class="maya-cc-conv" disabled>
-                    <span class="maya-cc-conv__top">
-                      <span class="maya-cc-conv__name">+1 772-555-0142</span>
-                      <span class="maya-cc-conv__time">Ayer</span>
-                    </span>
-                    <span class="maya-cc-conv__preview">¿Me mandan foto del logo?</span>
-                    <span class="maya-cc-conv__status maya-cc-conv__status--yellow">🟡 Esperando cliente</span>
-                  </button>
-                  <button type="button" class="maya-cc-conv" disabled>
-                    <span class="maya-cc-conv__top">
-                      <span class="maya-cc-conv__name">Pedro Ruiz</span>
-                      <span class="maya-cc-conv__time">Lun</span>
-                    </span>
-                    <span class="maya-cc-conv__preview">Listo, hago el depósito hoy.</span>
-                    <span class="maya-cc-conv__status maya-cc-conv__status--ok">✅ Orden confirmada</span>
-                  </button>
-                  <button type="button" class="maya-cc-conv" disabled>
-                    <span class="maya-cc-conv__top">
-                      <span class="maya-cc-conv__name">Ana — Gorras</span>
-                      <span class="maya-cc-conv__time">Lun</span>
-                    </span>
-                    <span class="maya-cc-conv__preview">Necesito algo que no vi en el catálogo…</span>
-                    <span class="maya-cc-conv__status maya-cc-conv__status--warn">⚠️ Necesita a Marvin</span>
-                  </button>
+                  <div class="maya-cc-wa-list__inner" id="maya-cc-wa-list"></div>
                 </aside>
 
                 <section class="maya-cc-wa-thread" aria-label="Historial de la conversación">
                   <div class="maya-cc-wa-thread__toolbar">
-                    <span class="maya-cc-wa-thread__title">María López</span>
+                    <span class="maya-cc-wa-thread__title" id="maya-cc-wa-thread-title">Selecciona una conversación</span>
                     <div class="maya-cc-wa-thread__actions">
-                      <button type="button" class="maya-cc-wa-btn" disabled>🎤 Intervenir</button>
-                      <button type="button" class="maya-cc-wa-btn" disabled>🤖 Soltar</button>
-                      <button type="button" class="maya-cc-wa-btn maya-cc-wa-btn--ghost" disabled>✏️ Nota interna</button>
+                      <button type="button" class="maya-cc-wa-btn" id="maya-cc-btn-intervene">🎤 Intervenir</button>
+                      <button type="button" class="maya-cc-wa-btn" id="maya-cc-btn-release">🤖 Soltar</button>
+                      <button type="button" class="maya-cc-wa-btn maya-cc-wa-btn--ghost" id="maya-cc-btn-note">
+                        ✏️ Nota interna
+                      </button>
                     </div>
                   </div>
-                  <div class="maya-cc-wa-msgs">
-                    <div class="maya-cc-msg maya-cc-msg--client">
-                      <span class="maya-cc-msg__who">Cliente</span>
-                      <p class="maya-cc-msg__body">Hola, necesito cotización de 12 polos bordados para el viernes.</p>
-                    </div>
-                    <div class="maya-cc-msg maya-cc-msg--maya">
-                      <span class="maya-cc-msg__who">Maya</span>
-                      <p class="maya-cc-msg__body">
-                        ¡Hola! Con gusto. ¿Los polos serían 100% poliéster y tienes el logo listo?
-                      </p>
-                    </div>
-                    <div class="maya-cc-msg maya-cc-msg--client">
-                      <span class="maya-cc-msg__who">Cliente</span>
-                      <p class="maya-cc-msg__body">Sí, poliéster y ya tengo el PNG del logo.</p>
-                    </div>
-                  </div>
+                  <div class="maya-cc-wa-msgs" id="maya-cc-wa-msgs"></div>
                 </section>
               </div>
             </div>

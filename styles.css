@@ -7054,6 +7054,26 @@ body.cf-modal-open {
   }
 }
 
+.maya-cc-wa-list__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: 0;
+}
+
+.maya-cc-alerts__empty {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin: 0.35rem 0 0;
+  padding: 0 0.15rem;
+}
+
+.maya-cc-msg--marvin {
+  align-self: flex-end;
+  background: rgba(254, 243, 199, 0.85);
+  border-color: rgba(180, 83, 9, 0.25);
+}
+
 .maya-cc-wa-list {
   display: flex;
   flex-direction: column;
@@ -7088,7 +7108,7 @@ body.cf-modal-open {
   background: transparent;
   font-family: var(--font);
   text-align: left;
-  cursor: default;
+  cursor: pointer;
 }
 
 .maya-cc-conv.is-active {
@@ -7180,7 +7200,12 @@ body.cf-modal-open {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
-  cursor: default;
+  cursor: pointer;
+}
+
+.maya-cc-wa-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .maya-cc-wa-btn--ghost {
@@ -7194,6 +7219,14 @@ body.cf-modal-open {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+.maya-cc-wa-empty-thread {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 0.75rem 0.25rem;
 }
 
 .maya-cc-msg {

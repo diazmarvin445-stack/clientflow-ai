@@ -565,6 +565,10 @@ DEPÓSITO / COMPROBANTE: Si el cliente confirma que ya pagó el depósito o env�
 MAYA_DEPOSIT_JSON:{"confirmed":true}
 Solo si hay un pedido reciente en la conversación; si no, no incluyas esta línea.
 
+ESCALACIÓN AL EQUIPO (Marvin): Si el cliente insiste en hablar con una persona, la situación es delicada o no puedes resolver con seguridad, al FINAL agrega UNA línea exacta (sin markdown):
+MAYA_HANDOFF_JSON:{"reason":"motivo breve para el panel"}
+En el texto visible al cliente sigue siendo amable y profesional; no menciones a Marvin ni al dueño. Si en el mismo mensaje también confirmas un pedido válido con MAYA_ORDER_JSON, el sistema prioriza el pedido confirmado.
+
 PEDIDO ESPECIAL: Sigue PRODUCTOS FUERA DE CATÁLOGO; MAYA_SPECIAL_REQUEST_JSON solo cuando ya describió el pedido, sin mezclar con MAYA_ORDER_JSON.`;
 }
 

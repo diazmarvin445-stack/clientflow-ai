@@ -113,7 +113,7 @@ async function sendWhatsAppViaMetaGraph(accessToken, toPhone, textBody) {
 /**
  * Extrae MAYA_* JSON finales y devuelve texto visible para el cliente.
  * @param {string} raw
- * @returns {{ text: string, order: Record<string, unknown> | null, deposit: Record<string, unknown> | null, meeting: Record<string, unknown> | null, specialRequest: Record<string, unknown> | null }}
+ * @returns {{ text: string, order: Record<string, unknown> | null, deposit: Record<string, unknown> | null, meeting: Record<string, unknown> | null, specialRequest: Record<string, unknown> | null, handoff: Record<string, unknown> | null }}
  */
 function extractMayaOrderFromReply(raw) {
   let visible = asText(raw);
@@ -121,10 +121,12 @@ function extractMayaOrderFromReply(raw) {
   let deposit = null;
   let meeting = null;
   let specialRequest = null;
+  let handoff = null;
   const depRe = /MAYA_DEPOSIT_JSON:\s*(\{[\s\S]*?\})\s*$/m;
   const orderRe = /MAYA_ORDER_JSON:\s*(\{[\s\S]*?\})\s*$/m;
   const meetingRe = /MAYA_MEETING_JSON:\s*(\{[\s\S]*?\})\s*$/m;
   const specialRe = /MAYA_SPECIAL_REQUEST_JSON:\s*(\{[\s\S]*?\})\s*$/m;
+  const handoffRe = /MAYA_HANDOFF_JSON:\s*(\{[\s\S]*?\})\s*$/m;
 
   let m = visible.match(depRe);
   if (m) {
@@ -162,7 +164,90 @@ function extractMayaOrderFromReply(raw) {
     }
     visible = visible.replace(specialRe, "").trim();
   }
-  return { text: visible, order, deposit, meeting, specialRequest };
+  m = visible.match(handoffRe);
+  if (m) {
+    try {
+      handoff = JSON.parse(m[1]);
+    } catch {
+      handoff = null;
+    }
+    visible = visible.replace(handoffRe, "").trim();
+  }
+  return { text: visible, order, deposit, meeting, specialRequest, handoff };
+}
+
+/** ID de documento en `conversations/{id}`: solo dígitos (Meta envía el número sin +). */
+function conversationDocIdFromWhatsAppFrom(from) {
+  const digits = String(from ?? "").replace(/\D/g, "");
+  return digits || "unknown";
+}
+
+/**
+ * Mensaje entrante del cliente: conversación + subcolección messages.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} businessId
+ * @param {string} from
+ * @param {string} text
+ */
+async function recordWhatsAppCustomerInbound(db, businessId, from, text) {
+  const docId = conversationDocIdFromWhatsAppFrom(from);
+  const convRef = db.collection("businesses").doc(businessId).collection("conversations").doc(docId);
+  const snap = await convRef.get();
+  const now = FieldValue.serverTimestamp();
+  /** @type {Record<string, unknown>} */
+  const patch = {
+    phoneNumber: docId === "unknown" ? String(from) : docId,
+    lastMessage: truncateWhatsApp(text, 500),
+    lastMessageAt: now,
+    status: "active",
+    mayaInControl: false,
+    updatedAt: now,
+  };
+  if (!snap.exists) {
+    patch.createdAt = now;
+  }
+  await convRef.set(patch, { merge: true });
+  await convRef.collection("messages").add({
+    from: "customer",
+    text,
+    at: FieldValue.serverTimestamp(),
+    metadata: {},
+  });
+}
+
+/**
+ * Respuesta de Maya vía WhatsApp: mensaje + estado de conversación.
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} businessId
+ * @param {string} from
+ * @param {string} text
+ * @param {{ status: 'waiting' | 'confirmed' | 'needs_attention', mayaInControl: boolean, messageMetadata?: Record<string, unknown> }} opts
+ */
+async function recordWhatsAppMayaOutbound(db, businessId, from, text, opts) {
+  const docId = conversationDocIdFromWhatsAppFrom(from);
+  const convRef = db.collection("businesses").doc(businessId).collection("conversations").doc(docId);
+  const now = FieldValue.serverTimestamp();
+  const snap = await convRef.get();
+  /** @type {Record<string, unknown>} */
+  const patch = {
+    phoneNumber: docId === "unknown" ? String(from) : docId,
+    lastMessage: truncateWhatsApp(text, 500),
+    lastMessageAt: now,
+    status: opts.status,
+    mayaInControl: opts.mayaInControl,
+    updatedAt: now,
+  };
+  if (!snap.exists) {
+    patch.createdAt = now;
+  }
+  await convRef.set(patch, { merge: true });
+  const meta = opts.messageMetadata && typeof opts.messageMetadata === "object" ? opts.messageMetadata : {};
+  await convRef.collection("messages").add({
+    from: "maya",
+    text,
+    at: FieldValue.serverTimestamp(),
+    metadata: meta,
+  });
 }
 
 /** Entrega = fecha actual + N días hábiles (lun–vie). */
@@ -524,6 +609,15 @@ export const whatsappWebhook = onRequest(
     }
 
     const db = getAdminDb();
+
+    try {
+      await recordWhatsAppCustomerInbound(db, businessId, from, effectiveInbound);
+    } catch (e) {
+      console.warn("[whatsappWebhook] conversation inbound", e);
+    }
+
+    let confirmedOrderSaved = false;
+
     const sessionId = createHash("sha256").update(from).digest("hex").slice(0, 40);
     const sessionRef = db
       .collection("businesses")
@@ -582,13 +676,20 @@ export const whatsappWebhook = onRequest(
       if (!anthropicResponse.ok) {
         const message = asText(anthropicBody?.error?.message, "Anthropic API failed");
         console.error("[whatsappWebhook] Anthropic", message);
-        await sendWhatsAppViaMetaGraph(
-          metaToken,
-          from,
+        const fallbackMsg =
           "Ahora mismo no puedo responder. Escríbenos al " +
-            YOURCOLOR_BUSINESS.phone +
-            " o intenta de nuevo en unos minutos.",
-        );
+          YOURCOLOR_BUSINESS.phone +
+          " o intenta de nuevo en unos minutos.";
+        try {
+          await recordWhatsAppMayaOutbound(db, businessId, from, fallbackMsg, {
+            status: "waiting",
+            mayaInControl: true,
+            messageMetadata: {},
+          });
+        } catch (e) {
+          console.warn("[whatsappWebhook] conversation maya outbound (anthropic_error)", e);
+        }
+        await sendWhatsAppViaMetaGraph(metaToken, from, fallbackMsg);
         res.status(200).type("application/json").send({ ok: true, fallback: "anthropic_error" });
         return;
       }
@@ -601,11 +702,18 @@ export const whatsappWebhook = onRequest(
         : "";
     } catch (e) {
       console.error("[whatsappWebhook] Anthropic fetch", e);
-      await sendWhatsAppViaMetaGraph(
-        metaToken,
-        from,
-        "Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone,
-      );
+      const fallbackMsg =
+        "Tuve un problema técnico. Intenta de nuevo o llama al " + YOURCOLOR_BUSINESS.phone;
+      try {
+        await recordWhatsAppMayaOutbound(db, businessId, from, fallbackMsg, {
+          status: "waiting",
+          mayaInControl: true,
+          messageMetadata: {},
+        });
+      } catch (err) {
+        console.warn("[whatsappWebhook] conversation maya outbound (anthropic_exception)", err);
+      }
+      await sendWhatsAppViaMetaGraph(metaToken, from, fallbackMsg);
       res.status(200).type("application/json").send({ ok: true, fallback: "anthropic_exception" });
       return;
     }
@@ -616,6 +724,7 @@ export const whatsappWebhook = onRequest(
       deposit: depositPayload,
       meeting: meetingPayload,
       specialRequest: specialRequestPayload,
+      handoff: handoffPayload,
     } = extractMayaOrderFromReply(assistantRaw);
     const defaultWhatsAppReply = "Gracias por escribir a YourColor.";
     let outbound = visibleReply || defaultWhatsAppReply;
@@ -742,6 +851,34 @@ export const whatsappWebhook = onRequest(
         try {
           const leadDocRef = await db.collection("businesses").doc(businessId).collection("leads").add(leadPayload);
           sessionLastLeadId = leadDocRef.id;
+
+          const convNameRef = db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("conversations")
+            .doc(conversationDocIdFromWhatsAppFrom(from));
+          await convNameRef.set(
+            { customerName, updatedAt: FieldValue.serverTimestamp() },
+            { merge: true },
+          );
+
+          await db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("orders")
+            .add({
+              createdAt: FieldValue.serverTimestamp(),
+              total: calc.total,
+              deposit: calc.deposit,
+              customerName,
+              phone: from.replace(/^whatsapp:/i, ""),
+              whatsappFrom: from,
+              source: "whatsapp-yourcolor",
+              leadId: leadDocRef.id,
+              mayaOrder: leadPayload.mayaOrder ?? null,
+              status: "new",
+            });
+          confirmedOrderSaved = true;
 
           outbound = `${outbound}\n\n✅ Pedido registrado. Total ${formatUsd(calc.total)}. Depósito del ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)} (${YOURCOLOR_BUSINESS.rules.paymentMethods.join(" o ")}).`;
           assistantForSession = outbound;
@@ -906,6 +1043,34 @@ export const whatsappWebhook = onRequest(
       await sessionRef.set(sessionUpdate, { merge: true });
     } catch (e) {
       console.warn("[whatsappWebhook] session write", e);
+    }
+
+    /** Estado del Centro de Control para esta respuesta de Maya. */
+    let convStatus = "waiting";
+    let mayaCtrl = true;
+    /** @type {Record<string, unknown>} */
+    let mayaMsgMeta = {};
+    if (confirmedOrderSaved) {
+      convStatus = "confirmed";
+      mayaCtrl = true;
+    } else if (
+      handoffPayload &&
+      typeof handoffPayload.reason === "string" &&
+      asText(handoffPayload.reason)
+    ) {
+      convStatus = "needs_attention";
+      mayaCtrl = false;
+      mayaMsgMeta = { reason: asText(handoffPayload.reason) };
+    }
+
+    try {
+      await recordWhatsAppMayaOutbound(db, businessId, from, outbound, {
+        status: convStatus,
+        mayaInControl: mayaCtrl,
+        messageMetadata: mayaMsgMeta,
+      });
+    } catch (e) {
+      console.warn("[whatsappWebhook] conversation maya outbound", e);
     }
 
     const graphSent = await sendWhatsAppViaMetaGraph(metaToken, from, outbound);

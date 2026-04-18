@@ -81,6 +81,23 @@ service cloud.firestore {
         allow read, write: if request.auth != null
           && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
       }
+
+      /* Centro de Control Maya — WhatsApp: una conversación por número (doc id = phoneNumber). */
+      match /conversations/{phoneNumber} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+
+        match /messages/{messageId} {
+          allow read, write: if request.auth != null
+            && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        }
+      }
+
+      /* Pedidos confirmados por Maya (estadísticas / historial); distinto de `jobs` usado en el panel legacy. */
+      match /orders/{orderId} {
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+      }
     }
   }
 }

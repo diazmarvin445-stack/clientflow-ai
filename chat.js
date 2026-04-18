@@ -3,6 +3,11 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/f
 import {
   addDoc,
   collection,
+  getDocs,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   Timestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -31,6 +36,20 @@ let firebaseContextPayload = null;
 
 /** @type {{ id: string, data: Record<string, unknown> } | null} */
 let activeBusiness = null;
+
+/** Centro de Control Maya: listeners en tiempo real. */
+/** @type {(() => void) | null} */
+let mayaUnsubConversations = null;
+/** @type {(() => void) | null} */
+let mayaUnsubOrders = null;
+/** @type {(() => void) | null} */
+let mayaUnsubMessages = null;
+/** @type {string | null} */
+let mayaCcBusinessId = null;
+/** @type {string | null} */
+let mayaSelectedPhoneId = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let mayaAvgDebounce = null;
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -937,6 +956,535 @@ async function loadFirebaseContext(business) {
   }
 }
 
+// ——— Centro de Control Maya (Firebase en vivo) ———
+
+/** @param {unknown} ts */
+function mayaTimestampToDate(ts) {
+  if (ts == null) return null;
+  if (typeof ts === "object" && ts !== null && typeof /** @type {{ toDate?: () => Date }} */ (ts).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (ts).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  if (ts instanceof Date) return Number.isNaN(ts.getTime()) ? null : ts;
+  return null;
+}
+
+function mayaStartOfToday() {
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 0, 0, 0, 0);
+}
+
+/** @param {unknown} ts */
+function mayaFormatRelativeTime(ts) {
+  const d = mayaTimestampToDate(ts);
+  if (!d) return "—";
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  if (diffMs < 0) return "ahora";
+  const diffM = Math.floor(diffMs / 60000);
+  if (diffM < 1) return "ahora";
+  if (diffM < 60) return `hace ${diffM} min`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH < 24 && d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) {
+    return `hace ${diffH} h`;
+  }
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (
+    d.getDate() === y.getDate() &&
+    d.getMonth() === y.getMonth() &&
+    d.getFullYear() === y.getFullYear()
+  ) {
+    return "ayer";
+  }
+  return d.toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" });
+}
+
+/** @param {string} phoneDocId */
+function mayaFormatPhoneDisplay(phoneDocId) {
+  const raw = String(phoneDocId ?? "").replace(/\D/g, "");
+  if (!raw || raw === "unknown") return "—";
+  if (raw.length === 11 && raw.startsWith("1")) {
+    return `+1 ${raw.slice(1, 4)}-${raw.slice(4, 7)}-${raw.slice(7)}`;
+  }
+  if (raw.length === 10) {
+    return `+1 ${raw.slice(0, 3)}-${raw.slice(3, 6)}-${raw.slice(6)}`;
+  }
+  return `+${raw}`;
+}
+
+/**
+ * @param {Record<string, unknown>} data
+ * @returns {{ label: string, className: string }}
+ */
+function mayaStatusBadge(data) {
+  const s = typeof data.status === "string" ? data.status : "";
+  switch (s) {
+    case "active":
+      return { label: "🟢 Activa", className: "maya-cc-conv__status maya-cc-conv__status--green" };
+    case "waiting":
+      return { label: "🟡 Esperando cliente", className: "maya-cc-conv__status maya-cc-conv__status--yellow" };
+    case "confirmed":
+      return { label: "✅ Orden confirmada", className: "maya-cc-conv__status maya-cc-conv__status--ok" };
+    case "needs_attention":
+      return { label: "⚠️ Necesita a Marvin", className: "maya-cc-conv__status maya-cc-conv__status--warn" };
+    default:
+      return { label: "—", className: "maya-cc-conv__status" };
+  }
+}
+
+/** @param {string} key */
+function mayaSetStat(key, display) {
+  const el = document.querySelector(`[data-maya-stat="${key}"]`);
+  if (el) el.textContent = display;
+}
+
+/**
+ * @param {Record<string, unknown>[]} conversations
+ * @param {Record<string, unknown>[]} orders
+ */
+function mayaUpdateStats(conversations, orders) {
+  const sod = mayaStartOfToday().getTime();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const weekCut = Date.now() - weekMs;
+
+  let chatsActiveToday = 0;
+  for (const c of conversations) {
+    const t = mayaTimestampToDate(c.lastMessageAt);
+    if (t && t.getTime() >= sod) chatsActiveToday += 1;
+  }
+
+  let salesClosedToday = 0;
+  let totalSalesToday = 0;
+  for (const o of orders) {
+    const t = mayaTimestampToDate(o.createdAt);
+    if (t && t.getTime() >= sod) {
+      salesClosedToday += 1;
+      totalSalesToday += Number(o.total) || 0;
+    }
+  }
+
+  const pendingAttention = conversations.filter((c) => c.status === "needs_attention").length;
+
+  const convIdsWeek = new Set();
+  for (const c of conversations) {
+    const t = mayaTimestampToDate(c.lastMessageAt);
+    if (t && t.getTime() >= weekCut) convIdsWeek.add(String(c.id ?? ""));
+  }
+  const chatsWeek = convIdsWeek.size;
+
+  let salesWeek = 0;
+  let revenueWeek = 0;
+  for (const o of orders) {
+    const t = mayaTimestampToDate(o.createdAt);
+    if (t && t.getTime() >= weekCut) {
+      salesWeek += 1;
+      revenueWeek += Number(o.total) || 0;
+    }
+  }
+
+  const conversionPct = chatsWeek > 0 ? (salesWeek / chatsWeek) * 100 : 0;
+
+  const nConv = conversations.length;
+  const autoReplyPct = nConv > 0 ? (conversations.filter((c) => c.mayaInControl === true).length / nConv) * 100 : 0;
+  const escalatedPct = nConv > 0 ? (conversations.filter((c) => c.status === "needs_attention").length / nConv) * 100 : 0;
+
+  mayaSetStat("chats-active-today", String(chatsActiveToday));
+  mayaSetStat("sales-closed-today", String(salesClosedToday));
+  mayaSetStat("sales-total-today", formatMoney(totalSalesToday));
+  mayaSetStat("pending-today", String(pendingAttention));
+
+  mayaSetStat("chats-week", String(chatsWeek));
+  mayaSetStat("sales-week", String(salesWeek));
+  mayaSetStat("revenue-week", formatMoney(revenueWeek));
+  mayaSetStat("conversion-week", `${Math.round(conversionPct)}%`);
+
+  mayaSetStat("auto-reply-pct", `${Math.round(autoReplyPct)}%`);
+  mayaSetStat("escalated-pct", `${Math.round(escalatedPct)}%`);
+}
+
+/**
+ * @param {string} businessId
+ * @param {string[]} phoneIds
+ */
+async function mayaComputeAvgResponseMinutes(businessId, phoneIds) {
+  const cap = Math.min(phoneIds.length, 40);
+  const deltas = [];
+  for (let i = 0; i < cap; i += 1) {
+    const pid = phoneIds[i];
+    try {
+      const ref = collection(db, "businesses", businessId, "conversations", pid, "messages");
+      const q = query(ref, orderBy("at", "asc"), limit(120));
+      const snap = await getDocs(q);
+      /** @type {{ from?: string, at?: unknown }[]} */
+      const rows = [];
+      snap.forEach((d) => {
+        const x = d.data();
+        rows.push({ from: typeof x.from === "string" ? x.from : "", at: x.at });
+      });
+      for (let j = 0; j < rows.length - 1; j += 1) {
+        if (rows[j].from !== "customer") continue;
+        const next = rows[j + 1];
+        if (next.from !== "maya") continue;
+        const t0 = mayaTimestampToDate(rows[j].at);
+        const t1 = mayaTimestampToDate(next.at);
+        if (t0 && t1) {
+          const ms = t1.getTime() - t0.getTime();
+          if (ms > 0 && ms < 48 * 60 * 60 * 1000) deltas.push(ms);
+        }
+      }
+    } catch (e) {
+      console.warn("[Maya CC] avg response for", pid, e);
+    }
+  }
+  if (deltas.length === 0) return 0;
+  const sum = deltas.reduce((a, b) => a + b, 0);
+  return sum / deltas.length / 60000;
+}
+
+/**
+ * @param {string} businessId
+ * @param {Record<string, unknown>[]} conversations
+ */
+function mayaScheduleAvgResponse(businessId, conversations) {
+  if (mayaAvgDebounce) clearTimeout(mayaAvgDebounce);
+  mayaAvgDebounce = setTimeout(async () => {
+    mayaAvgDebounce = null;
+    const ids = conversations.map((c) => String(c.id ?? "")).filter(Boolean);
+    const avgMin = await mayaComputeAvgResponseMinutes(businessId, ids);
+    if (avgMin <= 0) {
+      mayaSetStat("avg-response-min", "0 min");
+    } else if (avgMin < 1) {
+      mayaSetStat("avg-response-min", "< 1 min");
+    } else {
+      mayaSetStat("avg-response-min", `${Math.round(avgMin)} min`);
+    }
+  }, 600);
+}
+
+/**
+ * @param {string} businessId
+ * @param {Record<string, unknown>[]} convRows
+ */
+async function mayaFetchAttentionReason(businessId, phoneDocId) {
+  try {
+    const ref = collection(db, "businesses", businessId, "conversations", phoneDocId, "messages");
+    const q = query(ref, orderBy("at", "desc"), limit(8));
+    const snap = await getDocs(q);
+    for (const doc of snap.docs) {
+      const x = doc.data();
+      if (x.from !== "maya" || !x.metadata || typeof x.metadata !== "object") continue;
+      const r = /** @type {{ reason?: unknown }} */ (x.metadata).reason;
+      if (typeof r === "string" && r.trim()) return r.trim();
+    }
+  } catch (e) {
+    console.warn("[Maya CC] attention reason", e);
+  }
+  return null;
+}
+
+/**
+ * @param {string} businessId
+ * @param {Record<string, unknown>[]} convRows
+ */
+async function mayaRenderAlerts(businessId, convRows) {
+  const list = document.getElementById("maya-cc-alerts-list");
+  const empty = document.getElementById("maya-cc-alerts-empty");
+  if (!list) return;
+
+  const need = convRows.filter((c) => c.status === "needs_attention");
+  list.innerHTML = "";
+
+  if (need.length === 0) {
+    if (empty) empty.hidden = false;
+    return;
+  }
+  if (empty) empty.hidden = true;
+
+  const reasons = await Promise.all(need.map((c) => mayaFetchAttentionReason(businessId, String(c.id ?? ""))));
+
+  need.forEach((c, idx) => {
+    const phoneId = String(c.id ?? "");
+    const name =
+      typeof c.customerName === "string" && c.customerName.trim()
+        ? c.customerName.trim()
+        : mayaFormatPhoneDisplay(phoneId);
+    const reason = reasons[idx];
+    const preview =
+      reason ||
+      (typeof c.lastMessage === "string" && c.lastMessage.trim() ? c.lastMessage.trim() : "Requiere tu atención.");
+
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "maya-cc-alert";
+    btn.dataset.mayaPhone = phoneId;
+    btn.innerHTML = `<span class="maya-cc-alert__ico" aria-hidden="true">⚠️</span><span class="maya-cc-alert__text"></span><span class="maya-cc-alert__hint">Abrir en WhatsApp →</span>`;
+    const textSpan = btn.querySelector(".maya-cc-alert__text");
+    if (textSpan) textSpan.textContent = `${name}: ${preview}`;
+
+    btn.addEventListener("click", () => {
+      mayaOpenConversationInWaZone(phoneId);
+    });
+
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+/** @param {string} phoneDocId */
+function mayaOpenConversationInWaZone(phoneDocId) {
+  mayaSelectedPhoneId = phoneDocId;
+  const zone = document.querySelector("details.maya-cc-zone--wa");
+  if (zone) {
+    zone.open = true;
+    zone.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  const listRoot = document.getElementById("maya-cc-wa-list");
+  if (listRoot) {
+    const safe =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? CSS.escape(phoneDocId)
+        : phoneDocId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const btn = listRoot.querySelector(`button[data-phone-id="${safe}"]`);
+    if (btn instanceof HTMLButtonElement) btn.click();
+  }
+}
+
+function mayaWireWaToolbar() {
+  const intervene = document.getElementById("maya-cc-btn-intervene");
+  const release = document.getElementById("maya-cc-btn-release");
+  const note = document.getElementById("maya-cc-btn-note");
+  if (intervene && !intervene.dataset.wired) {
+    intervene.dataset.wired = "1";
+    intervene.addEventListener("click", () => showToast("Intervenir: próximamente envío como Marvin desde el panel."));
+  }
+  if (release && !release.dataset.wired) {
+    release.dataset.wired = "1";
+    release.addEventListener("click", () => showToast("Soltar: Maya volverá a responder sola en la siguiente versión."));
+  }
+  if (note && !note.dataset.wired) {
+    note.dataset.wired = "1";
+    note.addEventListener("click", () => showToast("Nota interna: se guardará en Firebase en una iteración próxima."));
+  }
+}
+
+/**
+ * @param {string} businessId
+ * @param {Record<string, unknown>[]} rows
+ */
+function mayaRenderConversationList(businessId, rows) {
+  const empty = document.getElementById("maya-cc-wa-empty");
+  const split = document.getElementById("maya-cc-wa-split");
+  const listRoot = document.getElementById("maya-cc-wa-list");
+  if (!listRoot || !split || !empty) return;
+
+  if (rows.length === 0) {
+    empty.hidden = false;
+    split.hidden = true;
+    if (mayaUnsubMessages) {
+      mayaUnsubMessages();
+      mayaUnsubMessages = null;
+    }
+    return;
+  }
+
+  empty.hidden = true;
+  split.hidden = false;
+
+  listRoot.innerHTML = "";
+  for (const c of rows) {
+    const phoneId = String(c.id ?? "");
+    const title =
+      typeof c.customerName === "string" && c.customerName.trim()
+        ? c.customerName.trim()
+        : mayaFormatPhoneDisplay(phoneId);
+    const preview =
+      typeof c.lastMessage === "string" && c.lastMessage.trim()
+        ? c.lastMessage.trim()
+        : "—";
+    const timeLabel = mayaFormatRelativeTime(c.lastMessageAt);
+    const badge = mayaStatusBadge(c);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "maya-cc-conv";
+    btn.dataset.phoneId = phoneId;
+    if (mayaSelectedPhoneId === phoneId) btn.classList.add("is-active");
+
+    btn.innerHTML = `<span class="maya-cc-conv__top"><span class="maya-cc-conv__name"></span><span class="maya-cc-conv__time"></span></span><span class="maya-cc-conv__preview"></span><span class="maya-cc-conv__status"></span>`;
+    const nameEl = btn.querySelector(".maya-cc-conv__name");
+    const timeEl = btn.querySelector(".maya-cc-conv__time");
+    const prevEl = btn.querySelector(".maya-cc-conv__preview");
+    const stEl = btn.querySelector(".maya-cc-conv__status");
+    if (nameEl) nameEl.textContent = title;
+    if (timeEl) timeEl.textContent = timeLabel;
+    if (prevEl) prevEl.textContent = preview;
+    if (stEl) {
+      stEl.className = badge.className;
+      stEl.textContent = badge.label;
+    }
+
+    btn.addEventListener("click", () => {
+      mayaSelectedPhoneId = phoneId;
+      listRoot.querySelectorAll(".maya-cc-conv").forEach((el) => el.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      const titleEl = document.getElementById("maya-cc-wa-thread-title");
+      if (titleEl) titleEl.textContent = title;
+      mayaSubscribeMessages(businessId, phoneId, title);
+    });
+
+    listRoot.appendChild(btn);
+  }
+
+  if (mayaSelectedPhoneId) {
+    const exists = rows.some((r) => String(r.id) === mayaSelectedPhoneId);
+    if (!exists) mayaSelectedPhoneId = null;
+  }
+  if (!mayaSelectedPhoneId && rows[0]) {
+    const first = listRoot.querySelector(".maya-cc-conv");
+    if (first instanceof HTMLButtonElement) first.click();
+  }
+}
+
+/**
+ * @param {string} businessId
+ * @param {string} phoneDocId
+ * @param {string} title
+ */
+function mayaSubscribeMessages(businessId, phoneDocId, title) {
+  if (mayaUnsubMessages) {
+    mayaUnsubMessages();
+    mayaUnsubMessages = null;
+  }
+  const msgsEl = document.getElementById("maya-cc-wa-msgs");
+  if (!msgsEl) return;
+
+  const ref = collection(db, "businesses", businessId, "conversations", phoneDocId, "messages");
+  const q = query(ref, orderBy("at", "asc"), limit(200));
+
+  mayaUnsubMessages = onSnapshot(
+    q,
+    (snap) => {
+      msgsEl.innerHTML = "";
+      if (snap.empty) {
+        const p = document.createElement("p");
+        p.className = "maya-cc-wa-empty-thread";
+        p.textContent = "Sin mensajes aún.";
+        msgsEl.appendChild(p);
+        return;
+      }
+      snap.forEach((docSnap) => {
+        const x = docSnap.data();
+        const fromRaw = typeof x.from === "string" ? x.from : "";
+        const text = typeof x.text === "string" ? x.text : "";
+        let who = "Cliente";
+        let mod = "maya-cc-msg--client";
+        if (fromRaw === "maya") {
+          who = "Maya";
+          mod = "maya-cc-msg--maya";
+        } else if (fromRaw === "marvin") {
+          who = "Marvin";
+          mod = "maya-cc-msg--marvin";
+        }
+        const wrap = document.createElement("div");
+        wrap.className = `maya-cc-msg ${mod}`;
+        const w = document.createElement("span");
+        w.className = "maya-cc-msg__who";
+        w.textContent = who;
+        const body = document.createElement("p");
+        body.className = "maya-cc-msg__body";
+        body.textContent = text;
+        wrap.append(w, body);
+        msgsEl.appendChild(wrap);
+      });
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    },
+    (err) => {
+      console.error("[Maya CC] messages", err);
+      msgsEl.innerHTML = "";
+      const p = document.createElement("p");
+      p.className = "maya-cc-wa-empty-thread";
+      p.textContent = "No se pudieron cargar los mensajes.";
+      msgsEl.appendChild(p);
+    },
+  );
+
+  const titleEl = document.getElementById("maya-cc-wa-thread-title");
+  if (titleEl) titleEl.textContent = title;
+}
+
+function mayaTeardownControlCenter() {
+  if (mayaUnsubConversations) {
+    mayaUnsubConversations();
+    mayaUnsubConversations = null;
+  }
+  if (mayaUnsubOrders) {
+    mayaUnsubOrders();
+    mayaUnsubOrders = null;
+  }
+  if (mayaUnsubMessages) {
+    mayaUnsubMessages();
+    mayaUnsubMessages = null;
+  }
+  if (mayaAvgDebounce) {
+    clearTimeout(mayaAvgDebounce);
+    mayaAvgDebounce = null;
+  }
+  mayaCcBusinessId = null;
+  mayaSelectedPhoneId = null;
+}
+
+/**
+ * @param {{ id: string, data: Record<string, unknown> }} business
+ */
+function mayaInitControlCenter(business) {
+  mayaTeardownControlCenter();
+  mayaCcBusinessId = business.id;
+  mayaWireWaToolbar();
+
+  /** @type {Record<string, unknown>[]} */
+  let convRows = [];
+  /** @type {Record<string, unknown>[]} */
+  let orderRows = [];
+
+  const pushStats = () => {
+    mayaUpdateStats(convRows, orderRows);
+    void mayaRenderAlerts(business.id, convRows).catch((e) => console.error("[Maya CC] alerts", e));
+    mayaScheduleAvgResponse(business.id, convRows);
+  };
+
+  const convCol = collection(db, "businesses", business.id, "conversations");
+  mayaUnsubConversations = onSnapshot(
+    convCol,
+    (snap) => {
+      convRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      convRows.sort((a, b) => {
+        const ta = mayaTimestampToDate(a.lastMessageAt)?.getTime() ?? 0;
+        const tb = mayaTimestampToDate(b.lastMessageAt)?.getTime() ?? 0;
+        return tb - ta;
+      });
+      mayaRenderConversationList(business.id, convRows);
+      pushStats();
+    },
+    (e) => console.error("[Maya CC] conversations", e),
+  );
+
+  const ordCol = collection(db, "businesses", business.id, "orders");
+  mayaUnsubOrders = onSnapshot(
+    ordCol,
+    (snap) => {
+      orderRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      pushStats();
+    },
+    (e) => console.error("[Maya CC] orders", e),
+  );
+}
+
 async function bootWithUser(user) {
   const loading = document.getElementById("yc-chat-loading");
   const stream = document.getElementById("yc-chat-stream");
@@ -946,12 +1494,14 @@ async function bootWithUser(user) {
     renderHeader(business);
 
     if (!business) {
+      mayaTeardownControlCenter();
       if (loading) loading.hidden = true;
       showError("No hay negocio vinculado. Completa el onboarding o inicia sesión con la cuenta correcta.");
       return;
     }
 
     await loadFirebaseContext(business);
+    mayaInitControlCenter(business);
 
     if (loading) loading.hidden = true;
     if (stream) {
