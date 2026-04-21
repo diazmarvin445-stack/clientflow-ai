@@ -1010,7 +1010,9 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "delete_order",
   "delete_client",
   "delete_calendar_event",
+  "delete_event",
   "delete_transaction",
+  "delete_finance",
   "add_team_member",
   "update_team_member",
   "delete_team_member",
@@ -1130,6 +1132,7 @@ function mergeMayaActionData(payload) {
     "eventId",
     "eventTitle",
     "weekday",
+    "query",
   ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
@@ -1180,13 +1183,103 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
 }
 
 /**
- * Elimina un cliente por `clientId` o búsqueda por nombre (`clientName` / `name`).
+ * Borra pedido con cascada; si hay varios pedidos del mismo cliente, devuelve `multiple`.
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {string} businessId
  * @param {Record<string, unknown>} payload
  */
-async function mayaDeleteClientByPayload(db, businessId, payload) {
+async function handleDeleteOrder(db, businessId, payload) {
   const data = mergeMayaActionData(payload);
+  console.log("[DELETE_ORDER] Iniciando:", data);
+  try {
+    let orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
+    if (orderId) {
+      await mayaDeleteOrderCascade(db, businessId, { ...payload, orderId });
+      const r = { success: true, deleted: `pedido ${orderId}` };
+      console.log("[DELETE_ORDER] Resultado:", r);
+      return r;
+    }
+    const clientName =
+      typeof data.clientName === "string" && data.clientName.trim() ? data.clientName.trim() : "";
+    if (!clientName) {
+      const r = { success: false, error: "Falta orderId o clientName para identificar el pedido." };
+      console.log("[DELETE_ORDER] Resultado:", r);
+      return r;
+    }
+    const needle = clientName.toLowerCase();
+    const qs = await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("orders")
+      .orderBy("createdAt", "desc")
+      .limit(120)
+      .get();
+    /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; o: Record<string, unknown> }[]} */
+    const matches = [];
+    qs.forEach((doc) => {
+      const o = doc.data() || {};
+      const cn = typeof o.clientName === "string" ? o.clientName.trim().toLowerCase() : "";
+      if (!cn) return;
+      if (cn.includes(needle) || needle.includes(cn)) matches.push({ doc, o });
+    });
+    if (matches.length === 0) {
+      const r = { success: false, error: `No hay pedidos de ${clientName}.` };
+      console.log("[DELETE_ORDER] Resultado:", r);
+      return r;
+    }
+    if (matches.length > 1) {
+      const r = {
+        success: false,
+        multiple: true,
+        orders: matches.map((m) => ({
+          id: m.doc.id,
+          product: m.o.product,
+          amount: m.o.amount,
+          status: m.o.status,
+        })),
+      };
+      console.log("[DELETE_ORDER] Resultado:", r);
+      return r;
+    }
+    await mayaDeleteOrderCascade(db, businessId, { ...payload, orderId: matches[0].doc.id });
+    const label =
+      typeof matches[0].o.clientName === "string" && matches[0].o.clientName.trim()
+        ? matches[0].o.clientName.trim()
+        : clientName;
+    const r = { success: true, deleted: `pedido de ${label}` };
+    console.log("[DELETE_ORDER] Resultado:", r);
+    return r;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error desconocido";
+    const r = { success: false, error: msg };
+    console.log("[DELETE_ORDER] Resultado:", r);
+    return r;
+  }
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ */
+function formatCalendarRowDateLabel(row) {
+  if (row.date && typeof row.date.toDate === "function") {
+    try {
+      return row.date.toDate().toISOString().slice(0, 10);
+    } catch {
+      return "?";
+    }
+  }
+  return "?";
+}
+
+/**
+ * Borra cliente; devuelve resultado estructurado para feedback en el chat interno.
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function handleDeleteClient(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  console.log("[DELETE_CLIENT] Iniciando:", data);
   let clientId =
     typeof data.clientId === "string"
       ? data.clientId.trim()
@@ -1194,9 +1287,17 @@ async function mayaDeleteClientByPayload(db, businessId, payload) {
   if (clientId) {
     const ref = db.collection("businesses").doc(businessId).collection("clients").doc(clientId);
     const snap = await ref.get();
-    if (!snap.exists) throw new Error("Cliente no encontrado con ese id.");
+    if (!snap.exists) {
+      const r = { success: false, error: "Cliente no encontrado con ese id." };
+      console.log("[DELETE_CLIENT] Resultado:", r);
+      return r;
+    }
+    const x = snap.data() || {};
+    const display = typeof x.name === "string" && x.name.trim() ? x.name.trim() : "Cliente";
     await ref.delete();
-    return;
+    const r = { success: true, deleted: display };
+    console.log("[DELETE_CLIENT] Resultado:", r);
+    return r;
   }
   const nameRaw =
     typeof data.clientName === "string" && data.clientName.trim()
@@ -1205,9 +1306,13 @@ async function mayaDeleteClientByPayload(db, businessId, payload) {
         ? data.name.trim()
         : "";
   const name = nameRaw.toLowerCase();
-  if (!name) throw new Error("Falta clientId o clientName para eliminar el cliente.");
+  if (!name) {
+    const r = { success: false, error: "Falta clientId o clientName para eliminar el cliente." };
+    console.log("[DELETE_CLIENT] Resultado:", r);
+    return r;
+  }
   const snap = await db.collection("businesses").doc(businessId).collection("clients").limit(400).get();
-  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; full: string }[]} */
+  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; full: string; row: Record<string, unknown> }[]} */
   const matches = [];
   snap.forEach((d) => {
     const x = d.data() || {};
@@ -1215,20 +1320,67 @@ async function mayaDeleteClientByPayload(db, businessId, payload) {
     const n = typeof x.name === "string" ? x.name.trim().toLowerCase() : "";
     const cand = fn || n;
     if (!cand) return;
-    if (cand.includes(name) || name.includes(cand)) matches.push({ doc: d, full: cand });
+    if (cand.includes(name) || name.includes(cand)) matches.push({ doc: d, full: cand, row: x });
   });
-  if (matches.length === 0) throw new Error("No encontré un cliente con ese nombre.");
+  if (matches.length === 0) {
+    const r = { success: false, error: `No encontré al cliente ${nameRaw}.` };
+    console.log("[DELETE_CLIENT] Resultado:", r);
+    return r;
+  }
   if (matches.length > 1) {
     const exact = matches.find((m) => m.full === name);
     if (exact) {
+      const display =
+        typeof exact.row.name === "string" && exact.row.name.trim()
+          ? exact.row.name.trim()
+          : typeof exact.row.fullName === "string" && exact.row.fullName.trim()
+            ? exact.row.fullName.trim()
+            : nameRaw;
       await exact.doc.ref.delete();
-      return;
+      const r = { success: true, deleted: display };
+      console.log("[DELETE_CLIENT] Resultado:", r);
+      return r;
     }
-    throw new Error(
-      "Hay varios clientes con nombres parecidos; pasá el clientId del contexto Firebase o el nombre completo exacto.",
-    );
+    const r = {
+      success: false,
+      multiple: true,
+      clients: matches.map((m) => ({
+        id: m.doc.id,
+        name: (typeof m.row.name === "string" && m.row.name.trim() ? m.row.name : m.row.fullName) || "",
+        phone: typeof m.row.phone === "string" ? m.row.phone : "",
+      })),
+    };
+    console.log("[DELETE_CLIENT] Resultado:", r);
+    return r;
   }
+  const display =
+    typeof matches[0].row.name === "string" && matches[0].row.name.trim()
+      ? matches[0].row.name.trim()
+      : typeof matches[0].row.fullName === "string" && matches[0].row.fullName.trim()
+        ? matches[0].row.fullName.trim()
+        : nameRaw;
   await matches[0].doc.ref.delete();
+  const r = { success: true, deleted: display };
+  console.log("[DELETE_CLIENT] Resultado:", r);
+  return r;
+}
+
+/**
+ * Elimina un cliente por `clientId` o búsqueda por nombre (`clientName` / `name`).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaDeleteClientByPayload(db, businessId, payload) {
+  const r = await handleDeleteClient(db, businessId, payload);
+  if (!r.success) {
+    if (r.multiple) {
+      throw new Error(
+        "Hay varios clientes con nombres parecidos; pasá el clientId del contexto Firebase o el nombre completo exacto.",
+      );
+    }
+    throw new Error(r.error || "No se pudo eliminar el cliente.");
+  }
 }
 
 /** Día de la semana en JS (0=domingo … 6=sábado) desde texto en español. */
@@ -1245,40 +1397,57 @@ const MAYA_WEEKDAY_ES = {
 };
 
 /**
- * Elimina un evento por `eventId` o por criterios (título, día de la semana, fecha ISO).
+ * Borra evento de calendario; resultado estructurado para el panel.
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {string} businessId
  * @param {Record<string, unknown>} payload
  */
-async function mayaDeleteCalendarEvent(db, businessId, payload) {
+async function handleDeleteEvent(db, businessId, payload) {
   const data = mergeMayaActionData(payload);
+  console.log("[DELETE_EVENT] Iniciando:", data);
   const eventId = typeof data.eventId === "string" ? data.eventId.trim() : "";
   if (eventId) {
     const ref = db.collection("businesses").doc(businessId).collection("calendar").doc(eventId);
     const snap = await ref.get();
-    if (!snap.exists) throw new Error("Evento de calendario no encontrado.");
+    if (!snap.exists) {
+      const r = { success: false, error: "Evento de calendario no encontrado." };
+      console.log("[DELETE_EVENT] Resultado:", r);
+      return r;
+    }
+    const row = snap.data() || {};
+    const title = typeof row.title === "string" && row.title.trim() ? row.title.trim() : "Evento";
     await ref.delete();
-    return;
+    const r = { success: true, deleted: title };
+    console.log("[DELETE_EVENT] Resultado:", r);
+    return r;
   }
 
+  const qRaw = typeof data.query === "string" && data.query.trim() ? data.query.trim() : "";
   const titleNeedle = (
-    typeof data.title === "string" && data.title.trim()
-      ? data.title.trim()
-      : typeof data.eventTitle === "string" && data.eventTitle.trim()
-        ? data.eventTitle.trim()
-        : ""
+    qRaw ||
+    (typeof data.title === "string" && data.title.trim() ? data.title.trim() : "") ||
+    (typeof data.eventTitle === "string" && data.eventTitle.trim() ? data.eventTitle.trim() : "")
   ).toLowerCase();
 
   const weekdayRaw = typeof data.weekday === "string" ? data.weekday.trim().toLowerCase() : "";
-  let targetWd = MAYA_WEEKDAY_ES[weekdayRaw];
+  const targetWd = MAYA_WEEKDAY_ES[weekdayRaw];
 
   let wantDay = null;
   if (data.date != null && String(data.date).trim()) {
     wantDay = parseFinanceMovementDate(data.date);
   }
 
+  if (!titleNeedle && targetWd === undefined && !wantDay) {
+    const r = {
+      success: false,
+      error: "Indicá eventId, texto (query/título), día de la semana o fecha para borrar el evento.",
+    };
+    console.log("[DELETE_EVENT] Resultado:", r);
+    return r;
+  }
+
   const snap = await db.collection("businesses").doc(businessId).collection("calendar").limit(500).get();
-  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; dt: Date | null }[]} */
+  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; dt: Date | null; row: Record<string, unknown> }[]} */
   const candidates = [];
   snap.forEach((doc) => {
     const row = doc.data() || {};
@@ -1291,20 +1460,31 @@ async function mayaDeleteCalendarEvent(db, businessId, payload) {
       }
     }
     const t = typeof row.title === "string" ? row.title.toLowerCase() : "";
+    const cn = typeof row.clientName === "string" ? row.clientName.toLowerCase() : "";
     let ok = true;
-    if (titleNeedle && !t.includes(titleNeedle)) ok = false;
+    if (titleNeedle) {
+      ok = t.includes(titleNeedle) || cn.includes(titleNeedle);
+    }
     if (targetWd !== undefined && dt && dt.getDay() !== targetWd) ok = false;
     if (wantDay && dt && !isSameCalendarDay(dt, wantDay)) ok = false;
-    if (ok) candidates.push({ doc, dt });
+    if (ok) candidates.push({ doc, dt, row });
   });
 
   if (candidates.length === 0) {
-    throw new Error("No encontré un evento de calendario con esos criterios.");
+    const r = { success: false, error: "No encontré un evento de calendario con esos criterios." };
+    console.log("[DELETE_EVENT] Resultado:", r);
+    return r;
   }
 
   if (candidates.length === 1) {
+    const title =
+      typeof candidates[0].row.title === "string" && candidates[0].row.title.trim()
+        ? candidates[0].row.title.trim()
+        : "Evento";
     await candidates[0].doc.ref.delete();
-    return;
+    const r = { success: true, deleted: title };
+    console.log("[DELETE_EVENT] Resultado:", r);
+    return r;
   }
 
   const now = new Date();
@@ -1312,20 +1492,71 @@ async function mayaDeleteCalendarEvent(db, businessId, payload) {
   if (targetWd !== undefined && !titleNeedle && !wantDay) {
     const future = candidates.filter((c) => c.dt && c.dt >= todayStart);
     future.sort((a, b) => (a.dt?.getTime() || 0) - (b.dt?.getTime() || 0));
-    if (future.length) {
+    if (future.length === 1) {
+      const title =
+        typeof future[0].row.title === "string" && future[0].row.title.trim()
+          ? future[0].row.title.trim()
+          : "Evento";
       await future[0].doc.ref.delete();
-      return;
+      const r = { success: true, deleted: title };
+      console.log("[DELETE_EVENT] Resultado:", r);
+      return r;
+    }
+    if (future.length > 1) {
+      const r = {
+        success: false,
+        multiple: true,
+        events: future.map((c) => ({
+          id: c.doc.id,
+          title: c.row.title,
+          date: formatCalendarRowDateLabel(c.row),
+        })),
+      };
+      console.log("[DELETE_EVENT] Resultado:", r);
+      return r;
     }
     const past = [...candidates].filter((c) => c.dt).sort((a, b) => (b.dt?.getTime() || 0) - (a.dt?.getTime() || 0));
-    if (past.length) {
+    if (past.length === 1) {
+      const title =
+        typeof past[0].row.title === "string" && past[0].row.title.trim()
+          ? past[0].row.title.trim()
+          : "Evento";
       await past[0].doc.ref.delete();
-      return;
+      const r = { success: true, deleted: title };
+      console.log("[DELETE_EVENT] Resultado:", r);
+      return r;
     }
   }
 
-  throw new Error(
-    "Hay varios eventos que coinciden; pasá el eventId del contexto o más detalle (título, fecha o día de la semana único).",
-  );
+  const r = {
+    success: false,
+    multiple: true,
+    events: candidates.map((c) => ({
+      id: c.doc.id,
+      title: c.row.title,
+      date: formatCalendarRowDateLabel(c.row),
+    })),
+  };
+  console.log("[DELETE_EVENT] Resultado:", r);
+  return r;
+}
+
+/**
+ * Elimina un evento por `eventId` o por criterios (título, día de la semana, fecha ISO).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaDeleteCalendarEvent(db, businessId, payload) {
+  const r = await handleDeleteEvent(db, businessId, payload);
+  if (!r.success) {
+    if (r.multiple) {
+      throw new Error(
+        "Hay varios eventos que coinciden; pasá el eventId del contexto o más detalle (título, fecha o día de la semana único).",
+      );
+    }
+    throw new Error(r.error || "No se pudo eliminar el evento.");
+  }
 }
 
 /**
@@ -1641,12 +1872,14 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
 }
 
 /**
+ * Borra movimiento en finance; resultado estructurado para el panel.
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {string} businessId
  * @param {Record<string, unknown>} payload
  */
-async function mayaFinanceDelete(db, businessId, payload) {
+async function handleDeleteFinance(db, businessId, payload) {
   const data = mergeFinancePayload(payload);
+  console.log("[DELETE_FINANCE] Iniciando:", data);
   const tid =
     typeof data.transactionId === "string"
       ? data.transactionId.trim()
@@ -1654,9 +1887,18 @@ async function mayaFinanceDelete(db, businessId, payload) {
   if (tid) {
     const ref = db.collection("businesses").doc(businessId).collection("finance").doc(tid);
     const snap = await ref.get();
-    if (!snap.exists) throw new Error("Movimiento financiero no encontrado.");
+    if (!snap.exists) {
+      const r = { success: false, error: "Movimiento financiero no encontrado." };
+      console.log("[DELETE_FINANCE] Resultado:", r);
+      return r;
+    }
+    const row = snap.data() || {};
+    const deletedLabel =
+      typeof row.description === "string" && row.description.trim() ? row.description.trim() : "movimiento";
     await ref.delete();
-    return;
+    const r = { success: true, deleted: deletedLabel };
+    console.log("[DELETE_FINANCE] Resultado:", r);
+    return r;
   }
 
   const amountHint = data.amount != null ? Number(data.amount) : NaN;
@@ -1720,14 +1962,51 @@ async function mayaFinanceDelete(db, businessId, payload) {
   });
 
   if (candidates.length === 0) {
-    throw new Error("No encontré un movimiento que coincida con esos criterios (usa transactionId del contexto si sigue fallando).");
+    const r = { success: false, error: "No encontré ese movimiento." };
+    console.log("[DELETE_FINANCE] Resultado:", r);
+    return r;
   }
   if (candidates.length > 1) {
-    throw new Error(
-      "Hay varios movimientos que coinciden; pasá el transactionId del contexto o más detalles (monto + fecha + tipo).",
-    );
+    const r = {
+      success: false,
+      multiple: true,
+      movements: candidates.map((doc) => {
+        const row = doc.data() || {};
+        return {
+          id: doc.id,
+          description: row.description,
+          amount: row.amount,
+          type: row.type,
+        };
+      }),
+    };
+    console.log("[DELETE_FINANCE] Resultado:", r);
+    return r;
   }
+  const row0 = candidates[0].data() || {};
+  const deletedLabel =
+    typeof row0.description === "string" && row0.description.trim() ? row0.description.trim() : "movimiento";
   await candidates[0].ref.delete();
+  const r = { success: true, deleted: deletedLabel };
+  console.log("[DELETE_FINANCE] Resultado:", r);
+  return r;
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaFinanceDelete(db, businessId, payload) {
+  const r = await handleDeleteFinance(db, businessId, payload);
+  if (!r.success) {
+    if (r.multiple) {
+      throw new Error(
+        "Hay varios movimientos que coinciden; pasá el transactionId del contexto o más detalles (monto + fecha + tipo).",
+      );
+    }
+    throw new Error(r.error || "No se pudo eliminar el movimiento.");
+  }
 }
 
 /**
@@ -1896,6 +2175,57 @@ async function mayaFinanceBalanceBlock(db, businessId, period) {
 }
 
 /**
+ * Feedback visible tras borrados reales en Firebase (chat interno Maya).
+ * @param {string} kindHint
+ * @param {Record<string, unknown>} result
+ */
+function formatDeleteActionFeedback(kindHint, result) {
+  if (result.success) {
+    const what =
+      result.deleted != null && String(result.deleted).trim()
+        ? String(result.deleted).trim()
+        : kindHint;
+    return `[Sistema] Listo Marvin, eliminé ${what} ✅`;
+  }
+  if (result.multiple) {
+    if (Array.isArray(result.events) && result.events.length) {
+      const lines = result.events.map((e, i) => {
+        const title = e.title != null ? String(e.title) : "(sin título)";
+        const ds = e.date != null ? String(e.date) : "?";
+        return `${i + 1}. ${title} (${ds}) — id:${e.id}`;
+      });
+      return `[Sistema] Encontré varios eventos; ¿cuál quieres borrar?\n${lines.join("\n")}`;
+    }
+    if (Array.isArray(result.clients) && result.clients.length) {
+      const lines = result.clients.map((c, i) => {
+        const n = c.name != null ? String(c.name) : "?";
+        const ph = c.phone != null ? String(c.phone) : "-";
+        return `${i + 1}. ${n} — tel:${ph} — id:${c.id}`;
+      });
+      return `[Sistema] Encontré varios clientes; ¿cuál quieres borrar?\n${lines.join("\n")}`;
+    }
+    if (Array.isArray(result.orders) && result.orders.length) {
+      const lines = result.orders.map((o, i) => {
+        const p = o.product != null ? String(o.product) : "Pedido";
+        const st = o.status != null ? String(o.status) : "?";
+        return `${i + 1}. ${p} — ${formatMoneyUsd(o.amount)} — ${st} — id:${o.id}`;
+      });
+      return `[Sistema] Encontré varios pedidos; ¿cuál quieres borrar?\n${lines.join("\n")}`;
+    }
+    if (Array.isArray(result.movements) && result.movements.length) {
+      const lines = result.movements.map((m, i) => {
+        const d = m.description != null ? String(m.description) : "?";
+        const ty = m.type != null ? String(m.type) : "?";
+        return `${i + 1}. ${d} — ${formatMoneyUsd(m.amount)} (${ty}) — id:${m.id}`;
+      });
+      return `[Sistema] Encontré varios movimientos en finanzas; ¿cuál quieres borrar?\n${lines.join("\n")}`;
+    }
+  }
+  const err = typeof result.error === "string" ? result.error : "detalle desconocido";
+  return `[Sistema] No pude encontrar ${kindHint}. ${err} ¿Podés darme más detalles?`;
+}
+
+/**
  * Ejecuta acciones financieras del panel en el servidor (MAYA_ACTION_JSON).
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {Record<string, unknown>} firebaseContext
@@ -1937,16 +2267,19 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         await mayaFinanceAddMovement(db, businessId, payload, "expense");
         continue;
       }
-      if (action === "delete_transaction") {
-        await mayaFinanceDelete(db, businessId, payload);
+      if (action === "delete_transaction" || action === "delete_finance") {
+        const r = await handleDeleteFinance(db, businessId, payload);
+        extraBlocks.push(formatDeleteActionFeedback("ese movimiento en finanzas", r));
         continue;
       }
-      if (action === "delete_calendar_event") {
-        await mayaDeleteCalendarEvent(db, businessId, payload);
+      if (action === "delete_calendar_event" || action === "delete_event") {
+        const r = await handleDeleteEvent(db, businessId, payload);
+        extraBlocks.push(formatDeleteActionFeedback("ese evento del calendario", r));
         continue;
       }
       if (action === "delete_order") {
-        await mayaDeleteOrderCascade(db, businessId, payload);
+        const r = await handleDeleteOrder(db, businessId, payload);
+        extraBlocks.push(formatDeleteActionFeedback("ese pedido", r));
         continue;
       }
       if (action === "create_client") {
@@ -2022,7 +2355,8 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         continue;
       }
       if (action === "delete_client") {
-        await mayaDeleteClientByPayload(db, businessId, payload);
+        const r = await handleDeleteClient(db, businessId, payload);
+        extraBlocks.push(formatDeleteActionFeedback("ese cliente", r));
         continue;
       }
       if (action === "add_team_member") {
