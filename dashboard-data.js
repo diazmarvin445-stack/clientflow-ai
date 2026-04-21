@@ -11,6 +11,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -605,6 +606,150 @@ export async function fetchClientsForBusiness(db, businessId) {
     const ta = toDate(a.createdAt)?.getTime() ?? 0;
     const tb = toDate(b.createdAt)?.getTime() ?? 0;
     return tb - ta;
+  });
+  return rows;
+}
+
+/** Pedidos/órdenes ya cerrados: no incluir en contexto Chat Maya (ahorro de tokens). */
+const CHAT_INACTIVE_ORDER_STATUSES = new Set([
+  "entregado",
+  "cancelado",
+  "cancelada",
+  "cancelled",
+  "completed",
+  "done",
+]);
+
+/**
+ * @param {Record<string, unknown>} row
+ * @returns {boolean}
+ */
+export function isChatActiveOrderOrJob(row) {
+  const s = String(row?.status ?? "")
+    .trim()
+    .toLowerCase();
+  if (!s) return true;
+  return !CHAT_INACTIVE_ORDER_STATUSES.has(s);
+}
+
+/**
+ * Trabajos (`jobs`) recientes; solo activos, tope razonable para el contexto de Maya.
+ */
+export async function fetchJobsForChatContext(db, businessId, maxFetch = 120, maxActive = 50) {
+  const qy = query(
+    collection(db, "businesses", businessId, "jobs"),
+    orderBy("createdAt", "desc"),
+    limit(maxFetch),
+  );
+  const snap = await getDocs(qy);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "jobs" });
+  });
+  const active = rows.filter(isChatActiveOrderOrJob);
+  return active.slice(0, maxActive);
+}
+
+/**
+ * Pedidos (`orders`) recientes; solo activos (no entregados/cancelados).
+ */
+export async function fetchOrdersForChatContext(db, businessId, maxFetch = 120, maxActive = 50) {
+  const qy = query(
+    collection(db, "businesses", businessId, "orders"),
+    orderBy("createdAt", "desc"),
+    limit(maxFetch),
+  );
+  const snap = await getDocs(qy);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "orders" });
+  });
+  const active = rows.filter(isChatActiveOrderOrJob);
+  return active.slice(0, maxActive);
+}
+
+/**
+ * Últimos N clientes (más recientes primero) para contexto Chat Maya.
+ */
+export async function fetchClientsForChatContext(db, businessId, limitN = 20) {
+  const qy = query(
+    collection(db, "businesses", businessId, "clients"),
+    orderBy("createdAt", "desc"),
+    limit(limitN),
+  );
+  const snap = await getDocs(qy);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data() });
+  });
+  return rows;
+}
+
+/**
+ * Movimientos de finanzas del mes calendario actual (lee hasta `maxRead` docs recientes y filtra).
+ */
+export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRead = 250) {
+  const rows = await fetchFinanceTransactionsForBusiness(db, businessId, maxRead);
+  const now = new Date();
+  const startM = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endM = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const out = [];
+  for (const row of rows) {
+    const raw = row.date ?? row.createdAt;
+    const d = toDate(raw);
+    if (!d || Number.isNaN(d.getTime())) continue;
+    const t = d.getTime();
+    if (t >= startM.getTime() && t <= endM.getTime()) out.push(row);
+  }
+  out.sort((a, b) => {
+    const ta = toDate(a.date ?? a.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.date ?? b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+  return out;
+}
+
+/**
+ * Eventos de calendario desde hoy hasta `daysAhead` días.
+ */
+export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 14, maxResults = 80) {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const limitEnd = new Date(dayStart);
+  limitEnd.setDate(limitEnd.getDate() + daysAhead);
+  limitEnd.setHours(23, 59, 59, 999);
+
+  let snap;
+  try {
+    const qy = query(
+      collection(db, "businesses", businessId, "calendar"),
+      where("date", ">=", Timestamp.fromDate(dayStart)),
+      orderBy("date", "asc"),
+      limit(maxResults),
+    );
+    snap = await getDocs(qy);
+  } catch (e) {
+    console.warn("[ClientFlow] fetchCalendarEventsForChat: query ascendente falló, usando escaneo acotado", e);
+    const qy = query(
+      collection(db, "businesses", businessId, "calendar"),
+      orderBy("date", "desc"),
+      limit(150),
+    );
+    snap = await getDocs(qy);
+  }
+
+  const rows = [];
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    const d = toDate(data.date);
+    if (!d || Number.isNaN(d.getTime())) return;
+    if (d.getTime() < dayStart.getTime() || d.getTime() > limitEnd.getTime()) return;
+    rows.push({ id: docSnap.id, ...data });
+  });
+  rows.sort((a, b) => {
+    const ta = toDate(a.date)?.getTime() ?? 0;
+    const tb = toDate(b.date)?.getTime() ?? 0;
+    return ta - tb;
   });
   return rows;
 }

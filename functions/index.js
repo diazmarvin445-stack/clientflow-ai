@@ -569,6 +569,138 @@ function asChatMessages(raw) {
   return out;
 }
 
+/** Últimos turnos enviados a Claude (panel Chat Maya). */
+const MAYA_MAX_CONVERSATION_MESSAGES = 20;
+/** Objetivo por debajo del límite de entrada (~200k tokens); margen para el modelo. */
+const MAYA_TARGET_TOTAL_INPUT_TOKENS = 150000;
+
+function estimateTokensFromCharLength(len) {
+  return Math.ceil(Number(len) / 4);
+}
+
+function trimMayaChatMessages(msgs, max = MAYA_MAX_CONVERSATION_MESSAGES) {
+  if (!Array.isArray(msgs) || msgs.length <= max) return msgs;
+  return msgs.slice(-max);
+}
+
+function cloneJsonSafe(obj) {
+  try {
+    return JSON.parse(JSON.stringify(obj));
+  } catch {
+    return {};
+  }
+}
+
+function mayaAnthropicInputTokenEstimate(systemStr, messages) {
+  const ser = JSON.stringify(messages);
+  return estimateTokensFromCharLength(systemStr.length) + estimateTokensFromCharLength(ser.length);
+}
+
+function shrinkFirebaseContextInitial(fc) {
+  const c = fc && typeof fc === "object" ? cloneJsonSafe(fc) : {};
+  if (Array.isArray(c.calendarNextTwoWeeks) && c.calendarNextTwoWeeks.length > 12) {
+    c.calendarNextTwoWeeks = c.calendarNextTwoWeeks.slice(0, 12);
+  }
+  if (Array.isArray(c.campaigns) && c.campaigns.length > 18) {
+    c.campaigns = c.campaigns.slice(0, 15);
+  }
+  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 45) {
+    c.financeRecent = c.financeRecent.slice(0, 40);
+  }
+  if (Array.isArray(c.clients) && c.clients.length > 22) {
+    c.clients = c.clients.slice(0, 20);
+  }
+  if (Array.isArray(c.orders) && c.orders.length > 55) {
+    c.orders = c.orders.slice(0, 50);
+  }
+  if (Array.isArray(c.jobs) && c.jobs.length > 55) {
+    c.jobs = c.jobs.slice(0, 50);
+  }
+  return c;
+}
+
+function mayaAggressiveShrinkFirebaseContext(c) {
+  if (!c || typeof c !== "object") return false;
+  if (Array.isArray(c.calendarNextTwoWeeks) && c.calendarNextTwoWeeks.length > 2) {
+    c.calendarNextTwoWeeks = c.calendarNextTwoWeeks.slice(0, Math.max(1, Math.floor(c.calendarNextTwoWeeks.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.campaigns) && c.campaigns.length > 2) {
+    c.campaigns = c.campaigns.slice(0, Math.max(1, Math.floor(c.campaigns.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 4) {
+    c.financeRecent = c.financeRecent.slice(0, Math.max(3, Math.floor(c.financeRecent.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.clients) && c.clients.length > 4) {
+    c.clients = c.clients.slice(0, Math.max(3, Math.floor(c.clients.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.orders) && c.orders.length > 4) {
+    c.orders = c.orders.slice(0, Math.max(3, Math.floor(c.orders.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.jobs) && c.jobs.length > 4) {
+    c.jobs = c.jobs.slice(0, Math.max(3, Math.floor(c.jobs.length / 2)));
+    return true;
+  }
+  if (c.profile && typeof c.profile === "object") {
+    delete c.profile.businessDescription;
+    delete c.profile.description;
+    return true;
+  }
+  if (c.stats) {
+    delete c.stats;
+    return true;
+  }
+  if (typeof c.contextNote === "string" && c.contextNote.length > 12) {
+    c.contextNote = "…";
+    return true;
+  }
+  return false;
+}
+
+function buildMayaSystemString(basePrompt, firebaseCtx) {
+  return `${basePrompt}\n\nCONTEXTO DEL NEGOCIO:\n${JSON.stringify(firebaseCtx)}`;
+}
+
+/**
+ * Recorta mensajes y contexto Firebase hasta acercarse al presupuesto de tokens (sin tocar el prompt base).
+ * @param {string} basePrompt
+ * @param {Record<string, unknown>} firebaseContextRaw
+ * @param {unknown} messagesRaw
+ * @returns {{ system: string, messages: { role: string, content: string }[] }}
+ */
+function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw) {
+  let messages = trimMayaChatMessages(asChatMessages(messagesRaw));
+  let fc = shrinkFirebaseContextInitial(
+    firebaseContextRaw && typeof firebaseContextRaw === "object" ? firebaseContextRaw : {},
+  );
+  let system = buildMayaSystemString(basePrompt, fc);
+
+  for (let i = 0; i < 80 && mayaAnthropicInputTokenEstimate(system, messages) > MAYA_TARGET_TOTAL_INPUT_TOKENS; i++) {
+    if (mayaAggressiveShrinkFirebaseContext(fc)) {
+      system = buildMayaSystemString(basePrompt, fc);
+      continue;
+    }
+    if (messages.length > 8) {
+      messages = messages.slice(-Math.max(6, messages.length - 4));
+      continue;
+    }
+    if (messages.length > 4) {
+      messages = messages.slice(-4);
+      continue;
+    }
+    if (messages.length > 2) {
+      messages = messages.slice(-2);
+      continue;
+    }
+    break;
+  }
+  return { system, messages };
+}
+
 const MAYA_PANEL_ACTION_PREFIX = "MAYA_ACTION_JSON:";
 const MAYA_PANEL_ACTION_ALIASES = {
   save_client: "create_client",
@@ -1276,9 +1408,11 @@ export const chatWithAI = onRequest(
         }
 
         const body = req.body && typeof req.body === "object" ? req.body : {};
-        const messages = asChatMessages(body.messages);
         const firebaseContext =
           body.firebaseContext && typeof body.firebaseContext === "object" ? body.firebaseContext : {};
+
+        const basePrompt = getMayaInternalChatPrompt();
+        const { system, messages } = prepareMayaAnthropicPayload(basePrompt, firebaseContext, body.messages);
 
         if (!messages.length) {
           return res.status(400).json({ error: "Se requiere al menos un mensaje de usuario." });
@@ -1286,12 +1420,6 @@ export const chatWithAI = onRequest(
         if (messages[messages.length - 1].role !== "user") {
           return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
         }
-
-        const system =
-          getMayaInternalChatPrompt() +
-          "\n\n" +
-          "CONTEXTO DEL NEGOCIO:\n" +
-          JSON.stringify(firebaseContext, null, 2);
 
         const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",

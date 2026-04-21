@@ -17,10 +17,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
-  fetchJobsForBusiness,
-  fetchClientsForBusiness,
+  fetchJobsForChatContext,
+  fetchOrdersForChatContext,
+  fetchClientsForChatContext,
   fetchCampaignsListAndStats,
-  fetchFinanceTransactionsForBusiness,
+  fetchFinanceTransactionsCurrentMonth,
+  fetchCalendarEventsForChat,
   formatBusinessMeta,
   initialsFromName,
 } from "./dashboard-data.js";
@@ -30,7 +32,8 @@ import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
 
-const MAX_API_MESSAGES = 40;
+/** Últimos turnos enviados a Claude (evitar exceder límite de contexto). */
+const MAX_API_MESSAGES = 20;
 const DELIVERY_DAYS_OFFSET = 12;
 
 /** @type {{ role: 'user' | 'assistant', content: string }[]} */
@@ -378,6 +381,31 @@ function buildQuoteCardEl(quote) {
 
   card.append(h, dl);
   return card;
+}
+
+/**
+ * Perfil mínimo del negocio para el contexto de Maya (sin campos pesados innecesarios).
+ * @param {Record<string, unknown>} data
+ */
+function slimBusinessProfileForChat(data) {
+  if (!data || typeof data !== "object") return {};
+  const keys = [
+    "businessName",
+    "name",
+    "phone",
+    "businessPhone",
+    "email",
+    "serviceArea",
+    "businessDescription",
+    "description",
+  ];
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const k of keys) {
+    const v = /** @type {Record<string, unknown>} */ (data)[k];
+    if (v != null && v !== "") out[k] = v;
+  }
+  return serializeForAi(out);
 }
 
 function serializeForAi(val, seen = new WeakSet()) {
@@ -1092,62 +1120,58 @@ function showWelcomeAssistant() {
  * @param {{ id: string, data: Record<string, unknown> }} business
  */
 async function loadFirebaseContext(business) {
-  const [orders, clients, campAgg, financeRows] = await Promise.all([
-    fetchJobsForBusiness(db, business.id),
-    fetchClientsForBusiness(db, business.id),
+  const [jobs, orders, clients, campAgg, financeMonth, calendarNext] = await Promise.all([
+    fetchJobsForChatContext(db, business.id),
+    fetchOrdersForChatContext(db, business.id),
+    fetchClientsForChatContext(db, business.id, 20),
     fetchCampaignsListAndStats(db, business.id),
-    fetchFinanceTransactionsForBusiness(db, business.id, 200),
+    fetchFinanceTransactionsCurrentMonth(db, business.id, 250),
+    fetchCalendarEventsForChat(db, business.id, 14),
   ]);
 
-  const now = new Date();
-  const startM = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const endM = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const financeRows = financeMonth.slice(0, 50);
+
   let monthIncome = 0;
   let monthExpense = 0;
-  for (const row of financeRows) {
-    const raw = row.date ?? row.createdAt;
-    let d = null;
-    if (raw && typeof raw === "object" && raw !== null && typeof /** @type {{ toDate?: () => Date }} */ (raw).toDate === "function") {
-      try {
-        d = /** @type {{ toDate: () => Date }} */ (raw).toDate();
-      } catch {
-        d = null;
-      }
-    }
-    const t = d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
-    if (t >= startM.getTime() && t <= endM.getTime()) {
-      const amt = Number(row.amount);
-      if (Number.isFinite(amt) && amt > 0) {
-        if (row.type === "expense") monthExpense += amt;
-        else monthIncome += amt;
-      }
-    }
+  for (const row of financeMonth) {
+    const amt = Number(row.amount);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    if (row.type === "expense") monthExpense += amt;
+    else monthIncome += amt;
   }
 
-  const profile = serializeForAi(business.data) || {};
+  const campaignsShort = (campAgg.campaigns || []).slice(0, 15);
+
+  const profile = slimBusinessProfileForChat(business.data) || {};
   firebaseContextPayload = {
     businessId: business.id,
     profile,
+    jobs: serializeForAi(jobs),
     orders: serializeForAi(orders),
     clients: serializeForAi(clients),
-    campaigns: serializeForAi(campAgg.campaigns || []),
+    campaigns: serializeForAi(campaignsShort),
+    calendarNextTwoWeeks: serializeForAi(calendarNext),
     financeThisMonth: {
       income: monthIncome,
       expense: monthExpense,
       net: monthIncome - monthExpense,
     },
-    financeRecent: serializeForAi(financeRows.slice(0, 40)),
+    financeRecent: serializeForAi(financeRows),
     stats: {
-      orderCount: orders.length,
+      jobsActiveCount: jobs.length,
+      ordersActiveCount: orders.length,
       clientCount: clients.length,
-      campaignCount: (campAgg.campaigns || []).length,
-      financeCount: financeRows.length,
+      campaignCount: campaignsShort.length,
+      financeMonthCount: financeMonth.length,
+      calendarEventCount: calendarNext.length,
     },
+    contextNote:
+      "Contexto acotado: trabajos y pedidos solo activos (no entregados/cancelados); últimos 20 clientes; finanzas del mes actual; calendario próximas 2 semanas; hasta 15 campañas.",
   };
 
   const meta = document.getElementById("yc-chat-context-meta");
   if (meta) {
-    meta.textContent = `${orders.length} órdenes · ${clients.length} clientes · ${(campAgg.campaigns || []).length} campañas`;
+    meta.textContent = `${jobs.length} trabajos activos · ${orders.length} pedidos activos · ${clients.length} clientes (últimos 20)`;
   }
 }
 
