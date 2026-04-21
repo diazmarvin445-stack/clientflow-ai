@@ -184,6 +184,14 @@ function orderStatusLabel(raw) {
   return "Pendiente";
 }
 
+function orderStatusBadgeClass(raw) {
+  const key = String(raw || "").toLowerCase().trim();
+  if (key === "completed" || key === "entregado") return "dash-badge--done";
+  if (key === "in_production" || key === "produccion") return "dash-badge--sched";
+  if (key === "cancelled" || key === "cancelado") return "dash-badge--cancelled";
+  return "dash-badge--prog";
+}
+
 function clearOrdersSubscription() {
   if (ordersUnsub) {
     ordersUnsub();
@@ -220,7 +228,10 @@ function renderOrdersRows(businessId, rows) {
     tdOrder.textContent = String(orderTitle);
 
     const tdStatus = document.createElement("td");
-    tdStatus.textContent = status;
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `dash-badge ${orderStatusBadgeClass(row.status)}`;
+    statusBadge.textContent = status;
+    tdStatus.appendChild(statusBadge);
 
     const tdDate = document.createElement("td");
     tdDate.className = "dash-table-muted";

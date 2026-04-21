@@ -3106,6 +3106,11 @@ body.dash-menu-open {
   color: #64748b;
 }
 
+.dash-badge--cancelled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .dash-workspace-aside {
   display: block;
   min-width: 0;
