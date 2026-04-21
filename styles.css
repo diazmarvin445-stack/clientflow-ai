@@ -2631,6 +2631,7 @@ body.dash-menu-open {
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
   padding: 0.75rem;
   z-index: 9999;
+  overflow: visible;
 }
 
 .dash-cal-pop__head,
@@ -2649,11 +2650,29 @@ body.dash-menu-open {
   margin: 0.5rem 0 0.4rem;
 }
 
+.dash-cal-nav__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
 .dash-cal-nav__label {
   text-align: center;
   font-size: 0.82rem;
   font-weight: 700;
   color: #0f172a;
+}
+
+.dash-cal-nav__today {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.dash-cal-mini-wrap {
+  position: relative;
+  margin-bottom: 0.35rem;
 }
 
 .dash-cal-mini__month {
@@ -2664,28 +2683,175 @@ body.dash-menu-open {
 .dash-cal-mini__grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
-.dash-cal-mini__day,
 .dash-cal-mini__empty {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.65rem;
-  font-size: 0.75rem;
-  border-radius: 0.45rem;
+  min-height: 2.85rem;
 }
 
-.dash-cal-mini__day {
+.dash-cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.15rem;
+  min-height: 2.85rem;
+  padding: 0.2rem 0.1rem 0.35rem;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
   background: #f8fafc;
   color: #0f172a;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
-.dash-cal-mini__day.has-event {
-  background: #dbeafe;
-  color: #1d4ed8;
+.dash-cal-day:hover {
+  background: #f1f5f9;
+}
+
+.dash-cal-day:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+
+.dash-cal-day--today {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
+}
+
+.dash-cal-day--has-events:not(.dash-cal-day--today) {
+  background: #eff6ff;
+}
+
+.dash-cal-day--outside {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.dash-cal-day--outside:hover {
+  background: #eef2f7;
+}
+
+.dash-cal-day__num {
+  font-size: 0.78rem;
   font-weight: 700;
+  line-height: 1.1;
+}
+
+.dash-cal-day__dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  min-height: 8px;
+}
+
+.dash-cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dash-cal-dot--entrega {
+  background: #16a34a;
+}
+
+.dash-cal-dot--cita {
+  background: #2563eb;
+}
+
+.dash-cal-dot--reunion {
+  background: #9333ea;
+}
+
+.dash-cal-dot--recordatorio {
+  background: #ca8a04;
+}
+
+.dash-cal-dot-more {
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #64748b;
+  line-height: 1;
+}
+
+.dash-cal-day-pop {
+  position: absolute;
+  z-index: 10;
+  width: min(260px, calc(100% - 1rem));
+  max-height: min(320px, 70vh);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  padding: 0.5rem 0.55rem;
+  overflow: hidden;
+}
+
+.dash-cal-day-pop__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: min(300px, 68vh);
+}
+
+.dash-cal-day-pop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.dash-cal-day-pop__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-y: auto;
+  max-height: 200px;
+  padding-right: 0.1rem;
+}
+
+.dash-cal-day-pop__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #0f172a;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.dash-cal-day-pop__row:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dash-cal-day-pop__time {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.dash-cal-day-pop__acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.dash-cal-day-pop .dash-quick-btn {
+  width: 100%;
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 .dash-cal-week-list {

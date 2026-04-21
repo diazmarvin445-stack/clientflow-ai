@@ -11,6 +11,7 @@ import {
   doc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -260,19 +261,24 @@ function createCalendarPopoverUi() {
       </div>
       <div class="dash-cal-nav">
         <button type="button" class="dash-panel-link" id="dash-cal-prev" aria-label="Mes anterior">&lt;</button>
-        <div class="dash-cal-nav__label" id="dash-cal-month-label"></div>
+        <div class="dash-cal-nav__center">
+          <div class="dash-cal-nav__label" id="dash-cal-month-label"></div>
+          <button type="button" class="dash-panel-link dash-cal-nav__today" id="dash-cal-today">Hoy</button>
+        </div>
         <button type="button" class="dash-panel-link" id="dash-cal-next" aria-label="Mes siguiente">&gt;</button>
       </div>
-      <div class="dash-cal-mini" id="dash-cal-mini"></div>
-      <div class="dash-cal-today-list" id="dash-cal-today-list"></div>
-      <div class="dash-cal-week-list" id="dash-cal-week-list"></div>
+      <div class="dash-cal-mini-wrap">
+        <div class="dash-cal-mini" id="dash-cal-mini" aria-label="Calendario mensual"></div>
+        <div class="dash-cal-day-pop" id="dash-cal-day-pop" hidden></div>
+      </div>
       <div class="dash-cal-pop__actions">
         <button type="button" class="dash-quick-btn" id="dash-cal-add">+ Agregar evento</button>
       </div>
     </div>
     <dialog class="dash-cal-modal" id="dash-cal-modal">
       <form method="dialog" id="dash-cal-form">
-        <h3>Nuevo evento</h3>
+        <input type="hidden" id="dash-cal-edit-id" value="" />
+        <h3 id="dash-cal-modal-title">Nuevo evento</h3>
         <input id="dash-cal-title" class="orders-input" placeholder="Título" required />
         <input id="dash-cal-date" class="orders-input" type="date" required />
         <input id="dash-cal-time" class="orders-input" type="time" />
@@ -307,13 +313,15 @@ async function initFloatingCalendar(auth, db) {
   const close = document.getElementById("dash-cal-close");
   const prevBtn = document.getElementById("dash-cal-prev");
   const nextBtn = document.getElementById("dash-cal-next");
+  const todayNavBtn = document.getElementById("dash-cal-today");
   const monthLabel = document.getElementById("dash-cal-month-label");
   const mini = document.getElementById("dash-cal-mini");
-  const weekList = document.getElementById("dash-cal-week-list");
-  const todayList = document.getElementById("dash-cal-today-list");
+  const dayPop = document.getElementById("dash-cal-day-pop");
   const addBtn = document.getElementById("dash-cal-add");
   const modal = document.getElementById("dash-cal-modal");
   const form = document.getElementById("dash-cal-form");
+  const modalTitleEl = document.getElementById("dash-cal-modal-title");
+  const editIdInput = document.getElementById("dash-cal-edit-id");
   const clientSel = document.getElementById("dash-cal-client");
   const cancelBtn = document.getElementById("dash-cal-cancel");
   if (
@@ -323,13 +331,15 @@ async function initFloatingCalendar(auth, db) {
     !close ||
     !prevBtn ||
     !nextBtn ||
+    !todayNavBtn ||
     !monthLabel ||
     !mini ||
-    !weekList ||
-    !todayList ||
+    !dayPop ||
     !addBtn ||
     !modal ||
     !form ||
+    !modalTitleEl ||
+    !editIdInput ||
     !clientSel ||
     !cancelBtn
   ) {
@@ -344,6 +354,8 @@ async function initFloatingCalendar(auth, db) {
   if (!businessId) return;
 
   let monthCursor = new Date();
+  /** @type {{ id: string, [k: string]: unknown }[]} */
+  let calendarRows = [];
 
   function parseEventDate(value) {
     if (!value) return null;
@@ -363,6 +375,20 @@ async function initFloatingCalendar(auth, db) {
     return v;
   }
 
+  /** @param {string} t */
+  function dotClassForType(t) {
+    const m = mapType(String(t || ""));
+    if (m === "entrega") return "dash-cal-dot dash-cal-dot--entrega";
+    if (m === "cita") return "dash-cal-dot dash-cal-dot--cita";
+    if (m === "reunion") return "dash-cal-dot dash-cal-dot--reunion";
+    return "dash-cal-dot dash-cal-dot--recordatorio";
+  }
+
+  function closeDayPop() {
+    dayPop.hidden = true;
+    dayPop.innerHTML = "";
+  }
+
   async function loadClients() {
     clientSel.innerHTML = '<option value="">Cliente (opcional)</option>';
     const clientSnap = await getDocs(
@@ -378,91 +404,210 @@ async function initFloatingCalendar(auth, db) {
     });
   }
 
-  async function loadCalendarView() {
-    const calSnap = await getDocs(
-      query(collection(db, "businesses", businessId, "calendar"), orderBy("date", "asc"), limit(300)),
-    );
-    const rows = calSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  /** Agrupa eventos por YYYY-MM-DD con orden dentro del día. */
+  function eventsByYmd(rows) {
+    /** @type {Map<string, { id: string, [k: string]: unknown }[]>} */
+    const map = new Map();
+    for (const r of rows) {
+      const dt = parseEventDate(r.date);
+      if (!dt) continue;
+      const k = fmtDateYmd(dt);
+      const list = map.get(k) || [];
+      list.push(r);
+      map.set(k, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => {
+        const ta = typeof a.time === "string" ? a.time : "";
+        const tb = typeof b.time === "string" ? b.time : "";
+        if (ta !== tb) return ta.localeCompare(tb);
+        return String(a.title || "").localeCompare(String(b.title || ""));
+      });
+    }
+    return map;
+  }
+
+  function openAddModal(dateYmd, editEvent) {
+    editIdInput.value = editEvent?.id ? String(editEvent.id) : "";
+    modalTitleEl.textContent = editEvent?.id ? "Editar evento" : "Nuevo evento";
+    document.getElementById("dash-cal-title").value = editEvent?.title ? String(editEvent.title) : "";
+    document.getElementById("dash-cal-date").value = dateYmd || fmtDateYmd(new Date());
+    document.getElementById("dash-cal-time").value = editEvent?.time ? String(editEvent.time) : "";
+    const selType = mapType(String(editEvent?.type || "cita"));
+    document.getElementById("dash-cal-type").value =
+      selType === "entrega" || selType === "cita" || selType === "reunion" || selType === "recordatorio"
+        ? selType
+        : "cita";
+    document.getElementById("dash-cal-notes").value = editEvent?.notes ? String(editEvent.notes) : "";
+    const cid = editEvent?.clientId ? String(editEvent.clientId) : "";
+    clientSel.value = cid;
+    modal.showModal();
+    closeDayPop();
+  }
+
+  function renderCalendar() {
+    const rows = calendarRows;
     const now = new Date();
     const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
     const monthEnd = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
     monthLabel.textContent = monthStart.toLocaleDateString("es", { month: "long", year: "numeric" });
     const firstDow = (monthStart.getDay() + 6) % 7;
     const days = monthEnd.getDate();
-    const eventsByDate = new Map();
-    rows.forEach((r) => {
-      const dt = parseEventDate(r.date);
-      if (!dt) return;
-      const k = fmtDateYmd(dt);
-      eventsByDate.set(k, (eventsByDate.get(k) || 0) + 1);
-    });
+    const byDay = eventsByYmd(rows);
+    const todayYmd = fmtDateYmd(now);
+
     const grid = [];
-    for (let i = 0; i < firstDow; i += 1) grid.push('<span class="dash-cal-mini__empty"></span>');
+    const prevMonthEnd = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 0);
+    const prevMonthDays = prevMonthEnd.getDate();
+    for (let i = 0; i < firstDow; i += 1) {
+      const dayNum = prevMonthDays - firstDow + i + 1;
+      const cellDate = new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, dayNum);
+      const k = fmtDateYmd(cellDate);
+      const dayEvents = byDay.get(k) || [];
+      const dots = dayEvents
+        .slice(0, 3)
+        .map((ev) => `<span class="${dotClassForType(ev.type)}" aria-hidden="true"></span>`)
+        .join("");
+      grid.push(`<button type="button" class="dash-cal-day dash-cal-day--outside${dayEvents.length ? " dash-cal-day--has-events" : ""}" data-cal-ymd="${k}" aria-label="Día ${dayNum}, mes anterior${dayEvents.length ? `, ${dayEvents.length} evento(s)` : ""}">
+        <span class="dash-cal-day__num">${dayNum}</span>
+        <span class="dash-cal-day__dots" aria-hidden="true">${dots}</span>
+      </button>`);
+    }
     for (let d = 1; d <= days; d += 1) {
-      const dt = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), d);
-      const k = fmtDateYmd(dt);
-      const n = eventsByDate.get(k) || 0;
-      const cls = n > 0 ? "dash-cal-mini__day has-event" : "dash-cal-mini__day";
-      grid.push(`<span class="${cls}" title="${n > 0 ? `${n} evento(s)` : "Sin eventos"}">${d}</span>`);
+      const cellDate = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), d);
+      const k = fmtDateYmd(cellDate);
+      const dayEvents = byDay.get(k) || [];
+      const isToday = k === todayYmd;
+      const hasEv = dayEvents.length > 0;
+      const dots = [];
+      const maxDots = 5;
+      for (let i = 0; i < Math.min(dayEvents.length, maxDots); i += 1) {
+        dots.push(`<span class="${dotClassForType(dayEvents[i].type)}" aria-hidden="true"></span>`);
+      }
+      if (dayEvents.length > maxDots) {
+        dots.push(`<span class="dash-cal-dot-more">+${dayEvents.length - maxDots}</span>`);
+      }
+      const dayClasses = ["dash-cal-day"];
+      if (isToday) dayClasses.push("dash-cal-day--today");
+      if (hasEv) dayClasses.push("dash-cal-day--has-events");
+      grid.push(`<button type="button" class="${dayClasses.join(" ")}" data-cal-ymd="${k}" aria-label="Día ${d}${hasEv ? `, ${dayEvents.length} evento(s)` : ""}">
+        <span class="dash-cal-day__num">${d}</span>
+        <span class="dash-cal-day__dots" aria-hidden="true">${dots.join("")}</span>
+      </button>`);
+    }
+    const totalCells = firstDow + days;
+    const trailing = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= trailing; i += 1) {
+      const cellDate = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, i);
+      const k = fmtDateYmd(cellDate);
+      const dayEvents = byDay.get(k) || [];
+      const dots = dayEvents
+        .slice(0, 3)
+        .map((ev) => `<span class="${dotClassForType(ev.type)}" aria-hidden="true"></span>`)
+        .join("");
+      grid.push(`<button type="button" class="dash-cal-day dash-cal-day--outside${dayEvents.length ? " dash-cal-day--has-events" : ""}" data-cal-ymd="${k}" aria-label="Día ${i}, mes siguiente${dayEvents.length ? `, ${dayEvents.length} evento(s)` : ""}">
+        <span class="dash-cal-day__num">${i}</span>
+        <span class="dash-cal-day__dots" aria-hidden="true">${dots}</span>
+      </button>`);
     }
     mini.innerHTML = `<div class="dash-cal-mini__grid">${grid.join("")}</div>`;
 
-    const weekCut = new Date();
-    weekCut.setDate(weekCut.getDate() + 7);
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const todayEvents = rows
-      .map((r) => ({ ...r, _d: parseEventDate(r.date) }))
-      .filter((r) => r._d && r._d >= todayStart && r._d <= todayEnd)
-      .sort((a, b) => a._d - b._d)
-      .slice(0, 8);
-    todayList.innerHTML = todayEvents.length
-      ? `<div class="dash-cal-today-title">Hoy</div>${todayEvents
-          .map(
-            (r) => `<div class="dash-cal-week-item"><span>•</span><span>${r.title || "Evento"}${r.time ? ` · ${r.time}` : ""}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
-          )
-          .join("")}`
-      : '<p class="dash-table-muted">Hoy no hay eventos.</p>';
+    mini.querySelectorAll("button[data-cal-ymd]").forEach((el) => {
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const ymd = el.getAttribute("data-cal-ymd");
+        if (!ymd) return;
+        const list = byDay.get(ymd) || [];
+        if (list.length === 0) {
+          openAddModal(ymd, null);
+          return;
+        }
+        const anchor = /** @type {HTMLElement} */ (el);
+        const rect = anchor.getBoundingClientRect();
+        const popRect = pop.getBoundingClientRect();
+        const top = rect.bottom - popRect.top + 4;
+        const left = Math.min(Math.max(rect.left - popRect.left - 4, 0), popRect.width - 220);
+        const lines = list
+          .map((evRow) => {
+            const t = typeof evRow.time === "string" && evRow.time ? `${evRow.time} · ` : "";
+            const cli =
+              typeof evRow.clientName === "string" && evRow.clientName.trim()
+                ? ` · ${evRow.clientName.trim()}`
+                : "";
+            return `<div class="dash-cal-day-pop__row" data-ev-id="${evRow.id}">
+              <div class="dash-cal-day-pop__main"><span class="dash-cal-day-pop__time">${t}</span>${evRow.title || "Evento"}${cli}</div>
+              <div class="dash-cal-day-pop__acts">
+                <button type="button" class="dash-panel-link" data-cal-pop-edit="${evRow.id}">Editar</button>
+                <button type="button" class="dash-panel-link" data-cal-pop-done="${evRow.id}">Completar</button>
+                <button type="button" class="dash-panel-link" data-cal-pop-del="${evRow.id}">Eliminar</button>
+              </div>
+            </div>`;
+          })
+          .join("");
+        dayPop.innerHTML = `<div class="dash-cal-day-pop__inner">
+          <div class="dash-cal-day-pop__head"><strong>${new Date(ymd + "T12:00:00").toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" })}</strong>
+          <button type="button" class="dash-panel-link" id="dash-cal-day-pop-close">Cerrar</button></div>
+          <div class="dash-cal-day-pop__list">${lines}</div>
+          <button type="button" class="dash-quick-btn" id="dash-cal-day-pop-add">+ Agregar otro evento para este día</button>
+        </div>`;
+        dayPop.hidden = false;
+        dayPop.style.top = `${top}px`;
+        dayPop.style.left = `${left}px`;
 
-    const upcoming = rows
-      .map((r) => ({ ...r, _d: parseEventDate(r.date) }))
-      .filter((r) => r._d && r._d >= new Date() && r._d <= weekCut)
-      .sort((a, b) => a._d - b._d)
-      .slice(0, 12);
-    weekList.innerHTML = upcoming.length
-      ? `<div class="dash-cal-today-title">Esta semana</div>${upcoming
-          .map(
-            (r) =>
-              `<div class="dash-cal-week-item"><span>${r._d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span><span>${r.title || "Evento"}${r.time ? ` · ${r.time}` : ""}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
-          )
-          .join("")}`
-      : '<p class="dash-table-muted">No tienes citas ni entregas programadas.</p>';
-
-    pop.querySelectorAll("[data-cal-done]").forEach((x) => {
-      x.addEventListener("click", async (ev) => {
-        ev.preventDefault();
-        const id = x.getAttribute("data-cal-done");
-        if (!id) return;
-        await updateDoc(doc(db, "businesses", businessId, "calendar", id), {
-          status: "completed",
-          completedAt: serverTimestamp(),
+        dayPop.querySelector("#dash-cal-day-pop-close")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeDayPop();
         });
-        await loadCalendarView();
-      });
-    });
-    pop.querySelectorAll("[data-cal-del]").forEach((x) => {
-      x.addEventListener("click", async (ev) => {
-        ev.preventDefault();
-        const id = x.getAttribute("data-cal-del");
-        if (!id) return;
-        await deleteDoc(doc(db, "businesses", businessId, "calendar", id));
-        await loadCalendarView();
+        dayPop.querySelector("#dash-cal-day-pop-add")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openAddModal(ymd, null);
+        });
+        dayPop.querySelectorAll("[data-cal-pop-edit]").forEach((b) => {
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const id = b.getAttribute("data-cal-pop-edit");
+            const row = list.find((x) => x.id === id);
+            if (row) openAddModal(ymd, row);
+          });
+        });
+        dayPop.querySelectorAll("[data-cal-pop-done]").forEach((b) => {
+          b.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const id = b.getAttribute("data-cal-pop-done");
+            if (!id) return;
+            await updateDoc(doc(db, "businesses", businessId, "calendar", id), {
+              status: "completed",
+              completedAt: serverTimestamp(),
+            });
+            closeDayPop();
+          });
+        });
+        dayPop.querySelectorAll("[data-cal-pop-del]").forEach((b) => {
+          b.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const id = b.getAttribute("data-cal-pop-del");
+            if (!id) return;
+            await deleteDoc(doc(db, "businesses", businessId, "calendar", id));
+            closeDayPop();
+          });
+        });
       });
     });
   }
 
+  const calQuery = query(collection(db, "businesses", businessId, "calendar"), orderBy("date", "asc"), limit(400));
+  onSnapshot(
+    calQuery,
+    (snap) => {
+      calendarRows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      closeDayPop();
+      renderCalendar();
+    },
+    (err) => console.warn("[DashShell] calendar snapshot", err),
+  );
+
   await loadClients();
-  await loadCalendarView();
+  renderCalendar();
 
   function closePop() {
     pop.hidden = true;
@@ -476,22 +621,46 @@ async function initFloatingCalendar(auth, db) {
   });
   close.addEventListener("click", closePop);
   pop.addEventListener("click", (e) => e.stopPropagation());
-  prevBtn.addEventListener("click", async (e) => {
+  const miniWrap = mini.closest(".dash-cal-mini-wrap");
+  if (miniWrap) {
+    miniWrap.addEventListener("click", (e) => {
+      const t = /** @type {HTMLElement} */ (e.target);
+      if (!t.closest(".dash-cal-day") && !t.closest(".dash-cal-day-pop")) closeDayPop();
+    });
+  }
+  prevBtn.addEventListener("click", (e) => {
     e.stopPropagation();
+    closeDayPop();
     monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1);
-    await loadCalendarView();
+    renderCalendar();
   });
-  nextBtn.addEventListener("click", async (e) => {
+  nextBtn.addEventListener("click", (e) => {
     e.stopPropagation();
+    closeDayPop();
     monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1);
-    await loadCalendarView();
+    renderCalendar();
+  });
+  todayNavBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeDayPop();
+    monthCursor = new Date();
+    renderCalendar();
   });
   document.addEventListener("click", (e) => {
     if (!ui.contains(e.target)) closePop();
   });
 
-  addBtn.addEventListener("click", () => modal.showModal());
-  cancelBtn.addEventListener("click", () => modal.close());
+  addBtn.addEventListener("click", () => {
+    openAddModal(fmtDateYmd(new Date()), null);
+  });
+  modal.addEventListener("close", () => {
+    editIdInput.value = "";
+    modalTitleEl.textContent = "Nuevo evento";
+  });
+  cancelBtn.addEventListener("click", () => {
+    editIdInput.value = "";
+    modal.close();
+  });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const title = document.getElementById("dash-cal-title")?.value?.trim();
@@ -505,22 +674,37 @@ async function initFloatingCalendar(auth, db) {
     const notes = document.getElementById("dash-cal-notes")?.value?.trim() || "";
     if (!title || !date) return;
     const dt = new Date(`${date}T${time || "12:00"}:00`);
-    await addDoc(collection(db, "businesses", businessId, "calendar"), {
-      title,
-      date: Timestamp.fromDate(dt),
-      time: time || "",
-      type,
-      clientId,
-      clientName,
-      notes,
-      createdBy: "marvin",
-      createdAt: serverTimestamp(),
-      status: "pending",
-    });
+    const editId = editIdInput.value?.trim();
+    if (editId) {
+      await updateDoc(doc(db, "businesses", businessId, "calendar", editId), {
+        title,
+        date: Timestamp.fromDate(dt),
+        time: time || "",
+        type,
+        clientId,
+        clientName,
+        notes,
+      });
+    } else {
+      await addDoc(collection(db, "businesses", businessId, "calendar"), {
+        title,
+        date: Timestamp.fromDate(dt),
+        time: time || "",
+        type,
+        clientId,
+        clientName,
+        notes,
+        createdBy: "marvin",
+        createdAt: serverTimestamp(),
+        status: "pending",
+      });
+    }
     form.reset();
+    editIdInput.value = "";
+    modalTitleEl.textContent = "Nuevo evento";
     modal.close();
     monthCursor = new Date(dt.getFullYear(), dt.getMonth(), 1);
-    await loadCalendarView();
+    closeDayPop();
   });
 }
 
