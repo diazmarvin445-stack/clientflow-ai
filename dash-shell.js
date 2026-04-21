@@ -845,13 +845,13 @@ export function ensureChatNavLink() {
     chatLink.className = "dash-nav-link";
     chatLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--chat" aria-hidden="true"></span>
         Chat IA`;
-    const camp = nav.querySelector('a[href="campanas.html"]');
-    if (camp && camp.nextSibling) {
-      camp.parentNode.insertBefore(chatLink, camp.nextSibling);
-    } else if (camp) {
-      camp.parentNode.appendChild(chatLink);
+    const dash = nav.querySelector('a[href="dashboard.html"]');
+    if (dash && dash.nextSibling) {
+      dash.parentNode.insertBefore(chatLink, dash.nextSibling);
+    } else if (dash) {
+      dash.parentNode.appendChild(chatLink);
     } else {
-      nav.appendChild(chatLink);
+      nav.insertBefore(chatLink, nav.firstChild);
     }
   }
   applyActiveNavLink(nav);

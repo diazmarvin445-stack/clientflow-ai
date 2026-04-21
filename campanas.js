@@ -639,7 +639,7 @@ function applyGeneratorPrefillFromBusiness(data) {
 }
 
 /**
- * Valores efectivos para el mock: campo del formulario si el usuario escribió algo; si no, perfil.
+ * Valores efectivos: campo del formulario si el usuario escribió algo; si no, perfil.
  * @param {ReturnType<typeof readGeneratorInputsFromDom>} fromDom
  * @param {ReturnType<typeof getCampaignGeneratorProfileDefaults>} profile
  */
@@ -887,7 +887,7 @@ function runCampaignGenerator() {
         if (diverged) {
           console.warn(`${LOG_PREFIX} [gen] DOM at click vs pre-submit differ (IME/autofill?)`, {
             atClick: inputsAtEvent,
-            preMock: fromDom,
+            preSubmitDom: fromDom,
           });
         }
       }
