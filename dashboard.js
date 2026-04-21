@@ -2,21 +2,119 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   collection,
-  getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import {
-  resolveBusinessForUser,
-  fetchCampaignsListAndStats,
-  fetchClientsForBusiness,
-  fetchFinanceTransactionsForBusiness,
-  formatBusinessMeta,
-  fetchJobsForBusiness,
-  initialsFromName,
-} from "./dashboard-data.js";
+import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+
+/** @type {(() => void) | null} */
+let unsubscribeDashboard = null;
+
+/**
+ * @param {unknown} v
+ * @returns {Date | null}
+ */
+function toDate(v) {
+  if (v == null) return null;
+  if (typeof v === "object" && v !== null && typeof /** @type {{ toDate?: () => Date }} */ (v).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (v).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  const d = new Date(/** @type {string | number} */ (v));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * @param {{ id: string, data: Record<string, unknown> } | null} business
+ * @param {Record<string, unknown>[]} orders
+ * @param {Record<string, unknown>[]} clients
+ * @param {Record<string, unknown>[]} financeRows
+ * @param {Record<string, unknown>[]} calendarRows
+ * @param {Record<string, unknown>[]} campaignRows
+ */
+function renderDashboardSnapshot(business, orders, clients, financeRows, calendarRows, campaignRows) {
+  renderHeader(business);
+  renderGreeting();
+
+  if (!business) {
+    return;
+  }
+
+  const activeOrders = orders.filter((o) => !["entregado", "cancelado"].includes(String(o.status || "").toLowerCase()));
+  const pendingPayments = orders.filter((o) => (Number(o.balance) || 0) > 0).length;
+  const today = new Date();
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+  const dayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+  const deliveriesToday = orders.filter((o) => {
+    const d = toDate(o.deliveryDate);
+    return d && d >= dayStart && d <= dayEnd;
+  }).length;
+
+  setText(
+    "dash-alert-strip",
+    `🔥 ${deliveriesToday} entregas hoy • ${pendingPayments} pagos pendientes • ${activeOrders.length} pedidos activos`,
+  );
+
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+  const daysInMonth = monthEnd.getDate();
+  const daily = Array.from({ length: daysInMonth }, () => 0);
+  financeRows.forEach((r) => {
+    if (r.type !== "income") return;
+    const d = toDate(r.date || r.createdAt);
+    if (!d || d < monthStart || d > monthEnd) return;
+    daily[d.getDate() - 1] += Number(r.amount) || 0;
+  });
+  drawSalesChart(document.getElementById("dash-sales-chart"), daily);
+
+  const monthIncome = daily.reduce((a, b) => a + b, 0);
+  const monthExpense = financeRows.reduce((sum, r) => {
+    if (r.type !== "expense") return sum;
+    const d = toDate(r.date || r.createdAt);
+    if (!d || d < monthStart || d > monthEnd) return sum;
+    return sum + (Number(r.amount) || 0);
+  }, 0);
+
+  let activeCampaigns = 0;
+  for (const row of campaignRows) {
+    if (String(row.status || "").toLowerCase() === "active") activeCampaigns += 1;
+  }
+
+  setText("dash-mini-active", String(activeOrders.length));
+  setText("dash-mini-balance", formatUsd(monthIncome - monthExpense));
+  setText("dash-mini-clients", String(clients.length));
+  setText("dash-mini-campaigns", String(activeCampaigns));
+
+  const upcoming = calendarRows
+    .map((x) => ({ ...x, _d: toDate(x.date) }))
+    .filter((x) => x._d && x._d >= dayStart)
+    .sort((a, b) => /** @type {number} */ (a._d?.getTime()) - /** @type {number} */ (b._d?.getTime()))
+    .slice(0, 5);
+  const ul = document.getElementById("dash-upcoming-list");
+  if (ul) {
+    ul.innerHTML = "";
+    if (!upcoming.length) {
+      const li = document.createElement("li");
+      li.className = "dash-table-muted";
+      li.textContent = "No tienes eventos próximos.";
+      ul.appendChild(li);
+    } else {
+      upcoming.forEach((e) => {
+        const li = document.createElement("li");
+        li.textContent = `• ${formatShortDate(e._d)} - ${e.title || "Evento"}`;
+        ul.appendChild(li);
+      });
+    }
+  }
+}
 
 function formatUsd(n) {
   const v = Number(n) || 0;
@@ -158,84 +256,92 @@ function orderStatusBadgeClass(raw) {
 }
 
 async function loadDashboardForUser(user) {
+  if (unsubscribeDashboard) {
+    unsubscribeDashboard();
+    unsubscribeDashboard = null;
+  }
+
   const business = await resolveBusinessForUser(db, user);
-  renderHeader(business);
-  renderGreeting();
 
   if (!business) {
+    renderHeader(null);
+    renderGreeting();
     return;
   }
 
-  const [ordersSnap, clients, campaigns, financeRows, calSnap] = await Promise.all([
-    getDocs(query(collection(db, "businesses", business.id, "orders"), orderBy("createdAt", "desc"))),
-    fetchClientsForBusiness(db, business.id),
-    fetchCampaignsListAndStats(db, business.id),
-    fetchFinanceTransactionsForBusiness(db, business.id, 500),
-    getDocs(query(collection(db, "businesses", business.id, "calendar"), orderBy("date", "asc"))),
-  ]);
+  const bid = business.id;
+  /** @type {{ orders: Record<string, unknown>[]; clients: Record<string, unknown>[]; finance: Record<string, unknown>[]; calendar: Record<string, unknown>[]; campaigns: Record<string, unknown>[] }} */
+  const state = {
+    orders: [],
+    clients: [],
+    finance: [],
+    calendar: [],
+    campaigns: [],
+  };
 
-  const orders = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const activeOrders = orders.filter((o) => !["entregado", "cancelado"].includes(String(o.status || "").toLowerCase()));
-  const pendingPayments = orders.filter((o) => (Number(o.balance) || 0) > 0).length;
-  const today = new Date();
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
-  const dayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-  const deliveriesToday = orders.filter((o) => {
-    const d = toDate(o.deliveryDate);
-    return d && d >= dayStart && d <= dayEnd;
-  }).length;
+  const rerender = () => {
+    renderDashboardSnapshot(business, state.orders, state.clients, state.finance, state.calendar, state.campaigns);
+  };
 
-  setText(
-    "dash-alert-strip",
-    `🔥 ${deliveriesToday} entregas hoy • ${pendingPayments} pagos pendientes • ${activeOrders.length} clientes esperando`,
+  const unsubs = [];
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, "businesses", bid, "orders"), orderBy("createdAt", "desc"), limit(400)),
+      (snap) => {
+        state.orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rerender();
+      },
+      (err) => console.error("[dashboard] orders", err),
+    ),
   );
 
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-  const daysInMonth = monthEnd.getDate();
-  const daily = Array.from({ length: daysInMonth }, () => 0);
-  financeRows.forEach((r) => {
-    if (r.type !== "income") return;
-    const d = toDate(r.date || r.createdAt);
-    if (!d || d < monthStart || d > monthEnd) return;
-    daily[d.getDate() - 1] += Number(r.amount) || 0;
-  });
-  drawSalesChart(document.getElementById("dash-sales-chart"), daily);
+  unsubs.push(
+    onSnapshot(
+      collection(db, "businesses", bid, "clients"),
+      (snap) => {
+        state.clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rerender();
+      },
+      (err) => console.error("[dashboard] clients", err),
+    ),
+  );
 
-  const monthIncome = daily.reduce((a, b) => a + b, 0);
-  const monthExpense = financeRows.reduce((sum, r) => {
-    if (r.type !== "expense") return sum;
-    const d = toDate(r.date || r.createdAt);
-    if (!d || d < monthStart || d > monthEnd) return sum;
-    return sum + (Number(r.amount) || 0);
-  }, 0);
-  setText("dash-mini-active", String(activeOrders.length));
-  setText("dash-mini-balance", formatUsd(monthIncome - monthExpense));
-  setText("dash-mini-clients", String(clients.length));
-  setText("dash-mini-campaigns", String(campaigns.activeCount));
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, "businesses", bid, "finance"), orderBy("date", "desc"), limit(500)),
+      (snap) => {
+        state.finance = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rerender();
+      },
+      (err) => console.error("[dashboard] finance", err),
+    ),
+  );
 
-  const upcoming = calSnap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .map((x) => ({ ...x, _d: toDate(x.date) }))
-    .filter((x) => x._d && x._d >= dayStart)
-    .sort((a, b) => a._d - b._d)
-    .slice(0, 5);
-  const ul = document.getElementById("dash-upcoming-list");
-  if (ul) {
-    ul.innerHTML = "";
-    if (!upcoming.length) {
-      const li = document.createElement("li");
-      li.className = "dash-table-muted";
-      li.textContent = "No tienes eventos próximos.";
-      ul.appendChild(li);
-    } else {
-      upcoming.forEach((e) => {
-        const li = document.createElement("li");
-        li.textContent = `• ${formatShortDate(e._d)} - ${e.title || "Evento"}`;
-        ul.appendChild(li);
-      });
-    }
-  }
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, "businesses", bid, "calendar"), orderBy("date", "desc"), limit(200)),
+      (snap) => {
+        state.calendar = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rerender();
+      },
+      (err) => console.error("[dashboard] calendar", err),
+    ),
+  );
+
+  unsubs.push(
+    onSnapshot(
+      collection(db, "businesses", bid, "campaigns"),
+      (snap) => {
+        state.campaigns = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rerender();
+      },
+      (err) => console.error("[dashboard] campaigns", err),
+    ),
+  );
+
+  unsubscribeDashboard = () => {
+    unsubs.forEach((fn) => fn());
+  };
 }
 
 function boot() {

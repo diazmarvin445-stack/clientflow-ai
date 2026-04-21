@@ -637,6 +637,226 @@ function shrinkFirebaseContextInitial(fc) {
   return c;
 }
 
+function mayaPlainJsonForContext(input) {
+  if (input === null || input === undefined) return input;
+  if (typeof input !== "object") return input;
+  if (input instanceof Date) return input.toISOString();
+  if (typeof /** @type {{ toDate?: () => Date }} */ (input).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (input).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
+    } catch {
+      return null;
+    }
+  }
+  if (Array.isArray(input)) return input.map((x) => mayaPlainJsonForContext(x));
+  const out = {};
+  for (const [k, v] of Object.entries(input)) {
+    out[k] = mayaPlainJsonForContext(v);
+  }
+  return out;
+}
+
+function mayaAdminToDate(v) {
+  if (v == null) return null;
+  if (typeof /** @type {{ toDate?: () => Date }} */ (v).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (v).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  return null;
+}
+
+const MAYA_CHAT_INACTIVE = new Set([
+  "entregado",
+  "cancelado",
+  "cancelada",
+  "cancelled",
+  "completed",
+  "done",
+]);
+const MAYA_CHAT_DELIVERED = new Set(["entregado", "completed", "done"]);
+
+function mayaChatRowActive(row) {
+  const s = String(row?.status ?? "")
+    .trim()
+    .toLowerCase();
+  if (!s) return true;
+  return !MAYA_CHAT_INACTIVE.has(s);
+}
+
+function mayaChatRowDelivered(row) {
+  const s = String(row?.status ?? "")
+    .trim()
+    .toLowerCase();
+  return MAYA_CHAT_DELIVERED.has(s);
+}
+
+function mayaChatRowSortTime(row) {
+  const u = mayaAdminToDate(row?.updatedAt);
+  const c = mayaAdminToDate(row?.createdAt);
+  const tu = u && !Number.isNaN(u.getTime()) ? u.getTime() : 0;
+  const tc = c && !Number.isNaN(c.getTime()) ? c.getTime() : 0;
+  return Math.max(tu, tc);
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {number} daysAhead
+ * @param {number} maxResults
+ */
+async function mayaFetchCalendarForChatServer(db, businessId, daysAhead, maxResults) {
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const limitEnd = new Date(dayStart);
+  limitEnd.setDate(limitEnd.getDate() + daysAhead);
+  limitEnd.setHours(23, 59, 59, 999);
+  const col = db.collection("businesses").doc(businessId).collection("calendar");
+  let snap;
+  try {
+    snap = await col
+      .where("date", ">=", Timestamp.fromDate(dayStart))
+      .orderBy("date", "asc")
+      .limit(maxResults)
+      .get();
+  } catch (e) {
+    console.warn("[chatWithAI] calendar query ascendente falló, usando escaneo acotado", e);
+    snap = await col.orderBy("date", "desc").limit(150).get();
+  }
+  const rows = [];
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    const d = mayaAdminToDate(data.date);
+    if (!d || Number.isNaN(d.getTime())) return;
+    if (d.getTime() < dayStart.getTime() || d.getTime() > limitEnd.getTime()) return;
+    rows.push({ id: docSnap.id, ...data });
+  });
+  rows.sort((a, b) => (mayaAdminToDate(a.date)?.getTime() ?? 0) - (mayaAdminToDate(b.date)?.getTime() ?? 0));
+  return rows.slice(0, maxResults);
+}
+
+/**
+ * Reemplaza listas de datos del contexto con lectura directa desde Firestore (sin caché del cliente).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {Record<string, unknown>} incomingRaw
+ */
+async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
+  const incoming = incomingRaw && typeof incomingRaw === "object" ? cloneJsonSafe(incomingRaw) : {};
+  const businessId = typeof incoming.businessId === "string" ? incoming.businessId.trim() : "";
+  if (!businessId) return incoming;
+
+  const bizSnap = await db.collection("businesses").doc(businessId).get();
+  const bizData = bizSnap.exists ? bizSnap.data() || {} : {};
+
+  const [jobsSnap, ordersSnap, clientsSnap, financeSnap, calendarRows, campSnap] = await Promise.all([
+    db.collection("businesses").doc(businessId).collection("jobs").orderBy("createdAt", "desc").limit(150).get(),
+    db.collection("businesses").doc(businessId).collection("orders").orderBy("createdAt", "desc").limit(150).get(),
+    db.collection("businesses").doc(businessId).collection("clients").orderBy("createdAt", "desc").limit(35).get(),
+    db.collection("businesses").doc(businessId).collection("finance").orderBy("date", "desc").limit(300).get(),
+    mayaFetchCalendarForChatServer(db, businessId, 28, 120),
+    db.collection("businesses").doc(businessId).collection("campaigns").limit(40).get(),
+  ]);
+
+  const jobRows = [];
+  jobsSnap.forEach((d) => jobRows.push({ id: d.id, ...d.data(), _cfCollection: "jobs" }));
+  const orderRows = [];
+  ordersSnap.forEach((d) => orderRows.push({ id: d.id, ...d.data(), _cfCollection: "orders" }));
+
+  const jobsActive = jobRows.filter(mayaChatRowActive).slice(0, 50);
+  const jobsDelivered = jobRows
+    .filter(mayaChatRowDelivered)
+    .sort((a, b) => mayaChatRowSortTime(b) - mayaChatRowSortTime(a))
+    .slice(0, 10);
+  const ordersActive = orderRows.filter(mayaChatRowActive).slice(0, 50);
+  const ordersDelivered = orderRows
+    .filter(mayaChatRowDelivered)
+    .sort((a, b) => mayaChatRowSortTime(b) - mayaChatRowSortTime(a))
+    .slice(0, 10);
+
+  const clients = [];
+  clientsSnap.forEach((d) => clients.push({ id: d.id, ...d.data() }));
+
+  const financeAll = [];
+  financeSnap.forEach((d) => financeAll.push({ id: d.id, ...d.data() }));
+
+  const now = new Date();
+  const startM = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endM = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const financeMonth = [];
+  for (const row of financeAll) {
+    const rawD = row.date ?? row.createdAt;
+    const d = mayaAdminToDate(rawD);
+    if (!d || Number.isNaN(d.getTime())) continue;
+    const t = d.getTime();
+    if (t >= startM.getTime() && t <= endM.getTime()) financeMonth.push(row);
+  }
+  financeMonth.sort((a, b) => {
+    const ta = mayaAdminToDate(a.date ?? a.createdAt)?.getTime() ?? 0;
+    const tb = mayaAdminToDate(b.date ?? b.createdAt)?.getTime() ?? 0;
+    return tb - ta;
+  });
+
+  let monthIncome = 0;
+  let monthExpense = 0;
+  for (const row of financeMonth) {
+    const amt = Number(row.amount);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    if (row.type === "expense") monthExpense += amt;
+    else monthIncome += amt;
+  }
+
+  const financeRecentCap = financeMonth.slice(0, 95);
+  const campaigns = [];
+  campSnap.forEach((d) => campaigns.push({ id: d.id, ...d.data() }));
+  campaigns.sort(
+    (a, b) => (mayaAdminToDate(b.createdAt)?.getTime() ?? 0) - (mayaAdminToDate(a.createdAt)?.getTime() ?? 0),
+  );
+  const campaignsShort = campaigns.slice(0, 22);
+
+  const profile = {
+    businessName: typeof bizData.businessName === "string" ? bizData.businessName.trim() : "",
+    serviceArea: typeof bizData.serviceArea === "string" ? bizData.serviceArea.trim() : "",
+    phone: typeof bizData.phone === "string" ? bizData.phone.trim() : "",
+  };
+
+  return {
+    ...incoming,
+    businessId,
+    profile,
+    jobs: mayaPlainJsonForContext(jobsActive),
+    jobsRecentDelivered: mayaPlainJsonForContext(jobsDelivered),
+    orders: mayaPlainJsonForContext(ordersActive),
+    ordersRecentDelivered: mayaPlainJsonForContext(ordersDelivered),
+    clients: mayaPlainJsonForContext(clients.slice(0, 30)),
+    calendarUpcomingFourWeeks: mayaPlainJsonForContext(calendarRows),
+    financeThisMonth: {
+      income: monthIncome,
+      expense: monthExpense,
+      net: monthIncome - monthExpense,
+    },
+    financeRecent: mayaPlainJsonForContext(financeRecentCap),
+    campaigns: mayaPlainJsonForContext(campaignsShort),
+    stats: {
+      jobsActiveCount: jobsActive.length,
+      jobsDeliveredListed: jobsDelivered.length,
+      ordersActiveCount: ordersActive.length,
+      ordersDeliveredListed: ordersDelivered.length,
+      clientCount: clients.length,
+      campaignCount: campaignsShort.length,
+      financeMonthCount: financeMonth.length,
+      calendarEventCount: calendarRows.length,
+    },
+    contextNote:
+      "Datos del negocio recargados desde Firestore en el servidor en esta petición (instantánea actual, no caché del navegador).",
+    contextServerRefreshedAt: new Date().toISOString(),
+  };
+}
+
 /**
  * @param {Record<string, unknown>} c
  * @returns {Set<string>}
@@ -1686,9 +1906,16 @@ export const chatWithAI = onRequest(
         }
 
         const body = req.body && typeof req.body === "object" ? req.body : {};
-        const firebaseContext =
+        let firebaseContext =
           body.firebaseContext && typeof body.firebaseContext === "object" ? body.firebaseContext : {};
         const wantStream = body.stream === true;
+
+        try {
+          const dbChat = getAdminDb();
+          firebaseContext = await loadFreshFirebaseContextForMaya(dbChat, firebaseContext);
+        } catch (e) {
+          console.error("[chatWithAI] loadFreshFirebaseContextForMaya", e);
+        }
 
         const basePrompt = getMayaInternalChatPrompt();
         const { system, messages } = prepareMayaAnthropicPayload(basePrompt, firebaseContext, body.messages);

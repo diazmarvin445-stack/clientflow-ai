@@ -33,8 +33,7 @@ import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
 
 /** Bienvenida estática (sin llamada a API — ahorro de tokens y respuesta instantánea). */
-const MAYA_WELCOME_STATIC =
-  "Hola Marvin, soy Maya, tu secretaria personal de YourColor. Ya tengo cargado tu negocio: clientes, órdenes, finanzas y calendario. ¿En qué te ayudo hoy?";
+const MAYA_WELCOME_STATIC = "Hola Marvin 👋";
 
 /** Últimos turnos enviados a Claude (memoria reciente; calidad de conversación). */
 const MAX_API_MESSAGES = 20;
