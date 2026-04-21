@@ -3,6 +3,9 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/f
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -10,6 +13,7 @@ import {
   query,
   serverTimestamp,
   Timestamp,
+  updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
@@ -660,11 +664,76 @@ function stripMayaPanelMetadata(raw) {
 }
 
 /**
+ * Combina `data` con campos en la raíz del JSON (p. ej. clientId junto a action).
+ * @param {Record<string, unknown>} payload
+ */
+function mergeMayaActionData(payload) {
+  const nested =
+    payload.data && typeof payload.data === "object"
+      ? /** @type {Record<string, unknown>} */ ({ ...payload.data })
+      : {};
+  /** @type {Record<string, unknown>} */
+  const out = { ...nested };
+  for (const k of ["clientId", "orderId", "changes", "date", "title"]) {
+    if (k in payload && payload[k] !== undefined && out[k] === undefined) {
+      out[k] = payload[k];
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {unknown} raw
+ */
+function pickOrderChanges(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const allowed = [
+    "status",
+    "title",
+    "clientName",
+    "product",
+    "quantity",
+    "total",
+    "amount",
+    "estimatedAmount",
+    "notes",
+  ];
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const k of allowed) {
+    if (!(k in /** @type {Record<string, unknown>} */ (raw))) continue;
+    const v = /** @type {Record<string, unknown>} */ (raw)[k];
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * Resuelve un pedido en `jobs` o `orders` por id de documento.
+ * @param {string} businessId
+ * @param {string} orderId
+ */
+async function resolveOrderDocRef(businessId, orderId) {
+  const refJobs = doc(db, "businesses", businessId, "jobs", orderId);
+  const refOrders = doc(db, "businesses", businessId, "orders", orderId);
+  const sj = await getDoc(refJobs);
+  if (sj.exists) return { ref: refJobs, kind: "jobs" };
+  const so = await getDoc(refOrders);
+  if (so.exists) return { ref: refOrders, kind: "orders" };
+  return null;
+}
+
+/**
  * @param {string} businessId
  * @param {{ action: string, data?: Record<string, unknown> }} payload
  */
 async function executeMayaActionFromChat(businessId, payload) {
-  const data = payload.data && typeof payload.data === "object" ? payload.data : {};
+  const data = mergeMayaActionData(
+    payload && typeof payload === "object" ? /** @type {Record<string, unknown>} */ (payload) : {},
+  );
 
   if (payload.action === "save_client") {
     const name = typeof data.name === "string" ? data.name.trim() : "";
@@ -729,6 +798,65 @@ async function executeMayaActionFromChat(businessId, payload) {
     return "schedule_delivery";
   }
 
+  if (payload.action === "delete_client") {
+    const clientId =
+      typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
+    if (!clientId) throw new Error("Falta clientId para eliminar el cliente.");
+    await deleteDoc(doc(db, "businesses", businessId, "clients", clientId));
+    return "delete_client";
+  }
+
+  if (payload.action === "delete_order") {
+    const orderId =
+      typeof data.orderId === "string" ? data.orderId.trim() : String(data.orderId ?? "").trim();
+    if (!orderId) throw new Error("Falta orderId para eliminar el pedido.");
+    const resolved = await resolveOrderDocRef(businessId, orderId);
+    if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
+    await deleteDoc(resolved.ref);
+    return "delete_order";
+  }
+
+  if (payload.action === "update_order") {
+    const orderId =
+      typeof data.orderId === "string" ? data.orderId.trim() : String(data.orderId ?? "").trim();
+    const rawChanges = data.changes && typeof data.changes === "object" ? data.changes : {};
+    if (!orderId) throw new Error("Falta orderId para actualizar el pedido.");
+    const changes = pickOrderChanges(rawChanges);
+    if (Object.keys(changes).length === 0) throw new Error("No hay cambios válidos en el pedido.");
+    const resolved = await resolveOrderDocRef(businessId, orderId);
+    if (!resolved) throw new Error("No se encontró el pedido para actualizar.");
+    await updateDoc(resolved.ref, {
+      ...changes,
+      updatedAt: serverTimestamp(),
+    });
+    return "update_order";
+  }
+
+  if (payload.action === "create_calendar_event") {
+    const title =
+      typeof data.title === "string" ? data.title.trim() : String(data.title ?? "").trim();
+    const rawDate = data.date;
+    if (!title) throw new Error("Falta el título del evento en calendario.");
+    let dateTs = Timestamp.now();
+    if (rawDate != null) {
+      const d = new Date(
+        typeof rawDate === "string" || typeof rawDate === "number" ? rawDate : String(rawDate),
+      );
+      if (!Number.isNaN(d.getTime())) {
+        d.setHours(12, 0, 0, 0);
+        dateTs = Timestamp.fromDate(d);
+      }
+    }
+    await addDoc(collection(db, "businesses", businessId, "calendar"), {
+      title,
+      date: dateTs,
+      deliveryDate: rawDate == null ? "" : typeof rawDate === "string" ? rawDate : String(rawDate),
+      source: "chat-maya",
+      createdAt: serverTimestamp(),
+    });
+    return "create_calendar_event";
+  }
+
   return null;
 }
 
@@ -736,6 +864,10 @@ function mayaActionCompletedLabel(kind) {
   if (kind === "save_client") return "guardar cliente";
   if (kind === "create_order") return "crear orden";
   if (kind === "schedule_delivery") return "programar entrega";
+  if (kind === "delete_client") return "eliminar cliente";
+  if (kind === "delete_order") return "eliminar pedido";
+  if (kind === "update_order") return "actualizar pedido";
+  if (kind === "create_calendar_event") return "crear evento en calendario";
   return "acción";
 }
 

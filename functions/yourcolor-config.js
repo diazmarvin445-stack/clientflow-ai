@@ -499,8 +499,17 @@ Tipos permitidos:
   {"action":"create_order","data":{"clientName":"...","product":"...","quantity":0,"total":0}}
 - schedule_delivery — programar entrega en calendario:
   {"action":"schedule_delivery","data":{"clientName":"...","product":"...","deliveryDate":"..."}}
+- delete_client — borrar cliente por id de documento (id en contexto Firebase):
+  {"action":"delete_client","clientId":"DOCUMENT_ID"}
+- delete_order — borrar pedido por id (busca en jobs u orders):
+  {"action":"delete_order","orderId":"DOCUMENT_ID"}
+- update_order — actualizar pedido (status, totales, notas, etc.):
+  {"action":"update_order","orderId":"DOCUMENT_ID","changes":{"status":"entregado"}}
+- create_calendar_event — evento en calendario:
+  {"action":"create_calendar_event","date":"2026-04-22","title":"Entrega pedido Juan"}
 
 Usa números reales en quantity y total. deliveryDate puede ser fecha legible o ISO (ej. "2026-05-01" o "15 de mayo de 2026").
+Los ids deben venir del contexto Firebase; no inventes ids.
 Solo incluye MAYA_ACTION_JSON cuando el usuario haya pedido realmente esa acción y tengas datos razonables; si faltan datos, pregunta en el texto visible y NO agregues la línea.`;
 }
 
@@ -606,7 +615,16 @@ Tipos permitidos:
   {"action":"create_order","data":{"clientName":"...","product":"...","quantity":0,"total":0}}
 - schedule_delivery — programar entrega en calendario:
   {"action":"schedule_delivery","data":{"clientName":"...","product":"...","deliveryDate":"..."}}
+- delete_client — borrar cliente por id de documento (id en contexto Firebase):
+  {"action":"delete_client","clientId":"DOCUMENT_ID"}
+- delete_order — borrar pedido por id (busca en jobs u orders):
+  {"action":"delete_order","orderId":"DOCUMENT_ID"}
+- update_order — actualizar pedido (status, totales, notas, etc.):
+  {"action":"update_order","orderId":"DOCUMENT_ID","changes":{"status":"entregado"}}
+- create_calendar_event — evento en calendario:
+  {"action":"create_calendar_event","date":"2026-04-22","title":"Entrega pedido Juan"}
 
 Usa números reales en quantity y total. deliveryDate puede ser fecha legible o ISO (ej. "2026-05-01" o "15 de mayo de 2026").
+Los ids deben venir del contexto Firebase; no inventes ids.
 Solo incluye MAYA_ACTION_JSON cuando el usuario haya pedido realmente esa acción y tengas datos razonables; si faltan datos, pregunta en el texto visible y NO agregues la línea.`;
 }
