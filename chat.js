@@ -1100,6 +1100,7 @@ async function sendToClaude() {
     const res = await fetch(CHAT_WITH_AI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      cache: "no-store",
       body: JSON.stringify({
         messages: apiConversation,
         firebaseContext: firebaseContextPayload,

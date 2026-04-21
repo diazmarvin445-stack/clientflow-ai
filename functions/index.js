@@ -13,8 +13,12 @@ import {
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
-/** Haiku 4.5: rápida y económica para el panel y WhatsApp. */
-const MODEL = "claude-haiku-4-5-20251001";
+/** Chat interno (Marvin ↔ Maya): rápido y económico. */
+const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
+/** WhatsApp (cliente ↔ Maya): Sonnet para ventas y conversación con clientes. */
+const MODEL_WHATSAPP = "claude-sonnet-4-6";
+/** Otras rutas (p. ej. generateCampaign). */
+const MODEL = MODEL_WHATSAPP;
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 /** Token de la API de WhatsApp Cloud (Meta) para enviar mensajes. */
 const META_ACCESS_TOKEN = defineSecret("META_ACCESS_TOKEN");
@@ -1531,7 +1535,7 @@ export const chatWithAI = onRequest(
         }
 
         const anthropicPayload = {
-          model: MODEL,
+          model: MODEL_INTERNAL_CHAT,
           max_tokens: 4096,
           system,
           messages,
@@ -2073,7 +2077,7 @@ export const whatsappWebhook = onRequest(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: MODEL_WHATSAPP,
           max_tokens: 2048,
           system: getMayaWhatsAppSystemPrompt(),
           messages: messagesForClaude,
