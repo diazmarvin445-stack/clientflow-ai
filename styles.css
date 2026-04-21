@@ -1,23 +1,38 @@
-/* —— ClientFlow AI — Premium landing — */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* —— ClientFlow AI — Deep Purple Dream (dark + IA) — */
 :root {
-  --bg: #fafbfc;
-  --surface: #ffffff;
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --border: rgba(15, 23, 42, 0.08);
+  --bg: #0f0f1e;
+  --bg-elevated: #1a1a2e;
+  --surface: rgba(26, 26, 46, 0.6);
+  --surface-solid: #1a1a2e;
+  --text: #f5f5f7;
+  --text-muted: #a1a1aa;
+  --border: rgba(139, 92, 246, 0.2);
+  --line: rgba(139, 92, 246, 0.2);
+  --accent: #8b5cf6;
+  --accent-2: #ec4899;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  /* Nombres legacy mapeados al tema (compatibilidad con reglas existentes) */
   --green: #10b981;
-  --green-soft: #d1fae5;
-  --blue: #2563eb;
-  --blue-soft: #dbeafe;
-  --gradient-hero: linear-gradient(135deg, #0ea5e9 0%, #10b981 50%, #22c55e 100%);
-  --gradient-soft: linear-gradient(180deg, #f0f9ff 0%, #f0fdf4 100%);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 24px 48px rgba(37, 99, 235, 0.12), 0 8px 16px rgba(15, 23, 42, 0.06);
-  --radius: 1rem;
-  --radius-lg: 1.25rem;
-  --font: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --green-soft: rgba(16, 185, 129, 0.18);
+  --blue: #8b5cf6;
+  --blue-soft: rgba(139, 92, 246, 0.2);
+  --gradient-hero: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  --gradient-soft: linear-gradient(180deg, #1a1a2e 0%, #0f0f1e 100%);
+  --gradient-glow: radial-gradient(circle, rgba(139, 92, 246, 0.35) 0%, transparent 70%);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 48px rgba(139, 92, 246, 0.15);
+  --radius: 12px;
+  --radius-lg: 12px;
+  --radius-btn: 8px;
+  --radius-input: 6px;
+  --font: "Inter", system-ui, -apple-system, sans-serif;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 0.3s ease;
 }
 
 *,
@@ -45,17 +60,17 @@ body {
   inset: 0;
   z-index: -1;
   background: var(--gradient-soft);
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .page-bg::after {
   content: "";
   position: absolute;
-  top: -20%;
-  right: -10%;
-  width: 60%;
-  height: 60%;
-  background: radial-gradient(ellipse, rgba(14, 165, 233, 0.12) 0%, transparent 70%);
+  top: -25%;
+  right: -15%;
+  width: 70%;
+  height: 70%;
+  background: var(--gradient-glow);
   pointer-events: none;
 }
 
@@ -69,8 +84,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(26, 26, 46, 0.8);
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -8585,4 +8600,184 @@ body.cf-modal-open {
 
 body.fin-modal-open {
   overflow: hidden;
+}
+
+/* ===== Deep Purple Dream overrides ===== */
+html,
+body {
+  background: #0f0f1e;
+  color: #f5f5f7;
+}
+
+* {
+  scrollbar-color: #8b5cf6 #1a1a2e;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #8b5cf6, #ec4899);
+  border-radius: 999px;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #8b5cf6;
+  outline-offset: 2px;
+}
+
+.dash-sidebar,
+.dash-topbar,
+.dash-panel,
+.dash-stat-card,
+.dash-mini-card,
+.auth-card,
+.yc-chat-panel,
+.yc-chat-toolbar,
+.yc-chat-composer {
+  background: rgba(26, 26, 46, 0.72) !important;
+  backdrop-filter: blur(20px);
+  border-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+.dash-topbar {
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2) !important;
+}
+
+.dash-nav-link:hover {
+  background: rgba(139, 92, 246, 0.12) !important;
+}
+
+.dash-nav-link.is-active {
+  color: #f5f5f7 !important;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.35) 0%, rgba(236, 72, 153, 0.25) 100%) !important;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.35), 0 6px 18px rgba(139, 92, 246, 0.2) !important;
+}
+
+.btn-primary,
+.dash-quick-btn--primary,
+.yc-chat-send {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%) !important;
+  border: none !important;
+  color: #fff !important;
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4) !important;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.btn-primary:hover,
+.dash-quick-btn--primary:hover,
+.yc-chat-send:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.45) !important;
+}
+
+.field input,
+.orders-input,
+.yc-chat-input,
+.fin-input,
+select,
+textarea {
+  background: rgba(26, 26, 46, 0.8) !important;
+  color: #f5f5f7 !important;
+  border-color: rgba(139, 92, 246, 0.25) !important;
+}
+
+.field input:focus,
+.orders-input:focus,
+.yc-chat-input:focus,
+.fin-input:focus,
+select:focus,
+textarea:focus {
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.22) !important;
+}
+
+.dash-alert-strip {
+  border-color: rgba(139, 92, 246, 0.3) !important;
+  background: rgba(139, 92, 246, 0.15) !important;
+  color: #e9d5ff !important;
+}
+
+.dash-stat-value,
+.dash-mini-card strong {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dash-badge--prog {
+  background: linear-gradient(135deg, #f59e0b, #f97316) !important;
+  color: #1f1302 !important;
+}
+.dash-badge--sched {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+  color: #eef2ff !important;
+}
+.dash-badge--quote {
+  background: linear-gradient(135deg, #14b8a6, #10b981) !important;
+  color: #ecfdf5 !important;
+}
+.dash-badge--done {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #ecfdf5 !important;
+}
+.dash-badge--cancelled {
+  background: linear-gradient(135deg, #ef4444, #ec4899) !important;
+  color: #fff1f2 !important;
+}
+
+.yc-msg--user .yc-msg-bubble {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%) !important;
+}
+
+.yc-msg--assistant .yc-msg-bubble {
+  background: rgba(26, 26, 46, 0.78) !important;
+  border: 1px solid rgba(139, 92, 246, 0.25) !important;
+  color: #f5f5f7 !important;
+}
+
+.yc-chat-dots span {
+  background: #8b5cf6 !important;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+}
+
+.dash-avatar {
+  position: relative;
+}
+
+.dash-avatar::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  animation: maya-halo 2.2s ease-in-out infinite;
+}
+
+@keyframes maya-halo {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+
+.auth-body .page-bg {
+  background: linear-gradient(140deg, #0f0f1e 0%, #1a1a2e 55%, #25163d 100%);
+}
+
+@media (max-width: 720px) {
+  .dash-sidebar,
+  .dash-topbar,
+  .dash-panel,
+  .dash-stat-card,
+  .dash-mini-card {
+    border-radius: 10px !important;
+  }
 }

@@ -23,11 +23,25 @@
     }
   ],
   "hosting": {
-    "public": "public",
+    "public": ".",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "functions/**",
+      ".vscode/**",
+      "scripts/**",
+      "**/*.md",
+      "server.js",
+      "set-key-mjs",
+      "setup-env.mjs",
+      "test-claude.mjs",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "package-lock.json",
+      "package.json",
+      "testquery.html",
+      "public/**"
     ],
     "rewrites": [
       {
