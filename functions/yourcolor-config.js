@@ -617,7 +617,7 @@ Tipos permitidos:
 - create_order — registrar pedido/orden:
   {"action":"create_order","clientName":"...","clientPhone":"...","product":"...","quantity":0,"amount":0,"deposit":0,"deliveryDate":"2026-04-25","notes":"..."}
 - create_calendar_event — programar entrega o evento en calendario:
-  {"action":"create_calendar_event","date":"2026-04-22","title":"Entrega pedido Juan"}
+  {"action":"create_calendar_event","title":"Cita con Pedro","date":"2026-04-24","time":"15:00","type":"cita","clientName":"Pedro","notes":"Revisar cotización"}
 - delete_client — borrar cliente por id de documento (id en contexto Firebase):
   {"action":"delete_client","clientId":"DOCUMENT_ID"}
 - delete_transaction — borrar movimiento por id de documento (aparece en financeRecent del contexto):

@@ -258,6 +258,11 @@ function createCalendarPopoverUi() {
         <strong>Calendario</strong>
         <button type="button" class="dash-panel-link" id="dash-cal-close">Cerrar</button>
       </div>
+      <div class="dash-cal-nav">
+        <button type="button" class="dash-panel-link" id="dash-cal-prev" aria-label="Mes anterior">&lt;</button>
+        <div class="dash-cal-nav__label" id="dash-cal-month-label"></div>
+        <button type="button" class="dash-panel-link" id="dash-cal-next" aria-label="Mes siguiente">&gt;</button>
+      </div>
       <div class="dash-cal-mini" id="dash-cal-mini"></div>
       <div class="dash-cal-today-list" id="dash-cal-today-list"></div>
       <div class="dash-cal-week-list" id="dash-cal-week-list"></div>
@@ -270,9 +275,10 @@ function createCalendarPopoverUi() {
         <h3>Nuevo evento</h3>
         <input id="dash-cal-title" class="orders-input" placeholder="Título" required />
         <input id="dash-cal-date" class="orders-input" type="date" required />
+        <input id="dash-cal-time" class="orders-input" type="time" />
         <select id="dash-cal-type" class="orders-input">
           <option value="cita">Cita</option>
-          <option value="delivery">Entrega</option>
+          <option value="entrega">Entrega</option>
           <option value="reunion">Reunión</option>
           <option value="recordatorio">Recordatorio</option>
         </select>
@@ -299,6 +305,9 @@ async function initFloatingCalendar(auth, db) {
   const dayEl = btn?.querySelector(".dash-cal-btn__day");
   const pop = document.getElementById("dash-cal-pop");
   const close = document.getElementById("dash-cal-close");
+  const prevBtn = document.getElementById("dash-cal-prev");
+  const nextBtn = document.getElementById("dash-cal-next");
+  const monthLabel = document.getElementById("dash-cal-month-label");
   const mini = document.getElementById("dash-cal-mini");
   const weekList = document.getElementById("dash-cal-week-list");
   const todayList = document.getElementById("dash-cal-today-list");
@@ -312,6 +321,9 @@ async function initFloatingCalendar(auth, db) {
     !dayEl ||
     !pop ||
     !close ||
+    !prevBtn ||
+    !nextBtn ||
+    !monthLabel ||
     !mini ||
     !weekList ||
     !todayList ||
@@ -330,6 +342,26 @@ async function initFloatingCalendar(auth, db) {
   const business = await resolveBusinessForUser(db, user);
   const businessId = business?.id;
   if (!businessId) return;
+
+  let monthCursor = new Date();
+
+  function parseEventDate(value) {
+    if (!value) return null;
+    if (typeof value.toDate === "function") {
+      const dt = value.toDate();
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function mapType(raw) {
+    const v = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+    if (!v) return "recordatorio";
+    if (v === "delivery") return "entrega";
+    if (v === "meeting") return "reunion";
+    return v;
+  }
 
   async function loadClients() {
     clientSel.innerHTML = '<option value="">Cliente (opcional)</option>';
@@ -352,13 +384,14 @@ async function initFloatingCalendar(auth, db) {
     );
     const rows = calSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
+    const monthEnd = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 0);
+    monthLabel.textContent = monthStart.toLocaleDateString("es", { month: "long", year: "numeric" });
     const firstDow = (monthStart.getDay() + 6) % 7;
     const days = monthEnd.getDate();
     const eventsByDate = new Map();
     rows.forEach((r) => {
-      const dt = r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null;
+      const dt = parseEventDate(r.date);
       if (!dt) return;
       const k = fmtDateYmd(dt);
       eventsByDate.set(k, (eventsByDate.get(k) || 0) + 1);
@@ -366,33 +399,33 @@ async function initFloatingCalendar(auth, db) {
     const grid = [];
     for (let i = 0; i < firstDow; i += 1) grid.push('<span class="dash-cal-mini__empty"></span>');
     for (let d = 1; d <= days; d += 1) {
-      const dt = new Date(now.getFullYear(), now.getMonth(), d);
+      const dt = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), d);
       const k = fmtDateYmd(dt);
       const n = eventsByDate.get(k) || 0;
       const cls = n > 0 ? "dash-cal-mini__day has-event" : "dash-cal-mini__day";
       grid.push(`<span class="${cls}" title="${n > 0 ? `${n} evento(s)` : "Sin eventos"}">${d}</span>`);
     }
-    mini.innerHTML = `<div class="dash-cal-mini__month">${now.toLocaleDateString("es", { month: "long", year: "numeric" })}</div><div class="dash-cal-mini__grid">${grid.join("")}</div>`;
+    mini.innerHTML = `<div class="dash-cal-mini__grid">${grid.join("")}</div>`;
 
     const weekCut = new Date();
     weekCut.setDate(weekCut.getDate() + 7);
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const todayEvents = rows
-      .map((r) => ({ ...r, _d: r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null }))
+      .map((r) => ({ ...r, _d: parseEventDate(r.date) }))
       .filter((r) => r._d && r._d >= todayStart && r._d <= todayEnd)
       .sort((a, b) => a._d - b._d)
       .slice(0, 8);
     todayList.innerHTML = todayEvents.length
       ? `<div class="dash-cal-today-title">Hoy</div>${todayEvents
           .map(
-            (r) => `<div class="dash-cal-week-item"><span>•</span><span>${r.title || "Evento"}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
+            (r) => `<div class="dash-cal-week-item"><span>•</span><span>${r.title || "Evento"}${r.time ? ` · ${r.time}` : ""}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
           )
           .join("")}`
       : '<p class="dash-table-muted">Hoy no hay eventos.</p>';
 
     const upcoming = rows
-      .map((r) => ({ ...r, _d: r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null }))
+      .map((r) => ({ ...r, _d: parseEventDate(r.date) }))
       .filter((r) => r._d && r._d >= new Date() && r._d <= weekCut)
       .sort((a, b) => a._d - b._d)
       .slice(0, 12);
@@ -400,7 +433,7 @@ async function initFloatingCalendar(auth, db) {
       ? `<div class="dash-cal-today-title">Esta semana</div>${upcoming
           .map(
             (r) =>
-              `<div class="dash-cal-week-item"><span>${r._d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span><span>${r.title || "Evento"}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
+              `<div class="dash-cal-week-item"><span>${r._d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span><span>${r.title || "Evento"}${r.time ? ` · ${r.time}` : ""}</span><span class="dash-cal-item-actions"><button type="button" class="dash-panel-link" data-cal-done="${r.id}">Completar</button><button type="button" class="dash-panel-link" data-cal-del="${r.id}">Eliminar</button></span></div>`,
           )
           .join("")}`
       : '<p class="dash-table-muted">No tienes citas ni entregas programadas.</p>';
@@ -442,6 +475,17 @@ async function initFloatingCalendar(auth, db) {
     btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
   });
   close.addEventListener("click", closePop);
+  pop.addEventListener("click", (e) => e.stopPropagation());
+  prevBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1);
+    await loadCalendarView();
+  });
+  nextBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    monthCursor = new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1);
+    await loadCalendarView();
+  });
   document.addEventListener("click", (e) => {
     if (!ui.contains(e.target)) closePop();
   });
@@ -452,21 +496,30 @@ async function initFloatingCalendar(auth, db) {
     e.preventDefault();
     const title = document.getElementById("dash-cal-title")?.value?.trim();
     const date = document.getElementById("dash-cal-date")?.value;
-    const type = document.getElementById("dash-cal-type")?.value || "recordatorio";
+    const time = document.getElementById("dash-cal-time")?.value?.trim() || "";
+    const type = mapType(document.getElementById("dash-cal-type")?.value || "recordatorio");
     const clientId = document.getElementById("dash-cal-client")?.value || null;
+    const clientName = clientId
+      ? clientSel.options[clientSel.selectedIndex]?.textContent?.trim() || null
+      : null;
     const notes = document.getElementById("dash-cal-notes")?.value?.trim() || "";
     if (!title || !date) return;
-    const dt = new Date(`${date}T12:00:00`);
+    const dt = new Date(`${date}T${time || "12:00"}:00`);
     await addDoc(collection(db, "businesses", businessId, "calendar"), {
       title,
       date: Timestamp.fromDate(dt),
+      time: time || "",
       type,
       clientId,
+      clientName,
       notes,
+      createdBy: "marvin",
       createdAt: serverTimestamp(),
       status: "pending",
     });
+    form.reset();
     modal.close();
+    monthCursor = new Date(dt.getFullYear(), dt.getMonth(), 1);
     await loadCalendarView();
   });
 }

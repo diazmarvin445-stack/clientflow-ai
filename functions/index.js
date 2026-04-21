@@ -993,16 +993,36 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
           typeof data.title === "string" && data.title.trim()
             ? data.title.trim()
             : "Evento (Chat IA)";
+        const time = typeof data.time === "string" ? data.time.trim() : "";
+        const rawType = typeof data.type === "string" ? data.type.trim().toLowerCase() : "";
+        const type = rawType === "delivery" ? "entrega" : rawType || "recordatorio";
+        const clientName = typeof data.clientName === "string" ? data.clientName.trim() : "";
         const srcDate = data.date ?? data.deliveryDate;
         let date = new Date();
         if (srcDate != null) {
           const d = new Date(String(srcDate));
           if (!Number.isNaN(d.getTime())) date = d;
         }
-        date.setHours(12, 0, 0, 0);
+        if (time) {
+          const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+          if (m) {
+            date.setHours(Number(m[1]), Number(m[2]), 0, 0);
+          } else {
+            date.setHours(12, 0, 0, 0);
+          }
+        } else {
+          date.setHours(12, 0, 0, 0);
+        }
         await db.collection("businesses").doc(businessId).collection("calendar").add({
           title,
           date: Timestamp.fromDate(date),
+          time,
+          type,
+          clientId: null,
+          clientName: clientName || null,
+          notes: typeof data.notes === "string" ? data.notes.trim() : "",
+          status: "pending",
+          createdBy: "maya",
           deliveryDate: srcDate == null ? "" : String(srcDate),
           source: "chat-maya",
           createdAt: FieldValue.serverTimestamp(),

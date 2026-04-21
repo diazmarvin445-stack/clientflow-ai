@@ -2641,6 +2641,21 @@ body.dash-menu-open {
   gap: 0.5rem;
 }
 
+.dash-cal-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.4rem;
+}
+
+.dash-cal-nav__label {
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .dash-cal-mini__month {
   margin: 0.45rem 0;
   font-weight: 700;
