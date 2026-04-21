@@ -2854,6 +2854,41 @@ body.dash-menu-open {
   font-size: 0.75rem;
 }
 
+@media (max-width: 640px) {
+  .dash-cal-pop {
+    position: fixed;
+    top: 3.9rem;
+    left: 0.55rem;
+    right: 0.55rem;
+    width: auto;
+    max-height: calc(100vh - 4.6rem);
+    overflow: auto;
+    padding: 0.65rem;
+  }
+
+  .dash-cal-mini__grid {
+    gap: 0.2rem;
+  }
+
+  .dash-cal-day {
+    min-height: 2.55rem;
+    padding: 0.18rem 0.08rem 0.25rem;
+  }
+
+  .dash-cal-day__num {
+    font-size: 0.72rem;
+  }
+
+  .dash-cal-day-pop {
+    width: min(240px, calc(100vw - 2.2rem));
+    max-height: 55vh;
+  }
+
+  .dash-cal-day-pop__row {
+    font-size: 0.69rem;
+  }
+}
+
 .dash-cal-week-list {
   margin: 0.7rem 0;
   display: grid;

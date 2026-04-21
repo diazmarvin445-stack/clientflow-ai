@@ -9,7 +9,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -288,7 +287,7 @@ function createCalendarPopoverUi() {
           <option value="reunion">Reunión</option>
           <option value="recordatorio">Recordatorio</option>
         </select>
-        <select id="dash-cal-client" class="orders-input"><option value="">Cliente (opcional)</option></select>
+        <input id="dash-cal-client-desc" class="orders-input" aria-label="Descripción / Cliente (opcional)" placeholder="Ej: Cita con proveedor, revisión pedido, etc." />
         <textarea id="dash-cal-notes" class="orders-input orders-notes" placeholder="Notas"></textarea>
         <div class="orders-modal-actions">
           <button type="button" class="dash-quick-btn" id="dash-cal-cancel">Cancelar</button>
@@ -322,7 +321,7 @@ async function initFloatingCalendar(auth, db) {
   const form = document.getElementById("dash-cal-form");
   const modalTitleEl = document.getElementById("dash-cal-modal-title");
   const editIdInput = document.getElementById("dash-cal-edit-id");
-  const clientSel = document.getElementById("dash-cal-client");
+  const clientDescInput = document.getElementById("dash-cal-client-desc");
   const cancelBtn = document.getElementById("dash-cal-cancel");
   if (
     !btn ||
@@ -340,7 +339,7 @@ async function initFloatingCalendar(auth, db) {
     !form ||
     !modalTitleEl ||
     !editIdInput ||
-    !clientSel ||
+    !clientDescInput ||
     !cancelBtn
   ) {
     return;
@@ -389,21 +388,6 @@ async function initFloatingCalendar(auth, db) {
     dayPop.innerHTML = "";
   }
 
-  async function loadClients() {
-    clientSel.innerHTML = '<option value="">Cliente (opcional)</option>';
-    const clientSnap = await getDocs(
-      query(collection(db, "businesses", businessId, "clients"), orderBy("createdAt", "desc"), limit(100)),
-    );
-    clientSnap.forEach((d) => {
-      const x = d.data() || {};
-      const name = typeof x.fullName === "string" ? x.fullName : typeof x.name === "string" ? x.name : "Cliente";
-      const opt = document.createElement("option");
-      opt.value = d.id;
-      opt.textContent = name;
-      clientSel.appendChild(opt);
-    });
-  }
-
   /** Agrupa eventos por YYYY-MM-DD con orden dentro del día. */
   function eventsByYmd(rows) {
     /** @type {Map<string, { id: string, [k: string]: unknown }[]>} */
@@ -439,8 +423,7 @@ async function initFloatingCalendar(auth, db) {
         ? selType
         : "cita";
     document.getElementById("dash-cal-notes").value = editEvent?.notes ? String(editEvent.notes) : "";
-    const cid = editEvent?.clientId ? String(editEvent.clientId) : "";
-    clientSel.value = cid;
+    clientDescInput.value = editEvent?.clientName ? String(editEvent.clientName) : "";
     modal.showModal();
     closeDayPop();
   }
@@ -606,7 +589,6 @@ async function initFloatingCalendar(auth, db) {
     (err) => console.warn("[DashShell] calendar snapshot", err),
   );
 
-  await loadClients();
   renderCalendar();
 
   function closePop() {
@@ -667,10 +649,8 @@ async function initFloatingCalendar(auth, db) {
     const date = document.getElementById("dash-cal-date")?.value;
     const time = document.getElementById("dash-cal-time")?.value?.trim() || "";
     const type = mapType(document.getElementById("dash-cal-type")?.value || "recordatorio");
-    const clientId = document.getElementById("dash-cal-client")?.value || null;
-    const clientName = clientId
-      ? clientSel.options[clientSel.selectedIndex]?.textContent?.trim() || null
-      : null;
+    const clientName = document.getElementById("dash-cal-client-desc")?.value?.trim() || null;
+    const clientId = null;
     const notes = document.getElementById("dash-cal-notes")?.value?.trim() || "";
     if (!title || !date) return;
     const dt = new Date(`${date}T${time || "12:00"}:00`);
