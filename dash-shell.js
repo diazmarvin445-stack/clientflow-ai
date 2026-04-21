@@ -12,7 +12,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 /** @type {boolean} */
@@ -256,10 +255,10 @@ function createCalendarPopoverUi() {
         <button type="button" class="dash-panel-link" id="dash-cal-close">Cerrar</button>
       </div>
       <div class="dash-cal-mini" id="dash-cal-mini"></div>
+      <div class="dash-cal-today-list" id="dash-cal-today-list"></div>
       <div class="dash-cal-week-list" id="dash-cal-week-list"></div>
       <div class="dash-cal-pop__actions">
         <button type="button" class="dash-quick-btn" id="dash-cal-add">+ Agregar evento</button>
-        <a href="calendario.html" class="dash-quick-btn dash-quick-btn--primary">Ver calendario completo</a>
       </div>
     </div>
     <dialog class="dash-cal-modal" id="dash-cal-modal">
@@ -298,12 +297,26 @@ async function initFloatingCalendar(auth, db) {
   const close = document.getElementById("dash-cal-close");
   const mini = document.getElementById("dash-cal-mini");
   const weekList = document.getElementById("dash-cal-week-list");
+  const todayList = document.getElementById("dash-cal-today-list");
   const addBtn = document.getElementById("dash-cal-add");
   const modal = document.getElementById("dash-cal-modal");
   const form = document.getElementById("dash-cal-form");
   const clientSel = document.getElementById("dash-cal-client");
   const cancelBtn = document.getElementById("dash-cal-cancel");
-  if (!btn || !dayEl || !pop || !close || !mini || !weekList || !addBtn || !modal || !form || !clientSel || !cancelBtn) {
+  if (
+    !btn ||
+    !dayEl ||
+    !pop ||
+    !close ||
+    !mini ||
+    !weekList ||
+    !todayList ||
+    !addBtn ||
+    !modal ||
+    !form ||
+    !clientSel ||
+    !cancelBtn
+  ) {
     return;
   }
   dayEl.textContent = String(new Date().getDate());
@@ -344,18 +357,31 @@ async function initFloatingCalendar(auth, db) {
 
   const weekCut = new Date();
   weekCut.setDate(weekCut.getDate() + 7);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const todayEvents = rows
+    .map((r) => ({ ...r, _d: r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null }))
+    .filter((r) => r._d && r._d >= todayStart && r._d <= todayEnd)
+    .sort((a, b) => a._d - b._d)
+    .slice(0, 5);
+  todayList.innerHTML = todayEvents.length
+    ? `<div class="dash-cal-today-title">Hoy</div>${todayEvents
+        .map((r) => `<div class="dash-cal-week-item"><span>•</span><span>${r.title || "Evento"}</span></div>`)
+        .join("")}`
+    : '<p class="dash-table-muted">Hoy no hay eventos.</p>';
+
   const upcoming = rows
     .map((r) => ({ ...r, _d: r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null }))
     .filter((r) => r._d && r._d >= new Date() && r._d <= weekCut)
     .sort((a, b) => a._d - b._d)
     .slice(0, 7);
   weekList.innerHTML = upcoming.length
-    ? upcoming
+    ? `<div class="dash-cal-today-title">Esta semana</div>${upcoming
         .map(
           (r) =>
             `<div class="dash-cal-week-item"><span>${r._d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span><span>${r.title || "Evento"}</span></div>`,
         )
-        .join("")
+        .join("")}`
     : '<p class="dash-table-muted">No tienes citas ni entregas programadas.</p>';
 
   const clientSnap = await getDocs(

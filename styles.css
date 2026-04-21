@@ -2679,6 +2679,19 @@ body.dash-menu-open {
   gap: 0.3rem;
 }
 
+.dash-cal-today-list {
+  margin-top: 0.6rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.dash-cal-today-title {
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
 .dash-cal-week-item {
   display: grid;
   grid-template-columns: 72px 1fr;
