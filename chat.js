@@ -603,6 +603,7 @@ function conversationSnippet(maxLen = 4000) {
 
 const MAYA_ORDER_PREFIX = "MAYA_ORDER_JSON:";
 const MAYA_ACTION_PREFIX = "MAYA_ACTION_JSON:";
+const MAYA_HANDOFF_PREFIX = "MAYA_HANDOFF_JSON:";
 
 /**
  * Extrae un bloque JSON tras `prefix` y lo elimina del texto (llaves anidadas).
@@ -653,13 +654,24 @@ function stripMayaPanelMetadata(raw) {
   let t = String(raw ?? "").trim();
   let orderPayload = null;
   let actionPayload = null;
-  const rOrder = extractAndRemoveMayaJsonLine(t, MAYA_ORDER_PREFIX);
-  t = rOrder.text;
-  orderPayload = rOrder.payload;
-  const rAct = extractAndRemoveMayaJsonLine(t, MAYA_ACTION_PREFIX);
-  t = rAct.text;
-  if (rAct.payload && typeof rAct.payload.action === "string") {
-    actionPayload = /** @type {{ action: string, data?: Record<string, unknown> }} */ (rAct.payload);
+  while (true) {
+    const rOrder = extractAndRemoveMayaJsonLine(t, MAYA_ORDER_PREFIX);
+    if (!rOrder.payload) break;
+    t = rOrder.text;
+    if (!orderPayload) orderPayload = rOrder.payload;
+  }
+  while (true) {
+    const rAct = extractAndRemoveMayaJsonLine(t, MAYA_ACTION_PREFIX);
+    if (!rAct.payload) break;
+    t = rAct.text;
+    if (!actionPayload && typeof rAct.payload.action === "string") {
+      actionPayload = /** @type {{ action: string, data?: Record<string, unknown> }} */ (rAct.payload);
+    }
+  }
+  while (true) {
+    const rHandoff = extractAndRemoveMayaJsonLine(t, MAYA_HANDOFF_PREFIX);
+    if (!rHandoff.payload) break;
+    t = rHandoff.text;
   }
   return { displayText: t, orderPayload, actionPayload };
 }

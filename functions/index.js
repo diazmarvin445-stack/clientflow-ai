@@ -419,7 +419,19 @@ function asChatMessages(raw) {
 }
 
 const MAYA_PANEL_ACTION_PREFIX = "MAYA_ACTION_JSON:";
-const MAYA_PANEL_FINANCE_ACTIONS = new Set(["add_income", "add_expense", "get_balance", "delete_transaction"]);
+const MAYA_PANEL_ACTION_ALIASES = {
+  save_client: "create_client",
+  schedule_delivery: "create_calendar_event",
+};
+const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
+  "create_client",
+  "add_income",
+  "add_expense",
+  "create_calendar_event",
+  "delete_client",
+  "delete_transaction",
+  "get_balance",
+]);
 
 const FINANCE_INCOME_KEYS = new Set(["ventas", "anticipos", "otros_ingresos"]);
 const FINANCE_EXPENSE_KEYS = new Set([
@@ -433,17 +445,17 @@ const FINANCE_EXPENSE_KEYS = new Set([
 ]);
 
 /**
- * Extrae MAYA_ACTION_JSON del final del mensaje (misma lógica que el panel en `chat.js`).
  * @param {string} text
- * @returns {{ visibleText: string, payload: Record<string, unknown> | null }}
+ * @param {string} prefix
+ * @returns {{ text: string, payload: Record<string, unknown> | null }}
  */
-function extractMayaPanelActionJson(text) {
+function extractAndRemoveSingleTaggedJson(text, prefix) {
   const raw = String(text ?? "");
-  const idx = raw.indexOf(MAYA_PANEL_ACTION_PREFIX);
-  if (idx < 0) return { visibleText: raw, payload: null };
-  const afterPrefix = raw.slice(idx + MAYA_PANEL_ACTION_PREFIX.length).trimStart();
+  const idx = raw.indexOf(prefix);
+  if (idx < 0) return { text: raw, payload: null };
+  const afterPrefix = raw.slice(idx + prefix.length).trimStart();
   const jsonStartInAfter = afterPrefix.indexOf("{");
-  if (jsonStartInAfter < 0) return { visibleText: raw, payload: null };
+  if (jsonStartInAfter < 0) return { text: raw, payload: null };
   const fromBrace = afterPrefix.slice(jsonStartInAfter);
   let depth = 0;
   let end = -1;
@@ -458,18 +470,66 @@ function extractMayaPanelActionJson(text) {
       }
     }
   }
-  if (end < 0) return { visibleText: raw, payload: null };
+  if (end < 0) return { text: raw, payload: null };
   const jsonStr = fromBrace.slice(0, end + 1);
   let payload = null;
   try {
     const parsed = JSON.parse(jsonStr);
     if (parsed && typeof parsed === "object") payload = /** @type {Record<string, unknown>} */ (parsed);
   } catch {
-    return { visibleText: raw, payload: null };
+    return { text: raw, payload: null };
   }
-  const removeEnd = idx + MAYA_PANEL_ACTION_PREFIX.length + afterPrefix.slice(0, jsonStartInAfter).length + end + 1;
-  const visibleText = (raw.slice(0, idx) + raw.slice(removeEnd)).replace(/\n{3,}/g, "\n\n").trim();
-  return { visibleText, payload };
+  const removeEnd = idx + prefix.length + afterPrefix.slice(0, jsonStartInAfter).length + end + 1;
+  const nextText = (raw.slice(0, idx) + raw.slice(removeEnd)).replace(/\n{3,}/g, "\n\n").trim();
+  return { text: nextText, payload };
+}
+
+/**
+ * @param {string} text
+ * @param {string} prefix
+ * @returns {{ text: string, payloads: Record<string, unknown>[] }}
+ */
+function extractAndRemoveAllTaggedJson(text, prefix) {
+  let out = String(text ?? "");
+  const payloads = [];
+  while (true) {
+    const step = extractAndRemoveSingleTaggedJson(out, prefix);
+    if (!step.payload) break;
+    payloads.push(step.payload);
+    out = step.text;
+  }
+  return { text: out, payloads };
+}
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @returns {Record<string, unknown>}
+ */
+function mergeMayaActionData(payload) {
+  const nested =
+    payload.data && typeof payload.data === "object"
+      ? /** @type {Record<string, unknown>} */ ({ ...payload.data })
+      : {};
+  const out = { ...nested };
+  for (const k of [
+    "name",
+    "phone",
+    "email",
+    "clientId",
+    "transactionId",
+    "title",
+    "date",
+    "amount",
+    "description",
+    "category",
+    "period",
+    "deliveryDate",
+  ]) {
+    if (k in payload && payload[k] !== undefined && out[k] === undefined) {
+      out[k] = payload[k];
+    }
+  }
+  return out;
 }
 
 /**
@@ -697,48 +757,89 @@ async function mayaFinanceBalanceBlock(db, businessId, period) {
  * @param {Record<string, unknown>} firebaseContext
  * @param {string} rawReply
  */
-async function applyMayaFinanceFromPanelReply(db, firebaseContext, rawReply) {
-  const { visibleText, payload } = extractMayaPanelActionJson(rawReply);
-  if (!payload || typeof payload.action !== "string") {
-    return rawReply;
-  }
-  if (!MAYA_PANEL_FINANCE_ACTIONS.has(payload.action)) {
-    return rawReply;
-  }
+async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
+  const extracted = extractAndRemoveAllTaggedJson(rawReply, MAYA_PANEL_ACTION_PREFIX);
+  const visibleText = extracted.text.trim();
+  const payloads = extracted.payloads;
+  if (!payloads.length) return rawReply;
 
   const businessId =
     typeof firebaseContext.businessId === "string" ? firebaseContext.businessId.trim() : "";
   if (!businessId) {
     return (
-      visibleText +
+      (visibleText || rawReply) +
       "\n\n(No se pudo ejecutar la acción financiera: falta businessId en el contexto.)"
     ).trim();
   }
 
+  const extraBlocks = [];
   try {
-    if (payload.action === "get_balance") {
-      const data = mergeFinancePayload(payload);
-      const period = normalizeFinancePeriod(data.period);
-      const block = await mayaFinanceBalanceBlock(db, businessId, period);
-      if (visibleText.trim()) {
-        return `${visibleText.trim()}\n\n${block}`;
+    for (const payload of payloads) {
+      const actionRaw = typeof payload.action === "string" ? payload.action.trim() : "";
+      const action = MAYA_PANEL_ACTION_ALIASES[actionRaw] || actionRaw;
+      if (!MAYA_PANEL_EXECUTABLE_ACTIONS.has(action)) continue;
+      if (action === "get_balance") {
+        const data = mergeFinancePayload(payload);
+        const period = normalizeFinancePeriod(data.period);
+        const block = await mayaFinanceBalanceBlock(db, businessId, period);
+        extraBlocks.push(block);
+        continue;
       }
-      return block;
-    }
-
-    if (payload.action === "add_income") {
-      await mayaFinanceAddMovement(db, businessId, payload, "income");
-      return visibleText.trim() || "Listo: ingreso registrado en Finanzas.";
-    }
-
-    if (payload.action === "add_expense") {
-      await mayaFinanceAddMovement(db, businessId, payload, "expense");
-      return visibleText.trim() || "Listo: gasto registrado en Finanzas.";
-    }
-
-    if (payload.action === "delete_transaction") {
-      await mayaFinanceDelete(db, businessId, payload);
-      return visibleText.trim() || "Listo: movimiento eliminado.";
+      if (action === "add_income") {
+        await mayaFinanceAddMovement(db, businessId, payload, "income");
+        continue;
+      }
+      if (action === "add_expense") {
+        await mayaFinanceAddMovement(db, businessId, payload, "expense");
+        continue;
+      }
+      if (action === "delete_transaction") {
+        await mayaFinanceDelete(db, businessId, payload);
+        continue;
+      }
+      if (action === "create_client") {
+        const data = mergeMayaActionData(payload);
+        const name = typeof data.name === "string" ? data.name.trim() : "";
+        await db.collection("businesses").doc(businessId).collection("clients").add({
+          fullName: name || "Cliente",
+          name: name || "Cliente",
+          phone: typeof data.phone === "string" ? data.phone.trim() : "",
+          email: typeof data.email === "string" ? data.email.trim() : "",
+          source: "chat-maya",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        continue;
+      }
+      if (action === "create_calendar_event") {
+        const data = mergeMayaActionData(payload);
+        const title =
+          typeof data.title === "string" && data.title.trim()
+            ? data.title.trim()
+            : "Evento (Chat IA)";
+        const srcDate = data.date ?? data.deliveryDate;
+        let date = new Date();
+        if (srcDate != null) {
+          const d = new Date(String(srcDate));
+          if (!Number.isNaN(d.getTime())) date = d;
+        }
+        date.setHours(12, 0, 0, 0);
+        await db.collection("businesses").doc(businessId).collection("calendar").add({
+          title,
+          date: Timestamp.fromDate(date),
+          deliveryDate: srcDate == null ? "" : String(srcDate),
+          source: "chat-maya",
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        continue;
+      }
+      if (action === "delete_client") {
+        const data = mergeMayaActionData(payload);
+        const clientId =
+          typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
+        if (!clientId) throw new Error("Falta clientId para eliminar el cliente.");
+        await db.collection("businesses").doc(businessId).collection("clients").doc(clientId).delete();
+        continue;
+      }
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
@@ -746,7 +847,9 @@ async function applyMayaFinanceFromPanelReply(db, firebaseContext, rawReply) {
     return (base ? `${base}\n\n` : "") + `(No se pudo completar la acción: ${msg})`;
   }
 
-  return rawReply;
+  const base = visibleText || rawReply;
+  if (!extraBlocks.length) return base;
+  return `${base}\n\n${extraBlocks.join("\n\n")}`.trim();
 }
 
 export const chatWithAI = onRequest(
@@ -817,7 +920,7 @@ export const chatWithAI = onRequest(
           : "";
 
         const db = getAdminDb();
-        const replyOut = await applyMayaFinanceFromPanelReply(db, firebaseContext, textContent);
+        const replyOut = await applyMayaActionsFromPanelReply(db, firebaseContext, textContent);
 
         return res.status(200).json({
           reply: replyOut,
