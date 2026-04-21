@@ -32,6 +32,10 @@ import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
 
+/** Bienvenida estática (sin llamada a API — ahorro de tokens y respuesta instantánea). */
+const MAYA_WELCOME_STATIC =
+  "Hola Marvin, soy Maya, tu secretaria personal de YourColor. Ya tengo cargado tu negocio: clientes, órdenes, finanzas y calendario. ¿En qué te ayudo hoy?";
+
 /** Últimos turnos enviados a Claude (memoria reciente; calidad de conversación). */
 const MAX_API_MESSAGES = 20;
 const DELIVERY_DAYS_OFFSET = 12;
@@ -1095,20 +1099,43 @@ async function sendToClaude() {
       body: JSON.stringify({
         messages: apiConversation,
         firebaseContext: firebaseContextPayload,
+        stream: true,
       }),
     });
-    const raw = await res.text();
-    let json;
-    try {
-      json = JSON.parse(raw);
-    } catch {
-      json = {};
-    }
+
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    const rawErr = !res.ok ? await res.text() : "";
     if (!res.ok) {
-      const errMsg = typeof json.error === "string" ? json.error : raw || `Error ${res.status}`;
+      let errMsg = rawErr || `Error ${res.status}`;
+      try {
+        const j = JSON.parse(rawErr);
+        if (typeof j.error === "string") errMsg = j.error;
+      } catch {
+        /* ignore */
+      }
       throw new Error(errMsg);
     }
-    const reply = typeof json.reply === "string" ? json.reply.trim() : "";
+
+    let reply = "";
+    if (ct.includes("ndjson") && res.body) {
+      const shell = createStreamingAssistantShell();
+      if (!shell) throw new Error("No se pudo mostrar la respuesta.");
+      try {
+        reply = await readMayaNdjsonStream(res, (chunk) => {
+          shell.bubble.textContent += chunk;
+          const st = document.getElementById("yc-chat-stream");
+          if (st) st.scrollTop = st.scrollHeight;
+        });
+      } finally {
+        shell.bubble.removeAttribute("aria-busy");
+        shell.wrap.remove();
+      }
+      reply = String(reply || "").trim();
+    } else {
+      const json = await res.json();
+      reply = typeof json.reply === "string" ? json.reply.trim() : "";
+    }
+
     if (!reply) {
       throw new Error("Respuesta vacía del asistente.");
     }
@@ -1177,8 +1204,7 @@ function showWelcomeAssistant() {
   col.className = "yc-msg-inner-col";
   const bubble = document.createElement("div");
   bubble.className = "yc-msg-bubble";
-  bubble.textContent =
-    "Hola Marvin, soy Maya. Ya tengo a mano lo importante del negocio (pedidos, clientes, finanzas del mes y la agenda). Cuéntame en qué te ayudo hoy — precios, seguimiento, ideas… aquí estoy.";
+  bubble.textContent = MAYA_WELCOME_STATIC;
   const time = document.createElement("div");
   time.className = "yc-msg-time";
   time.textContent = formatTime();
@@ -1189,23 +1215,113 @@ function showWelcomeAssistant() {
 }
 
 /**
+ * Burbuja vacía para ir rellenando con streaming.
+ * @returns {{ wrap: HTMLDivElement, bubble: HTMLDivElement } | null}
+ */
+function createStreamingAssistantShell() {
+  const stream = document.getElementById("yc-chat-stream");
+  if (!stream) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "yc-msg yc-msg--assistant";
+  const col = document.createElement("div");
+  col.className = "yc-msg-inner-col";
+  const bubble = document.createElement("div");
+  bubble.className = "yc-msg-bubble";
+  bubble.textContent = "";
+  bubble.setAttribute("aria-busy", "true");
+  const time = document.createElement("div");
+  time.className = "yc-msg-time";
+  time.textContent = formatTime();
+  col.appendChild(bubble);
+  col.appendChild(time);
+  wrap.appendChild(col);
+  stream.appendChild(wrap);
+  stream.scrollTop = stream.scrollHeight;
+  return { wrap, bubble };
+}
+
+/**
+ * Lee respuesta NDJSON del endpoint con streaming (delta + done).
+ * @param {Response} res
+ * @param {(chunk: string) => void} onDelta
+ * @returns {Promise<string>}
+ */
+async function readMayaNdjsonStream(res, onDelta) {
+  const body = res.body;
+  if (!body || !body.getReader) {
+    return "";
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let finalReply = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let ev;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (ev.type === "delta" && typeof ev.text === "string") {
+        onDelta(ev.text);
+      }
+      if (ev.type === "done" && typeof ev.reply === "string") {
+        finalReply = ev.reply;
+      }
+      if (ev.type === "error") {
+        throw new Error(typeof ev.message === "string" ? ev.message : "Error del asistente");
+      }
+    }
+  }
+  const tail = buf.trim();
+  if (tail) {
+    try {
+      const ev = JSON.parse(tail);
+      if (ev.type === "done" && typeof ev.reply === "string") finalReply = ev.reply;
+    } catch {
+      /* ignore */
+    }
+  }
+  return finalReply;
+}
+
+/**
  * @param {{ id: string, data: Record<string, unknown> }} business
  * @param {{ userMessage?: string }} [options]
  */
 async function loadFirebaseContext(business, options = {}) {
   const userMessage = typeof options.userMessage === "string" ? options.userMessage : "";
+  const bootstrap = options.bootstrap === true;
   const { flags, priority } = inferMayaDataFocus(userMessage);
 
-  const campaignCap = flags.campaigns ? 22 : flags.finance ? 8 : 14;
-  const financeDetailCap = flags.finance ? 95 : 60;
+  let campaignCap = flags.campaigns ? 22 : flags.finance ? 8 : 14;
+  let financeDetailCap = flags.finance ? 95 : 60;
+  let clientLimit = 30;
+  let calendarDays = 28;
+  let financeReadCap = 280;
+
+  if (bootstrap) {
+    campaignCap = Math.min(campaignCap, 8);
+    financeDetailCap = 40;
+    clientLimit = 18;
+    calendarDays = 14;
+    financeReadCap = 140;
+  }
 
   const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext] = await Promise.all([
-    fetchJobsSplitForChat(db, business.id),
-    fetchOrdersSplitForChat(db, business.id),
-    fetchClientsForChatContext(db, business.id, 30),
+    fetchJobsSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
+    fetchOrdersSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
+    fetchClientsForChatContext(db, business.id, clientLimit),
     fetchCampaignsListAndStats(db, business.id),
-    fetchFinanceTransactionsCurrentMonth(db, business.id, 280),
-    fetchCalendarEventsForChat(db, business.id, 28),
+    fetchFinanceTransactionsCurrentMonth(db, business.id, financeReadCap),
+    fetchCalendarEventsForChat(db, business.id, calendarDays),
   ]);
 
   const financeRows = financeMonth.slice(0, financeDetailCap);
@@ -1262,8 +1378,10 @@ async function loadFirebaseContext(business, options = {}) {
       financeMonthCount: financeMonth.length,
       calendarEventCount: calendarNext.length,
     },
-    contextNote:
-      "Datos cargados con foco inteligente: últimos 30 clientes; trabajos/pedidos activos + últimas 10 entregas por colección; finanzas del mes; calendario próximas 4 semanas. Si falta algo, dilo con naturalidad y pide a Marvin lo que necesites.",
+    contextNote: bootstrap
+      ? "Carga inicial ligera para arranque rápido; al escribir, el contexto se amplía según el tema."
+      : "Datos cargados con foco inteligente: clientes recientes; trabajos/pedidos activos + últimas entregas; finanzas del mes; calendario próximas semanas. Si falta algo, dilo con naturalidad y pide a Marvin lo que necesites.",
+    contextBootstrap: bootstrap,
   };
 
   const meta = document.getElementById("yc-chat-context-meta");
@@ -1816,7 +1934,6 @@ async function bootWithUser(user) {
       return;
     }
 
-    await loadFirebaseContext(business);
     mayaInitControlCenter(business);
 
     if (loading) loading.hidden = true;
@@ -1829,6 +1946,10 @@ async function bootWithUser(user) {
     setComposerEnabled(true);
     wireComposer();
     document.getElementById("yc-chat-input")?.focus();
+
+    void loadFirebaseContext(business, { bootstrap: true }).catch((e) => {
+      console.warn("[YourColor Chat] context bootstrap", e);
+    });
   } catch (e) {
     console.error("[YourColor Chat]", e);
     if (loading) loading.hidden = true;

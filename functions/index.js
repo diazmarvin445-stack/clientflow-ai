@@ -13,7 +13,8 @@ import {
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
-const MODEL = "claude-sonnet-4-20250514";
+/** Sonnet 3.5: excelente equilibrio velocidad / calidad para el panel. */
+const MODEL = "claude-3-5-sonnet-20241022";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 /** Token de la API de WhatsApp Cloud (Meta) para enviar mensajes. */
 const META_ACCESS_TOKEN = defineSecret("META_ACCESS_TOKEN");
@@ -1434,6 +1435,65 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
   return `${base}\n\n${extraBlocks.join("\n\n")}`.trim();
 }
 
+/**
+ * Parsea el stream SSE de Anthropic Messages y acumula texto del asistente.
+ * @param {import("node:stream").Readable | ReadableStream<Uint8Array> | null} body
+ * @param {(chunk: string) => void} onDelta
+ * @returns {Promise<string>}
+ */
+async function readAnthropicMessageStream(body, onDelta) {
+  if (!body || typeof body.getReader !== "function") {
+    return "";
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let lineBuf = "";
+  let fullText = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    lineBuf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = lineBuf.indexOf("\n")) >= 0) {
+      const line = lineBuf.slice(0, nl).trimEnd();
+      lineBuf = lineBuf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const raw = line.slice(5).trim();
+      if (!raw || raw === "[DONE]") continue;
+      let evt;
+      try {
+        evt = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && typeof evt.delta.text === "string") {
+        const t = evt.delta.text;
+        fullText += t;
+        onDelta(t);
+      }
+    }
+  }
+
+  for (const line of lineBuf.split("\n")) {
+    const t = line.trim();
+    if (!t.startsWith("data:")) continue;
+    const raw = t.slice(5).trim();
+    if (!raw || raw === "[DONE]") continue;
+    let evt;
+    try {
+      evt = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && typeof evt.delta.text === "string") {
+      fullText += evt.delta.text;
+      onDelta(evt.delta.text);
+    }
+  }
+  return fullText;
+}
+
 export const chatWithAI = onRequest(
   { secrets: [ANTHROPIC_KEY] },
   async (req, res) => {
@@ -1458,6 +1518,7 @@ export const chatWithAI = onRequest(
         const body = req.body && typeof req.body === "object" ? req.body : {};
         const firebaseContext =
           body.firebaseContext && typeof body.firebaseContext === "object" ? body.firebaseContext : {};
+        const wantStream = body.stream === true;
 
         const basePrompt = getMayaInternalChatPrompt();
         const { system, messages } = prepareMayaAnthropicPayload(basePrompt, firebaseContext, body.messages);
@@ -1469,6 +1530,54 @@ export const chatWithAI = onRequest(
           return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
         }
 
+        const anthropicPayload = {
+          model: MODEL,
+          max_tokens: 4096,
+          system,
+          messages,
+        };
+
+        if (wantStream) {
+          const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              ...anthropicPayload,
+              stream: true,
+            }),
+          });
+
+          if (!anthropicResponse.ok) {
+            const errText = await anthropicResponse.text();
+            let errMsg = errText;
+            try {
+              const j = JSON.parse(errText);
+              errMsg = asText(j?.error?.message, errText);
+            } catch {
+              /* ignore */
+            }
+            return res.status(anthropicResponse.status).json({ error: errMsg });
+          }
+
+          res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+          res.setHeader("Cache-Control", "no-cache, no-transform");
+          res.setHeader("X-Accel-Buffering", "no");
+
+          const rawAccum = await readAnthropicMessageStream(anthropicResponse.body, (chunk) => {
+            res.write(`${JSON.stringify({ type: "delta", text: chunk })}\n`);
+          });
+
+          const db = getAdminDb();
+          const replyOut = await applyMayaActionsFromPanelReply(db, firebaseContext, rawAccum);
+          res.write(`${JSON.stringify({ type: "done", reply: replyOut })}\n`);
+          res.end();
+          return;
+        }
+
         const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: {
@@ -1476,12 +1585,7 @@ export const chatWithAI = onRequest(
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            model: MODEL,
-            max_tokens: 4096,
-            system,
-            messages,
-          }),
+          body: JSON.stringify(anthropicPayload),
         });
 
         const anthropicBody = await anthropicResponse.json();
