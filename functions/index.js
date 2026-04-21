@@ -418,6 +418,337 @@ function asChatMessages(raw) {
   return out;
 }
 
+const MAYA_PANEL_ACTION_PREFIX = "MAYA_ACTION_JSON:";
+const MAYA_PANEL_FINANCE_ACTIONS = new Set(["add_income", "add_expense", "get_balance", "delete_transaction"]);
+
+const FINANCE_INCOME_KEYS = new Set(["ventas", "anticipos", "otros_ingresos"]);
+const FINANCE_EXPENSE_KEYS = new Set([
+  "materiales",
+  "transporte",
+  "personal",
+  "servicios",
+  "alquiler",
+  "marketing",
+  "otros_gastos",
+]);
+
+/**
+ * Extrae MAYA_ACTION_JSON del final del mensaje (misma lógica que el panel en `chat.js`).
+ * @param {string} text
+ * @returns {{ visibleText: string, payload: Record<string, unknown> | null }}
+ */
+function extractMayaPanelActionJson(text) {
+  const raw = String(text ?? "");
+  const idx = raw.indexOf(MAYA_PANEL_ACTION_PREFIX);
+  if (idx < 0) return { visibleText: raw, payload: null };
+  const afterPrefix = raw.slice(idx + MAYA_PANEL_ACTION_PREFIX.length).trimStart();
+  const jsonStartInAfter = afterPrefix.indexOf("{");
+  if (jsonStartInAfter < 0) return { visibleText: raw, payload: null };
+  const fromBrace = afterPrefix.slice(jsonStartInAfter);
+  let depth = 0;
+  let end = -1;
+  for (let i = 0; i < fromBrace.length; i += 1) {
+    const c = fromBrace[i];
+    if (c === "{") depth += 1;
+    else if (c === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return { visibleText: raw, payload: null };
+  const jsonStr = fromBrace.slice(0, end + 1);
+  let payload = null;
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === "object") payload = /** @type {Record<string, unknown>} */ (parsed);
+  } catch {
+    return { visibleText: raw, payload: null };
+  }
+  const removeEnd = idx + MAYA_PANEL_ACTION_PREFIX.length + afterPrefix.slice(0, jsonStartInAfter).length + end + 1;
+  const visibleText = (raw.slice(0, idx) + raw.slice(removeEnd)).replace(/\n{3,}/g, "\n\n").trim();
+  return { visibleText, payload };
+}
+
+/**
+ * @param {Record<string, unknown>} payload
+ */
+function mergeFinancePayload(payload) {
+  const nested =
+    payload.data && typeof payload.data === "object"
+      ? /** @type {Record<string, unknown>} */ ({ ...payload.data })
+      : {};
+  const out = { ...nested };
+  for (const k of ["amount", "description", "category", "date", "period", "transactionId", "clientId", "orderId"]) {
+    if (k in payload && payload[k] !== undefined && out[k] === undefined) {
+      out[k] = payload[k];
+    }
+  }
+  return out;
+}
+
+function formatMoneyUsd(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "$0.00";
+  const sign = v < 0 ? "-" : "";
+  return `${sign}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * @param {string} period
+ */
+function normalizeFinancePeriod(period) {
+  const p = String(period ?? "")
+    .trim()
+    .toLowerCase();
+  if (p === "day" || p === "today" || p === "hoy") return "day";
+  if (p === "week" || p === "semana") return "week";
+  if (p === "month" || p === "mes") return "month";
+  if (p === "all" || p === "todo" || p === "total") return "all";
+  return "month";
+}
+
+/**
+ * @param {"day" | "week" | "month" | "all"} period
+ * @returns {{ contains: (d: Date | null | undefined) => boolean, label: string }}
+ */
+function financeBoundsForPeriod(period) {
+  const now = new Date();
+  if (period === "all") {
+    return {
+      contains: () => true,
+      label: "En total registrado",
+    };
+  }
+  if (period === "day") {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    return {
+      contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
+      label: "Hoy",
+    };
+  }
+  if (period === "week") {
+    const x = new Date(now);
+    const day = (x.getDay() + 6) % 7;
+    x.setDate(x.getDate() - day);
+    const start = new Date(x.getFullYear(), x.getMonth(), x.getDate(), 0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return {
+      contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
+      label: "Esta semana",
+    };
+  }
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return {
+    contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
+    label: "Este mes",
+  };
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {"day" | "week" | "month" | "all"} period
+ */
+async function aggregateFinanceTotals(db, businessId, period) {
+  const { contains } = financeBoundsForPeriod(period);
+  const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(3000).get();
+  let income = 0;
+  let expense = 0;
+  snap.forEach((docSnap) => {
+    const d = docSnap.data();
+    const raw = d.date;
+    let dt = null;
+    if (raw && typeof raw.toDate === "function") {
+      try {
+        dt = raw.toDate();
+      } catch {
+        dt = null;
+      }
+    }
+    if (!contains(dt)) return;
+    const amt = Number(d.amount);
+    if (!Number.isFinite(amt) || amt <= 0) return;
+    if (d.type === "expense") expense += amt;
+    else income += amt;
+  });
+  return { income, expense, net: income - expense };
+}
+
+/**
+ * @param {string} raw
+ * @param {"income" | "expense"} kind
+ */
+function normalizeFinanceCategory(raw, kind) {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  if (kind === "income") {
+    if (s === "otros_ingresos" || s === "otros" || s === "otrosingresos") return "otros_ingresos";
+    if (FINANCE_INCOME_KEYS.has(s)) return s;
+    return "otros_ingresos";
+  }
+  if (FINANCE_EXPENSE_KEYS.has(s)) return s;
+  const map = {
+    material: "materiales",
+    materiales: "materiales",
+    transport: "transporte",
+    transporte: "transporte",
+    rent: "alquiler",
+    alquiler: "alquiler",
+  };
+  if (map[s]) return map[s];
+  return "otros_gastos";
+}
+
+/**
+ * @param {unknown} raw
+ */
+function parseFinanceMovementDate(raw) {
+  if (raw == null || raw === "") {
+    const t = new Date();
+    t.setHours(12, 0, 0, 0);
+    return t;
+  }
+  const s = typeof raw === "string" ? raw.trim() : String(raw);
+  const d = new Date(s.includes("T") ? s : `${s}T12:00:00`);
+  if (Number.isNaN(d.getTime())) {
+    const t = new Date();
+    t.setHours(12, 0, 0, 0);
+    return t;
+  }
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaFinanceAddMovement(db, businessId, payload, kind) {
+  const data = mergeFinancePayload(payload);
+  const amt = Number(data.amount);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    throw new Error("Monto inválido para registrar.");
+  }
+  const description =
+    typeof data.description === "string" && data.description.trim()
+      ? data.description.trim()
+      : "Movimiento (Chat IA)";
+  const category = normalizeFinanceCategory(data.category, kind);
+  const movementDate = parseFinanceMovementDate(data.date);
+  const clientId = typeof data.clientId === "string" && data.clientId.trim() ? data.clientId.trim() : null;
+  const orderId = typeof data.orderId === "string" && data.orderId.trim() ? data.orderId.trim() : null;
+
+  await db.collection("businesses").doc(businessId).collection("finance").add({
+    type: kind,
+    amount: amt,
+    category,
+    description,
+    clientId,
+    orderId,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: "maya",
+    date: Timestamp.fromDate(movementDate),
+  });
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaFinanceDelete(db, businessId, payload) {
+  const data = mergeFinancePayload(payload);
+  const tid =
+    typeof data.transactionId === "string"
+      ? data.transactionId.trim()
+      : String(data.transactionId ?? "").trim();
+  if (!tid) throw new Error("Falta transactionId para eliminar el movimiento.");
+  await db.collection("businesses").doc(businessId).collection("finance").doc(tid).delete();
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {"day" | "week" | "month" | "all"} period
+ */
+async function mayaFinanceBalanceBlock(db, businessId, period) {
+  const { label } = financeBoundsForPeriod(period);
+  const { income, expense, net } = await aggregateFinanceTotals(db, businessId, period);
+  const face = net >= 0 ? "✅" : "⚠️";
+  return `${label} llevas:
+• Ingresos: ${formatMoneyUsd(income)}
+• Gastos: ${formatMoneyUsd(expense)}
+• Ganancia neta: ${formatMoneyUsd(net)} ${face}`;
+}
+
+/**
+ * Ejecuta acciones financieras del panel en el servidor (MAYA_ACTION_JSON).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {Record<string, unknown>} firebaseContext
+ * @param {string} rawReply
+ */
+async function applyMayaFinanceFromPanelReply(db, firebaseContext, rawReply) {
+  const { visibleText, payload } = extractMayaPanelActionJson(rawReply);
+  if (!payload || typeof payload.action !== "string") {
+    return rawReply;
+  }
+  if (!MAYA_PANEL_FINANCE_ACTIONS.has(payload.action)) {
+    return rawReply;
+  }
+
+  const businessId =
+    typeof firebaseContext.businessId === "string" ? firebaseContext.businessId.trim() : "";
+  if (!businessId) {
+    return (
+      visibleText +
+      "\n\n(No se pudo ejecutar la acción financiera: falta businessId en el contexto.)"
+    ).trim();
+  }
+
+  try {
+    if (payload.action === "get_balance") {
+      const data = mergeFinancePayload(payload);
+      const period = normalizeFinancePeriod(data.period);
+      const block = await mayaFinanceBalanceBlock(db, businessId, period);
+      if (visibleText.trim()) {
+        return `${visibleText.trim()}\n\n${block}`;
+      }
+      return block;
+    }
+
+    if (payload.action === "add_income") {
+      await mayaFinanceAddMovement(db, businessId, payload, "income");
+      return visibleText.trim() || "Listo: ingreso registrado en Finanzas.";
+    }
+
+    if (payload.action === "add_expense") {
+      await mayaFinanceAddMovement(db, businessId, payload, "expense");
+      return visibleText.trim() || "Listo: gasto registrado en Finanzas.";
+    }
+
+    if (payload.action === "delete_transaction") {
+      await mayaFinanceDelete(db, businessId, payload);
+      return visibleText.trim() || "Listo: movimiento eliminado.";
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error desconocido";
+    const base = visibleText.trim();
+    return (base ? `${base}\n\n` : "") + `(No se pudo completar la acción: ${msg})`;
+  }
+
+  return rawReply;
+}
+
 export const chatWithAI = onRequest(
   { secrets: [ANTHROPIC_KEY] },
   async (req, res) => {
@@ -485,8 +816,11 @@ export const chatWithAI = onRequest(
               .join("\n")
           : "";
 
+        const db = getAdminDb();
+        const replyOut = await applyMayaFinanceFromPanelReply(db, firebaseContext, textContent);
+
         return res.status(200).json({
-          reply: textContent,
+          reply: replyOut,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";

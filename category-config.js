@@ -19,6 +19,7 @@ export const CATEGORY_CONFIGS = {
       { id: "chat", name: "Chat IA", href: "chat.html", icon: "chat" },
       { id: "calendario", name: "Calendario", href: "calendario.html", icon: "cal" },
       { id: "clientes", name: "Clientes", href: "clientes.html", icon: "users" },
+      { id: "finanzas", name: "Finanzas", href: "finanzas.html", icon: "finance" },
       { id: "pedidos", name: "Pedidos", href: "dashboard.html#pedidos", icon: "orders" },
       { id: "campanas", name: "Campañas IA", href: "campanas.html", icon: "spark" },
       { id: "equipo", name: "Equipo", href: "equipo.html", icon: "team" },

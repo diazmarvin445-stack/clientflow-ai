@@ -20,6 +20,7 @@ import {
   fetchJobsForBusiness,
   fetchClientsForBusiness,
   fetchCampaignsListAndStats,
+  fetchFinanceTransactionsForBusiness,
   formatBusinessMeta,
   initialsFromName,
 } from "./dashboard-data.js";
@@ -674,7 +675,18 @@ function mergeMayaActionData(payload) {
       : {};
   /** @type {Record<string, unknown>} */
   const out = { ...nested };
-  for (const k of ["clientId", "orderId", "changes", "date", "title"]) {
+  for (const k of [
+    "clientId",
+    "orderId",
+    "changes",
+    "date",
+    "title",
+    "amount",
+    "description",
+    "category",
+    "period",
+    "transactionId",
+  ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
     }
@@ -993,6 +1005,12 @@ async function sendToClaude() {
     apiConversation.push({ role: "assistant", content: assistantVisible });
     trimApiMessages();
 
+    if (activeBusiness) {
+      void loadFirebaseContext(activeBusiness).catch((e) => {
+        console.warn("[YourColor Chat] context refresh", e);
+      });
+    }
+
     if (actionPayload && activeBusiness?.id && actionPayload.action !== "save_client") {
       try {
         const kind = await executeMayaActionFromChat(activeBusiness.id, actionPayload);
@@ -1062,11 +1080,37 @@ function showWelcomeAssistant() {
  * @param {{ id: string, data: Record<string, unknown> }} business
  */
 async function loadFirebaseContext(business) {
-  const [orders, clients, campAgg] = await Promise.all([
+  const [orders, clients, campAgg, financeRows] = await Promise.all([
     fetchJobsForBusiness(db, business.id),
     fetchClientsForBusiness(db, business.id),
     fetchCampaignsListAndStats(db, business.id),
+    fetchFinanceTransactionsForBusiness(db, business.id, 200),
   ]);
+
+  const now = new Date();
+  const startM = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const endM = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  let monthIncome = 0;
+  let monthExpense = 0;
+  for (const row of financeRows) {
+    const raw = row.date ?? row.createdAt;
+    let d = null;
+    if (raw && typeof raw === "object" && raw !== null && typeof /** @type {{ toDate?: () => Date }} */ (raw).toDate === "function") {
+      try {
+        d = /** @type {{ toDate: () => Date }} */ (raw).toDate();
+      } catch {
+        d = null;
+      }
+    }
+    const t = d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+    if (t >= startM.getTime() && t <= endM.getTime()) {
+      const amt = Number(row.amount);
+      if (Number.isFinite(amt) && amt > 0) {
+        if (row.type === "expense") monthExpense += amt;
+        else monthIncome += amt;
+      }
+    }
+  }
 
   const profile = serializeForAi(business.data) || {};
   firebaseContextPayload = {
@@ -1075,10 +1119,17 @@ async function loadFirebaseContext(business) {
     orders: serializeForAi(orders),
     clients: serializeForAi(clients),
     campaigns: serializeForAi(campAgg.campaigns || []),
+    financeThisMonth: {
+      income: monthIncome,
+      expense: monthExpense,
+      net: monthIncome - monthExpense,
+    },
+    financeRecent: serializeForAi(financeRows.slice(0, 40)),
     stats: {
       orderCount: orders.length,
       clientCount: clients.length,
       campaignCount: (campAgg.campaigns || []).length,
+      financeCount: financeRows.length,
     },
   };
 

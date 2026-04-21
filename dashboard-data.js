@@ -8,6 +8,7 @@ import {
   getDocs,
   getDocsFromServer,
   limit,
+  orderBy,
   query,
   serverTimestamp,
   updateDoc,
@@ -604,6 +605,23 @@ export async function fetchClientsForBusiness(db, businessId) {
     const ta = toDate(a.createdAt)?.getTime() ?? 0;
     const tb = toDate(b.createdAt)?.getTime() ?? 0;
     return tb - ta;
+  });
+  return rows;
+}
+
+/**
+ * Movimientos en `businesses/{businessId}/finance`, más recientes por `date` primero.
+ */
+export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDocs = 200) {
+  const qy = query(
+    collection(db, "businesses", businessId, "finance"),
+    orderBy("date", "desc"),
+    limit(maxDocs),
+  );
+  const snap = await getDocs(qy);
+  const rows = [];
+  snap.forEach((docSnap) => {
+    rows.push({ id: docSnap.id, ...docSnap.data() });
   });
   return rows;
 }
