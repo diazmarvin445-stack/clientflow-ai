@@ -262,6 +262,157 @@ function deliveryDateAfterBusinessDays(start, businessDays) {
   return d;
 }
 
+function normalizePhoneDigits(raw) {
+  return String(raw ?? "").replace(/\D/g, "");
+}
+
+function parseOrderDate(raw) {
+  if (raw == null || raw === "") return null;
+  const s = typeof raw === "string" ? raw.trim() : String(raw);
+  const d = new Date(s.includes("T") ? s : `${s}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
+
+function normalizeOrderStatus(raw) {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (s === "produccion" || s === "in_production") return "produccion";
+  if (s === "listo") return "listo";
+  if (s === "entregado" || s === "completed") return "entregado";
+  if (s === "cancelado" || s === "cancelled") return "cancelado";
+  return "nuevo";
+}
+
+async function findOrCreateClient(db, businessId, payload) {
+  const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
+  const name = asText(payload.clientName, "Cliente");
+  const phone = normalizePhoneDigits(payload.clientPhone);
+  let existing = null;
+
+  if (phone) {
+    const byPhone = await clientsCol.where("phone", "==", phone).limit(1).get();
+    if (!byPhone.empty) {
+      const docSnap = byPhone.docs[0];
+      existing = { id: docSnap.id, data: docSnap.data() || {} };
+    }
+  }
+
+  if (existing) {
+    await clientsCol.doc(existing.id).set(
+      {
+        fullName: name || existing.data.fullName || "Cliente",
+        name: name || existing.data.name || "Cliente",
+        phone: phone || existing.data.phone || "",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return { id: existing.id };
+  }
+
+  const created = await clientsCol.add({
+    fullName: name || "Cliente",
+    name: name || "Cliente",
+    phone,
+    source: payload.source || "manual",
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return { id: created.id };
+}
+
+async function processNewOrder(db, businessId, rawOrder) {
+  const clientName = asText(rawOrder.clientName, "Cliente");
+  const clientPhone = normalizePhoneDigits(rawOrder.clientPhone);
+  const product = asText(rawOrder.product, "Pedido");
+  const quantity = Math.max(0, Number(rawOrder.quantity) || 0);
+  const amount = Math.max(0, Number(rawOrder.amount) || 0);
+  const deposit = Math.max(0, Number(rawOrder.deposit) || 0);
+  const balance = Math.max(0, amount - deposit);
+  const notes = asText(rawOrder.notes);
+  const source = asText(rawOrder.source, "manual");
+  const createdBy = asText(rawOrder.createdBy, "marvin");
+  const status = normalizeOrderStatus(rawOrder.status);
+  const sourceLeadId = asText(rawOrder.sourceLeadId);
+
+  let deliveryDate = parseOrderDate(rawOrder.deliveryDate);
+  if (!deliveryDate) {
+    deliveryDate = deliveryDateAfterBusinessDays(new Date(), 12);
+  }
+
+  const client = await findOrCreateClient(db, businessId, {
+    clientName,
+    clientPhone,
+    source,
+  });
+
+  const orderRef = await db.collection("businesses").doc(businessId).collection("orders").add({
+    clientId: client.id,
+    clientName,
+    clientPhone,
+    product,
+    quantity,
+    amount,
+    deposit,
+    balance,
+    status,
+    deliveryDate: Timestamp.fromDate(deliveryDate),
+    notes,
+    source,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy,
+    linkedClientId: client.id,
+    linkedFinanceId: "",
+    linkedCalendarId: "",
+  });
+
+  let linkedFinanceId = "";
+  if (deposit > 0) {
+    const financeRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+      type: "income",
+      amount: deposit,
+      category: "ventas",
+      description: `Depósito: ${product} - ${clientName}`,
+      clientId: client.id,
+      orderId: orderRef.id,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy,
+      date: Timestamp.fromDate(new Date()),
+    });
+    linkedFinanceId = financeRef.id;
+  }
+
+  let linkedCalendarId = "";
+  const calRef = await db.collection("businesses").doc(businessId).collection("calendar").add({
+    title: `Entrega: ${product} - ${clientName}`,
+    date: Timestamp.fromDate(deliveryDate),
+    type: "delivery",
+    status: "pending",
+    orderId: orderRef.id,
+    clientId: client.id,
+    sourceLeadId: sourceLeadId || null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  linkedCalendarId = calRef.id;
+
+  await orderRef.set(
+    {
+      linkedFinanceId,
+      linkedCalendarId,
+    },
+    { merge: true },
+  );
+
+  return {
+    orderId: orderRef.id,
+    linkedClientId: client.id,
+    linkedFinanceId,
+    linkedCalendarId,
+  };
+}
+
 function truncateWhatsApp(s, max = 1500) {
   const t = asText(s);
   if (t.length <= max) return t;
@@ -425,6 +576,7 @@ const MAYA_PANEL_ACTION_ALIASES = {
 };
 const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "create_client",
+  "create_order",
   "add_income",
   "add_expense",
   "create_calendar_event",
@@ -515,15 +667,23 @@ function mergeMayaActionData(payload) {
     "name",
     "phone",
     "email",
+    "clientName",
+    "clientPhone",
+    "product",
+    "quantity",
     "clientId",
     "transactionId",
     "title",
     "date",
     "amount",
+    "deposit",
+    "amount",
     "description",
     "category",
     "period",
     "deliveryDate",
+    "notes",
+    "status",
   ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
@@ -810,6 +970,23 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         });
         continue;
       }
+      if (action === "create_order") {
+        const data = mergeMayaActionData(payload);
+        await processNewOrder(db, businessId, {
+          clientName: data.clientName,
+          clientPhone: data.clientPhone,
+          product: data.product,
+          quantity: data.quantity,
+          amount: data.amount ?? data.total,
+          deposit: data.deposit,
+          deliveryDate: data.deliveryDate ?? data.date,
+          notes: data.notes,
+          source: "chat_interno",
+          createdBy: "maya",
+          status: "nuevo",
+        });
+        continue;
+      }
       if (action === "create_calendar_event") {
         const data = mergeMayaActionData(payload);
         const title =
@@ -928,6 +1105,126 @@ export const chatWithAI = onRequest(
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return res.status(500).json({ error: "Chat request failed.", details: message });
+      }
+    });
+  },
+);
+
+export const createManualOrder = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        if (!businessId) {
+          res.status(400).json({ error: "businessId es requerido." });
+          return;
+        }
+        const db = getAdminDb();
+        const result = await processNewOrder(db, businessId, {
+          clientName: body.clientName,
+          clientPhone: body.clientPhone,
+          product: body.product,
+          quantity: body.quantity,
+          amount: body.amount,
+          deposit: body.deposit,
+          deliveryDate: body.deliveryDate,
+          notes: body.notes,
+          source: "manual",
+          createdBy: "marvin",
+          status: body.status,
+        });
+        res.status(200).json({ ok: true, ...result });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo crear el pedido.", details: message });
+      }
+    });
+  },
+);
+
+export const updateOrderStatus = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        const orderId = asText(body.orderId);
+        const nextStatus = normalizeOrderStatus(body.status);
+        if (!businessId || !orderId) {
+          res.status(400).json({ error: "businessId y orderId son requeridos." });
+          return;
+        }
+
+        const db = getAdminDb();
+        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const snap = await orderRef.get();
+        if (!snap.exists) {
+          res.status(404).json({ error: "Pedido no encontrado." });
+          return;
+        }
+        const order = snap.data() || {};
+        let patch = { status: nextStatus, updatedAt: FieldValue.serverTimestamp() };
+        let financeId = "";
+
+        if (nextStatus === "entregado") {
+          const pendingBalance = Math.max(0, Number(order.balance) || 0);
+          if (pendingBalance > 0) {
+            const financeRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+              type: "income",
+              amount: pendingBalance,
+              category: "ventas",
+              description: `Saldo final: ${asText(order.product, "Pedido")} - ${asText(order.clientName, "Cliente")}`,
+              clientId: asText(order.linkedClientId),
+              orderId,
+              createdAt: FieldValue.serverTimestamp(),
+              createdBy: "marvin",
+              date: Timestamp.fromDate(new Date()),
+            });
+            financeId = financeRef.id;
+            patch.balance = 0;
+          }
+          const linkedCalendarId = asText(order.linkedCalendarId);
+          if (linkedCalendarId) {
+            await db
+              .collection("businesses")
+              .doc(businessId)
+              .collection("calendar")
+              .doc(linkedCalendarId)
+              .set(
+                {
+                  status: "completed",
+                  completedAt: FieldValue.serverTimestamp(),
+                },
+                { merge: true },
+              );
+          }
+        }
+
+        if (financeId) patch.linkedFinanceId = financeId;
+        await orderRef.set(patch, { merge: true });
+        res.status(200).json({ ok: true });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo actualizar el estado del pedido.", details: message });
       }
     });
   },
@@ -1299,22 +1596,21 @@ export const whatsappWebhook = onRequest(
             { merge: true },
           );
 
-          await db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("orders")
-            .add({
-              createdAt: FieldValue.serverTimestamp(),
-              total: calc.total,
-              deposit: calc.deposit,
-              customerName,
-              phone: from.replace(/^whatsapp:/i, ""),
-              whatsappFrom: from,
-              source: "whatsapp-yourcolor",
-              leadId: leadDocRef.id,
-              mayaOrder: leadPayload.mayaOrder ?? null,
-              status: "new",
-            });
+          await processNewOrder(db, businessId, {
+            clientName: customerName,
+            clientPhone: from.replace(/^whatsapp:/i, ""),
+            product:
+              (typeof leadPayload.service === "string" && leadPayload.service.trim()) || "Pedido WhatsApp",
+            quantity: Number(leadPayload.quantity) || 0,
+            amount: calc.total,
+            deposit: calc.deposit,
+            deliveryDate: deliveryDateAfterBusinessDays(new Date(), 12).toISOString().slice(0, 10),
+            notes: description,
+            source: "whatsapp",
+            createdBy: "maya",
+            status: "nuevo",
+            sourceLeadId: leadDocRef.id,
+          });
           confirmedOrderSaved = true;
 
           outbound = `${outbound}\n\n✅ Pedido registrado. Total ${formatUsd(calc.total)}. Depósito del ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)} (${YOURCOLOR_BUSINESS.rules.paymentMethods.join(" o ")}).`;

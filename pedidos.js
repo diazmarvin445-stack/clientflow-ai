@@ -1,0 +1,290 @@
+import { auth, db } from "./firebase.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  Timestamp,
+  updateDoc,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
+import { initDashShell } from "./dash-shell.js";
+
+const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
+const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
+
+let activeBusinessId = "";
+let allOrders = [];
+let ordersUnsub = null;
+
+function money(v) {
+  const n = Number(v) || 0;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function toDate(v) {
+  if (!v) return null;
+  if (typeof v.toDate === "function") return v.toDate();
+  if (v instanceof Date) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function renderHeader(business) {
+  const nameEl = document.getElementById("dash-business-name");
+  const metaEl = document.getElementById("dash-business-meta");
+  const av = document.getElementById("dash-avatar-initials");
+  if (!business) return;
+  const displayName = (typeof business.data.businessName === "string" && business.data.businessName.trim()) || "Tu negocio";
+  const { metaLine } = formatBusinessMeta(business.data);
+  if (nameEl) nameEl.textContent = displayName;
+  if (metaEl) metaEl.textContent = metaLine;
+  if (av) av.textContent = initialsFromName(displayName);
+}
+
+function statusBadgeClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "entregado") return "dash-badge--done";
+  if (s === "produccion") return "dash-badge--sched";
+  if (s === "cancelado") return "dash-badge--cancelled";
+  return "dash-badge--prog";
+}
+
+function sourceLabel(source) {
+  if (source === "whatsapp") return "💬 WhatsApp";
+  if (source === "chat_interno") return "🤖 Chat";
+  return "✍️ Manual";
+}
+
+function weekBounds() {
+  const now = new Date();
+  const day = (now.getDay() + 6) % 7;
+  const start = new Date(now);
+  start.setDate(now.getDate() - day);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function monthBounds() {
+  const now = new Date();
+  return {
+    start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0),
+    end: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+  };
+}
+
+function renderSummary(rows) {
+  const active = rows.filter((r) => !["entregado", "cancelado"].includes(String(r.status || "").toLowerCase())).length;
+  const wb = weekBounds();
+  const weekPending = rows.filter((r) => {
+    const d = toDate(r.deliveryDate);
+    const s = String(r.status || "").toLowerCase();
+    return d && d >= wb.start && d <= wb.end && !["entregado", "cancelado"].includes(s);
+  }).length;
+  const mb = monthBounds();
+  const monthTotal = rows.reduce((sum, r) => {
+    const d = toDate(r.createdAt);
+    if (!d || d < mb.start || d > mb.end) return sum;
+    return sum + (Number(r.amount) || 0);
+  }, 0);
+  const balance = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
+
+  document.getElementById("orders-metric-active").textContent = String(active);
+  document.getElementById("orders-metric-week").textContent = String(weekPending);
+  document.getElementById("orders-metric-month").textContent = money(monthTotal);
+  document.getElementById("orders-metric-balance").textContent = money(balance);
+}
+
+function getFilters() {
+  return {
+    status: document.getElementById("orders-filter-status").value,
+    date: document.getElementById("orders-filter-date").value,
+    source: document.getElementById("orders-filter-source").value,
+    search: document.getElementById("orders-filter-search").value.trim().toLowerCase(),
+  };
+}
+
+function applyFilters(rows) {
+  const f = getFilters();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const wb = weekBounds();
+  const mb = monthBounds();
+  return rows.filter((r) => {
+    const st = String(r.status || "").toLowerCase();
+    if (f.status !== "all" && st !== f.status) return false;
+    const src = String(r.source || "manual");
+    if (f.source !== "all" && src !== f.source) return false;
+    const text = `${r.clientName || ""} ${r.clientPhone || ""}`.toLowerCase();
+    if (f.search && !text.includes(f.search)) return false;
+    if (f.date !== "all") {
+      const d = toDate(r.createdAt);
+      if (!d) return false;
+      if (f.date === "today" && (d < todayStart || d > todayEnd)) return false;
+      if (f.date === "week" && (d < wb.start || d > wb.end)) return false;
+      if (f.date === "month" && (d < mb.start || d > mb.end)) return false;
+    }
+    return true;
+  });
+}
+
+async function deleteOrder(orderId) {
+  const ok = window.confirm("¿Eliminar este pedido?");
+  if (!ok) return;
+  await deleteDoc(doc(db, "businesses", activeBusinessId, "orders", orderId));
+}
+
+async function saveOrderFromModal(ev) {
+  ev.preventDefault();
+  const orderId = document.getElementById("orders-order-id").value.trim();
+  const payload = {
+    businessId: activeBusinessId,
+    clientName: document.getElementById("orders-client-name").value.trim(),
+    clientPhone: document.getElementById("orders-client-phone").value.trim(),
+    product: document.getElementById("orders-product").value.trim(),
+    quantity: Number(document.getElementById("orders-quantity").value || 0),
+    amount: Number(document.getElementById("orders-amount").value || 0),
+    deposit: Number(document.getElementById("orders-deposit").value || 0),
+    deliveryDate: document.getElementById("orders-delivery-date").value || null,
+    notes: document.getElementById("orders-notes").value.trim(),
+    status: document.getElementById("orders-status").value,
+  };
+
+  if (!orderId) {
+    const res = await fetch(CREATE_MANUAL_ORDER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error("No se pudo crear el pedido manual.");
+  } else {
+    await updateDoc(doc(db, "businesses", activeBusinessId, "orders", orderId), {
+      clientName: payload.clientName,
+      clientPhone: payload.clientPhone,
+      product: payload.product,
+      quantity: payload.quantity,
+      amount: payload.amount,
+      deposit: payload.deposit,
+      balance: Math.max(0, payload.amount - payload.deposit),
+      notes: payload.notes,
+      status: payload.status,
+      deliveryDate: payload.deliveryDate ? Timestamp.fromDate(new Date(`${payload.deliveryDate}T12:00:00`)) : null,
+    });
+    if (payload.status === "entregado") {
+      await fetch(UPDATE_ORDER_STATUS_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId: activeBusinessId, orderId, status: "entregado" }),
+      });
+    }
+  }
+  document.getElementById("orders-modal").close();
+}
+
+function openModalFor(row = null) {
+  const modal = document.getElementById("orders-modal");
+  document.getElementById("orders-modal-title").textContent = row ? "Editar pedido" : "Nuevo pedido manual";
+  document.getElementById("orders-order-id").value = row?.id || "";
+  document.getElementById("orders-client-name").value = row?.clientName || "";
+  document.getElementById("orders-client-phone").value = row?.clientPhone || "";
+  document.getElementById("orders-product").value = row?.product || "";
+  document.getElementById("orders-quantity").value = row?.quantity ?? "";
+  document.getElementById("orders-amount").value = row?.amount ?? "";
+  document.getElementById("orders-deposit").value = row?.deposit ?? "";
+  const dd = toDate(row?.deliveryDate);
+  document.getElementById("orders-delivery-date").value = dd ? dd.toISOString().slice(0, 10) : "";
+  document.getElementById("orders-notes").value = row?.notes || "";
+  document.getElementById("orders-status").value = row?.status || "nuevo";
+  modal.showModal();
+}
+
+function renderRows() {
+  const tbody = document.getElementById("orders-tbody");
+  const rows = applyFilters(allOrders);
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 9;
+    td.className = "dash-table-muted";
+    td.textContent = "No hay pedidos para este filtro.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    const dateLabel = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
+    tr.innerHTML = `
+      <td><input type="checkbox" aria-label="Seleccionar pedido" /></td>
+      <td><strong>${row.clientName || "—"}</strong><br><span class="dash-table-muted">${row.clientPhone || "—"}</span></td>
+      <td>${row.product || "—"}</td>
+      <td>${money(row.amount)} / ${money(row.deposit)} / ${money(row.balance)}</td>
+      <td><span class="dash-badge ${statusBadgeClass(row.status)}">${row.status || "nuevo"}</span></td>
+      <td>${sourceLabel(row.source)}</td>
+      <td>${dateLabel}</td>
+      <td>${row.notes || "—"}</td>
+      <td><button class="dash-icon-btn" data-edit="${row.id}">✏️</button> <button class="dash-icon-btn" data-del="${row.id}">🗑️</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = allOrders.find((x) => x.id === btn.getAttribute("data-edit"));
+      if (row) openModalFor(row);
+    });
+  });
+  tbody.querySelectorAll("[data-del]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await deleteOrder(btn.getAttribute("data-del"));
+    });
+  });
+}
+
+function wireUi() {
+  document.getElementById("orders-btn-add").addEventListener("click", () => openModalFor(null));
+  document.getElementById("orders-btn-cancel").addEventListener("click", () => document.getElementById("orders-modal").close());
+  document.getElementById("orders-form").addEventListener("submit", (ev) => {
+    saveOrderFromModal(ev).catch((e) => window.alert(e instanceof Error ? e.message : "Error al guardar pedido"));
+  });
+  ["orders-filter-status", "orders-filter-date", "orders-filter-source", "orders-filter-search"].forEach((id) => {
+    document.getElementById(id).addEventListener("input", renderRows);
+    document.getElementById(id).addEventListener("change", renderRows);
+  });
+}
+
+function subscribeOrders() {
+  if (ordersUnsub) ordersUnsub();
+  const q = query(collection(db, "businesses", activeBusinessId, "orders"), orderBy("createdAt", "desc"));
+  ordersUnsub = onSnapshot(q, (snap) => {
+    allOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderSummary(allOrders);
+    renderRows();
+  });
+}
+
+function boot() {
+  initDashShell({ auth, db });
+  wireUi();
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      window.location.replace("login.html");
+      return;
+    }
+    const business = await resolveBusinessForUser(db, user);
+    if (!business) return;
+    activeBusinessId = business.id;
+    renderHeader(business);
+    subscribeOrders();
+  });
+}
+
+boot();

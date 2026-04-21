@@ -150,8 +150,8 @@ function renderAppointmentsFromJobs(jobs) {
     li.className = "dash-appt dash-appt--solo";
     li.innerHTML = `
     <div class="dash-appt-body">
-      <span class="dash-appt-title">Sin entregas programadas</span>
-      <span class="dash-appt-meta">Las órdenes creadas desde Chat IA aparecerán aquí con su fecha de entrega (+12 días).</span>
+      <span class="dash-appt-title">No tienes citas ni entregas programadas.</span>
+      <span class="dash-appt-meta">Cuando tengas eventos reales en tu calendario, aparecerán aquí.</span>
     </div>`;
     list.appendChild(li);
     if (badge) badge.textContent = "0";

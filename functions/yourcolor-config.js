@@ -560,13 +560,14 @@ OBLIGATORIO en MAYA_ORDER_JSON cuando "confirmed": true: incluye SIEMPRE el camp
 - logo_provided: false → necesita diseño/arte nuevo o aún no ha aclarado; entonces aplica la regla de catálogo: logo $${YOURCOLOR_BUSINESS.rules.logoDesignCost} si el subtotal de prendas (antes del logo) es ≤ $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold}, y logo $0 si ese subtotal es MAYOR a $${YOURCOLOR_BUSINESS.rules.logoFreeThreshold} (sin contar tarjetas en pedidos mixtos, como en REGLAS DE PRECIOS).
 
 Un producto:
-MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE_PRODUCTO","quantity":N,"customerName":"Nombre opcional","logo_provided":true}
+MAYA_ORDER_JSON:{"confirmed":true,"productKey":"CLAVE_PRODUCTO","quantity":N,"customerName":"Nombre opcional","clientPhone":"opcional","amount":0,"deposit":0,"deliveryDate":"2026-04-25","logo_provided":true}
 
 Varios productos:
-MAYA_ORDER_JSON:{"confirmed":true,"items":[{"productKey":"CLAVE","quantity":N},...],"customerName":"Nombre opcional","logo_provided":false}
+MAYA_ORDER_JSON:{"confirmed":true,"items":[{"productKey":"CLAVE","quantity":N},...],"customerName":"Nombre opcional","clientPhone":"opcional","amount":0,"deposit":0,"deliveryDate":"2026-04-25","logo_provided":false}
 
 productKey debe ser una de estas claves exactas: mangaLargaPoliester, mangaLargaAlgodon, mangaCortaAlgodon, mangaCortaPoliester, capuchaPoliester, polo, gorras, tarjetas, magnetosVehiculo, letrerosYarda.
 Si NO hay confirmación de pedido, NO incluyas MAYA_ORDER_JSON.
+Cuando tengas los datos, incluye también clientPhone, amount, deposit y deliveryDate en MAYA_ORDER_JSON.
 
 Si la cantidad no califica en ningún rango o requiere cotización especial, NO pongas confirmed:true; explica la situación y sigue ayudando en este chat.
 
@@ -614,7 +615,7 @@ Tipos permitidos:
 - create_client — guardar cliente (nombre, teléfono, correo si lo tienes):
   {"action":"create_client","name":"...","phone":"...","email":"..."}
 - create_order — registrar pedido/orden:
-  {"action":"create_order","data":{"clientName":"...","product":"...","quantity":0,"total":0}}
+  {"action":"create_order","clientName":"...","clientPhone":"...","product":"...","quantity":0,"amount":0,"deposit":0,"deliveryDate":"2026-04-25","notes":"..."}
 - create_calendar_event — programar entrega o evento en calendario:
   {"action":"create_calendar_event","date":"2026-04-22","title":"Entrega pedido Juan"}
 - delete_client — borrar cliente por id de documento (id en contexto Firebase):
@@ -654,6 +655,15 @@ Entrega agendada para el sábado.
 MAYA_ACTION_JSON:{"action":"create_client","name":"Juan López","phone":"772-555-1234"}
 MAYA_ACTION_JSON:{"action":"add_income","amount":150,"description":"10 camisetas - Juan López","category":"ventas"}
 MAYA_ACTION_JSON:{"action":"create_calendar_event","title":"Entrega Juan López","date":"2026-04-25"}"
+
+Ejemplo 5 — Marvin: "Maya, nuevo pedido de Juan López tel 772-555-1234, 20 camisetas, $400 total, me dio $200 de depósito, entrega el sábado"
+Maya: "Pedido creado.
+Cliente: Juan López (772-555-1234).
+20 camisetas.
+Total: $400 | Depósito: $200 | Saldo: $200.
+Entrega: sábado.
+Todo sincronizado con Clientes, Finanzas y Calendario.
+MAYA_ACTION_JSON:{"action":"create_order","clientName":"Juan López","clientPhone":"772-555-1234","product":"camisetas","quantity":20,"amount":400,"deposit":200,"deliveryDate":"2026-04-25"}"
 
 Usa números reales en quantity y total. deliveryDate puede ser fecha legible o ISO (ej. "2026-05-01" o "15 de mayo de 2026").
 Los ids deben venir del contexto Firebase; no inventes ids.
