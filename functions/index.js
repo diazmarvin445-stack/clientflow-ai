@@ -13,8 +13,8 @@ import {
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
-/** Sonnet 3.5: excelente equilibrio velocidad / calidad para el panel. */
-const MODEL = "claude-3-5-sonnet-20241022";
+/** Haiku 4.5: rápida y económica para el panel y WhatsApp. */
+const MODEL = "claude-haiku-4-5-20251001";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 /** Token de la API de WhatsApp Cloud (Meta) para enviar mensajes. */
 const META_ACCESS_TOKEN = defineSecret("META_ACCESS_TOKEN");

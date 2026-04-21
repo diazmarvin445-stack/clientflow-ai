@@ -1075,7 +1075,11 @@ async function sendToClaude() {
   const input = document.getElementById("yc-chat-input");
   const btn = document.getElementById("yc-chat-send");
   const text = input && "value" in input ? String(input.value).trim() : "";
-  if (!text || !activeBusiness) return;
+  if (!text) return;
+  if (!activeBusiness) {
+    showToast("Espera a que cargue tu negocio o vuelve a iniciar sesión.", true);
+    return;
+  }
 
   hideError();
   appendUserBubble(text);
@@ -1103,7 +1107,6 @@ async function sendToClaude() {
       }),
     });
 
-    const ct = (res.headers.get("content-type") || "").toLowerCase();
     const rawErr = !res.ok ? await res.text() : "";
     if (!res.ok) {
       let errMsg = rawErr || `Error ${res.status}`;
@@ -1116,8 +1119,9 @@ async function sendToClaude() {
       throw new Error(errMsg);
     }
 
+    // Siempre enviamos stream:true al backend; el cuerpo es NDJSON aunque el Content-Type venga alterado por un proxy.
     let reply = "";
-    if (ct.includes("ndjson") && res.body) {
+    if (res.body) {
       const shell = createStreamingAssistantShell();
       if (!shell) throw new Error("No se pudo mostrar la respuesta.");
       try {

@@ -95,7 +95,7 @@ app.post("/api/campaign", async (req, res) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 1000,
         system: buildSystemPrompt(businessName, businessProfile),
         messages: [{ role: "user", content: buildUserPrompt(inputs, businessName) }],
