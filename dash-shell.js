@@ -4,6 +4,16 @@
 import { signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import { clearStoredPrimaryBusiness, resolveBusinessForUser } from "./dashboard-data.js";
 import { getMenuItemsForCategory } from "./category-config.js";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  where,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
 /** @type {boolean} */
 let cfHashNavBound = false;
@@ -155,7 +165,8 @@ function bindComingSoonTriggers() {
 function initUserMenu(auth) {
   const avatarBtn = document.querySelector(".dash-avatar");
   const notifyBtn = document.querySelector(".dash-notify");
-  if (!avatarBtn) return;
+  const topbarActions = document.querySelector(".dash-topbar-actions");
+  if (!avatarBtn || !topbarActions) return;
 
   let wrap = document.querySelector(".dash-user-menu-wrap");
   if (!wrap) {
@@ -223,6 +234,180 @@ function initUserMenu(auth) {
       );
     });
   }
+}
+
+function fmtDateYmd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function createCalendarPopoverUi() {
+  const wrap = document.createElement("div");
+  wrap.className = "dash-cal-pop-wrap";
+  wrap.innerHTML = `
+    <button type="button" class="dash-icon-btn dash-cal-btn" id="dash-cal-btn" aria-label="Calendario" aria-expanded="false">
+      <span class="dash-cal-btn__day"></span>
+    </button>
+    <div class="dash-cal-pop" id="dash-cal-pop" hidden>
+      <div class="dash-cal-pop__head">
+        <strong>Calendario</strong>
+        <button type="button" class="dash-panel-link" id="dash-cal-close">Cerrar</button>
+      </div>
+      <div class="dash-cal-mini" id="dash-cal-mini"></div>
+      <div class="dash-cal-week-list" id="dash-cal-week-list"></div>
+      <div class="dash-cal-pop__actions">
+        <button type="button" class="dash-quick-btn" id="dash-cal-add">+ Agregar evento</button>
+        <a href="calendario.html" class="dash-quick-btn dash-quick-btn--primary">Ver calendario completo</a>
+      </div>
+    </div>
+    <dialog class="dash-cal-modal" id="dash-cal-modal">
+      <form method="dialog" id="dash-cal-form">
+        <h3>Nuevo evento</h3>
+        <input id="dash-cal-title" class="orders-input" placeholder="Título" required />
+        <input id="dash-cal-date" class="orders-input" type="date" required />
+        <select id="dash-cal-type" class="orders-input">
+          <option value="cita">Cita</option>
+          <option value="delivery">Entrega</option>
+          <option value="reunion">Reunión</option>
+          <option value="recordatorio">Recordatorio</option>
+        </select>
+        <select id="dash-cal-client" class="orders-input"><option value="">Cliente (opcional)</option></select>
+        <textarea id="dash-cal-notes" class="orders-input orders-notes" placeholder="Notas"></textarea>
+        <div class="orders-modal-actions">
+          <button type="button" class="dash-quick-btn" id="dash-cal-cancel">Cancelar</button>
+          <button type="submit" class="dash-quick-btn dash-quick-btn--primary">Guardar</button>
+        </div>
+      </form>
+    </dialog>
+  `;
+  return wrap;
+}
+
+async function initFloatingCalendar(auth, db) {
+  const actions = document.querySelector(".dash-topbar-actions");
+  if (!actions || !auth || !db) return;
+  if (document.getElementById("dash-cal-btn")) return;
+  const ui = createCalendarPopoverUi();
+  actions.prepend(ui);
+
+  const btn = document.getElementById("dash-cal-btn");
+  const dayEl = btn?.querySelector(".dash-cal-btn__day");
+  const pop = document.getElementById("dash-cal-pop");
+  const close = document.getElementById("dash-cal-close");
+  const mini = document.getElementById("dash-cal-mini");
+  const weekList = document.getElementById("dash-cal-week-list");
+  const addBtn = document.getElementById("dash-cal-add");
+  const modal = document.getElementById("dash-cal-modal");
+  const form = document.getElementById("dash-cal-form");
+  const clientSel = document.getElementById("dash-cal-client");
+  const cancelBtn = document.getElementById("dash-cal-cancel");
+  if (!btn || !dayEl || !pop || !close || !mini || !weekList || !addBtn || !modal || !form || !clientSel || !cancelBtn) {
+    return;
+  }
+  dayEl.textContent = String(new Date().getDate());
+
+  const user = auth.currentUser;
+  if (!user) return;
+  const business = await resolveBusinessForUser(db, user);
+  const businessId = business?.id;
+  if (!businessId) return;
+
+  const calSnap = await getDocs(
+    query(collection(db, "businesses", businessId, "calendar"), orderBy("date", "asc"), limit(200)),
+  );
+  const rows = calSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const firstDow = (monthStart.getDay() + 6) % 7;
+  const days = monthEnd.getDate();
+  const eventsByDate = new Map();
+  rows.forEach((r) => {
+    const dt = r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null;
+    if (!dt) return;
+    const k = fmtDateYmd(dt);
+    eventsByDate.set(k, (eventsByDate.get(k) || 0) + 1);
+  });
+  const grid = [];
+  for (let i = 0; i < firstDow; i += 1) grid.push('<span class="dash-cal-mini__empty"></span>');
+  for (let d = 1; d <= days; d += 1) {
+    const dt = new Date(now.getFullYear(), now.getMonth(), d);
+    const k = fmtDateYmd(dt);
+    const n = eventsByDate.get(k) || 0;
+    const cls = n > 0 ? "dash-cal-mini__day has-event" : "dash-cal-mini__day";
+    grid.push(`<span class="${cls}" title="${n > 0 ? `${n} evento(s)` : "Sin eventos"}">${d}</span>`);
+  }
+  mini.innerHTML = `<div class="dash-cal-mini__month">${now.toLocaleDateString("es", { month: "long", year: "numeric" })}</div><div class="dash-cal-mini__grid">${grid.join("")}</div>`;
+
+  const weekCut = new Date();
+  weekCut.setDate(weekCut.getDate() + 7);
+  const upcoming = rows
+    .map((r) => ({ ...r, _d: r.date && typeof r.date.toDate === "function" ? r.date.toDate() : null }))
+    .filter((r) => r._d && r._d >= new Date() && r._d <= weekCut)
+    .sort((a, b) => a._d - b._d)
+    .slice(0, 7);
+  weekList.innerHTML = upcoming.length
+    ? upcoming
+        .map(
+          (r) =>
+            `<div class="dash-cal-week-item"><span>${r._d.toLocaleDateString("es", { day: "numeric", month: "short" })}</span><span>${r.title || "Evento"}</span></div>`,
+        )
+        .join("")
+    : '<p class="dash-table-muted">No tienes citas ni entregas programadas.</p>';
+
+  const clientSnap = await getDocs(
+    query(collection(db, "businesses", businessId, "clients"), orderBy("createdAt", "desc"), limit(100)),
+  );
+  clientSnap.forEach((d) => {
+    const x = d.data() || {};
+    const name = typeof x.fullName === "string" ? x.fullName : typeof x.name === "string" ? x.name : "Cliente";
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = name;
+    clientSel.appendChild(opt);
+  });
+
+  function closePop() {
+    pop.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  }
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = pop.hidden;
+    pop.hidden = !willOpen;
+    btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  });
+  close.addEventListener("click", closePop);
+  document.addEventListener("click", (e) => {
+    if (!ui.contains(e.target)) closePop();
+  });
+
+  addBtn.addEventListener("click", () => modal.showModal());
+  cancelBtn.addEventListener("click", () => modal.close());
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = document.getElementById("dash-cal-title")?.value?.trim();
+    const date = document.getElementById("dash-cal-date")?.value;
+    const type = document.getElementById("dash-cal-type")?.value || "recordatorio";
+    const clientId = document.getElementById("dash-cal-client")?.value || null;
+    const notes = document.getElementById("dash-cal-notes")?.value?.trim() || "";
+    if (!title || !date) return;
+    const dt = new Date(`${date}T12:00:00`);
+    await addDoc(collection(db, "businesses", businessId, "calendar"), {
+      title,
+      date: dt,
+      type,
+      clientId,
+      notes,
+      createdAt: serverTimestamp(),
+      status: "pending",
+    });
+    modal.close();
+    window.location.reload();
+  });
 }
 
 /**
@@ -362,6 +547,9 @@ export function initDashShell(opts = {}) {
   initSidebar();
   bindComingSoonTriggers();
   if (auth) initUserMenu(auth);
+  if (auth && db) {
+    void initFloatingCalendar(auth, db);
+  }
 
   if (auth && db) {
     onAuthStateChanged(auth, (user) => {

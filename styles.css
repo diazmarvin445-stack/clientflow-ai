@@ -2599,6 +2599,100 @@ body.dash-menu-open {
   color: #fff;
 }
 
+.dash-cal-pop-wrap {
+  position: relative;
+}
+
+.dash-cal-btn {
+  position: relative;
+}
+
+.dash-cal-btn__day {
+  display: inline-flex;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.dash-cal-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: min(420px, 90vw);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
+  padding: 0.75rem;
+  z-index: 35;
+}
+
+.dash-cal-pop__head,
+.dash-cal-pop__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.dash-cal-mini__month {
+  margin: 0.45rem 0;
+  font-weight: 700;
+}
+
+.dash-cal-mini__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+}
+
+.dash-cal-mini__day,
+.dash-cal-mini__empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.65rem;
+  font-size: 0.75rem;
+  border-radius: 0.45rem;
+}
+
+.dash-cal-mini__day {
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.dash-cal-mini__day.has-event {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.dash-cal-week-list {
+  margin: 0.7rem 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.dash-cal-week-item {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+
+.dash-cal-modal {
+  width: min(480px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  padding: 1rem;
+}
+
 .dash-main {
   flex: 1;
 }
@@ -3151,6 +3245,69 @@ body.dash-menu-open {
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 1rem;
+}
+
+.orders-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+  font-size: 0.9rem;
+}
+
+.orders-detail-notes {
+  grid-column: 1 / -1;
+}
+
+.orders-detail-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.dash-alert-strip {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+}
+
+.dash-mini-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0.9rem 0;
+}
+
+.dash-mini-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.dash-mini-card strong {
+  font-weight: 800;
+}
+
+.dash-upcoming-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+@media (max-width: 1024px) {
+  .dash-mini-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .dash-workspace-aside {

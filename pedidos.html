@@ -141,6 +141,31 @@
               </table>
             </div>
           </section>
+
+          <section class="dash-panel" id="orders-detail-panel" hidden>
+            <div class="dash-panel-head">
+              <h2 class="dash-panel-title">Detalle del pedido</h2>
+              <button type="button" class="dash-quick-btn" id="orders-detail-close">Cerrar</button>
+            </div>
+            <div class="orders-detail-grid">
+              <div><strong>Cliente:</strong> <span id="od-client">—</span></div>
+              <div><strong>Teléfono:</strong> <span id="od-phone">—</span></div>
+              <div><strong>Producto:</strong> <span id="od-product">—</span></div>
+              <div><strong>Cantidad:</strong> <span id="od-qty">—</span></div>
+              <div><strong>Total:</strong> <span id="od-amount">—</span></div>
+              <div><strong>Depósito:</strong> <span id="od-deposit">—</span></div>
+              <div><strong>Saldo:</strong> <span id="od-balance">—</span></div>
+              <div><strong>Estado:</strong> <span id="od-status">—</span></div>
+              <div><strong>Entrega:</strong> <span id="od-delivery">—</span></div>
+              <div><strong>Fuente:</strong> <span id="od-source">—</span></div>
+              <div class="orders-detail-notes"><strong>Notas:</strong> <span id="od-notes">—</span></div>
+            </div>
+            <div class="orders-detail-actions">
+              <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="od-edit">Editar</button>
+              <button type="button" class="dash-quick-btn" id="od-mark-delivered">Marcar entregado</button>
+              <button type="button" class="dash-quick-btn" id="od-delete">Eliminar</button>
+            </div>
+          </section>
         </div>
       </main>
     </div>

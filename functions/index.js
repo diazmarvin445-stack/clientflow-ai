@@ -1230,6 +1230,175 @@ export const updateOrderStatus = onRequest(
   },
 );
 
+export const updateOrderAndSync = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        const orderId = asText(body.orderId);
+        if (!businessId || !orderId) {
+          res.status(400).json({ error: "businessId y orderId son requeridos." });
+          return;
+        }
+        const db = getAdminDb();
+        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const snap = await orderRef.get();
+        if (!snap.exists) {
+          res.status(404).json({ error: "Pedido no encontrado." });
+          return;
+        }
+        const old = snap.data() || {};
+        const nextAmount = Math.max(0, Number(body.amount ?? old.amount) || 0);
+        const nextDeposit = Math.max(0, Number(body.deposit ?? old.deposit) || 0);
+        const nextBalance = Math.max(0, nextAmount - nextDeposit);
+        const nextClientName = asText(body.clientName, asText(old.clientName, "Cliente"));
+        const nextClientPhone = normalizePhoneDigits(body.clientPhone ?? old.clientPhone);
+        const nextProduct = asText(body.product, asText(old.product, "Pedido"));
+        const nextNotes = asText(body.notes, asText(old.notes));
+        const nextStatus = normalizeOrderStatus(body.status ?? old.status);
+        const nextQuantity = Math.max(0, Number(body.quantity ?? old.quantity) || 0);
+        const nextDeliveryDate = parseOrderDate(body.deliveryDate) || parseOrderDate(old.deliveryDate) || new Date();
+
+        await orderRef.set(
+          {
+            clientName: nextClientName,
+            clientPhone: nextClientPhone,
+            product: nextProduct,
+            quantity: nextQuantity,
+            amount: nextAmount,
+            deposit: nextDeposit,
+            balance: nextBalance,
+            notes: nextNotes,
+            status: nextStatus,
+            deliveryDate: Timestamp.fromDate(nextDeliveryDate),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        const clientId = asText(old.linkedClientId);
+        if (clientId) {
+          await db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("clients")
+            .doc(clientId)
+            .set(
+              {
+                fullName: nextClientName,
+                name: nextClientName,
+                phone: nextClientPhone,
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
+        }
+
+        const linkedCalendarId = asText(old.linkedCalendarId);
+        if (linkedCalendarId) {
+          await db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("calendar")
+            .doc(linkedCalendarId)
+            .set(
+              {
+                title: `Entrega: ${nextProduct} - ${nextClientName}`,
+                date: Timestamp.fromDate(nextDeliveryDate),
+                status: nextStatus === "entregado" ? "completed" : "pending",
+                updatedAt: FieldValue.serverTimestamp(),
+              },
+              { merge: true },
+            );
+        }
+
+        const oldAmount = Math.max(0, Number(old.amount) || 0);
+        if (nextAmount !== oldAmount && nextDeposit > 0) {
+          await db.collection("businesses").doc(businessId).collection("finance").add({
+            type: "income",
+            amount: nextDeposit,
+            category: "ventas",
+            description: `Ajuste pedido: ${nextProduct} - ${nextClientName}`,
+            clientId: clientId || null,
+            orderId,
+            createdAt: FieldValue.serverTimestamp(),
+            createdBy: "marvin",
+            date: Timestamp.fromDate(new Date()),
+          });
+        }
+
+        res.status(200).json({ ok: true });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo actualizar y sincronizar pedido.", details: message });
+      }
+    });
+  },
+);
+
+export const deleteOrderCascade = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        const orderId = asText(body.orderId);
+        if (!businessId || !orderId) {
+          res.status(400).json({ error: "businessId y orderId son requeridos." });
+          return;
+        }
+        const db = getAdminDb();
+        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const snap = await orderRef.get();
+        if (!snap.exists) {
+          res.status(404).json({ error: "Pedido no encontrado." });
+          return;
+        }
+        const row = snap.data() || {};
+        const linkedCalendarId = asText(row.linkedCalendarId);
+        if (linkedCalendarId) {
+          await db.collection("businesses").doc(businessId).collection("calendar").doc(linkedCalendarId).delete();
+        }
+
+        const finSnap = await db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("finance")
+          .where("orderId", "==", orderId)
+          .get();
+        for (const d of finSnap.docs) {
+          await d.ref.delete();
+        }
+
+        await orderRef.delete();
+        res.status(200).json({ ok: true });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo eliminar pedido.", details: message });
+      }
+    });
+  },
+);
+
 const MAYA_PRODUCT_KEYS = new Set([
   "mangaLargaPoliester",
   "mangaLargaAlgodon",

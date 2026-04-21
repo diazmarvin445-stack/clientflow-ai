@@ -17,10 +17,8 @@ export const CATEGORY_CONFIGS = {
     menuItems: [
       { id: "dashboard", name: "Dashboard", href: "dashboard.html", icon: "home" },
       { id: "chat", name: "Chat IA", href: "chat.html", icon: "chat" },
-      { id: "calendario", name: "Calendario", href: "calendario.html", icon: "cal" },
-      { id: "clientes", name: "Clientes", href: "clientes.html", icon: "users" },
+      { id: "pedidos", name: "Pedidos", href: "pedidos.html", icon: "orders" },
       { id: "finanzas", name: "Finanzas", href: "finanzas.html", icon: "finance" },
-      { id: "pedidos", name: "Pedidos", href: "dashboard.html#pedidos", icon: "orders" },
       { id: "campanas", name: "Campañas IA", href: "campanas.html", icon: "spark" },
       { id: "equipo", name: "Equipo", href: "equipo.html", icon: "team" },
       { id: "configuracion", name: "Configuración", href: "configuracion.html", icon: "gear" },

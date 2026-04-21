@@ -15,10 +15,13 @@ import { initDashShell } from "./dash-shell.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
+const UPDATE_ORDER_AND_SYNC_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderAndSync";
+const DELETE_ORDER_CASCADE_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/deleteOrderCascade";
 
 let activeBusinessId = "";
 let allOrders = [];
 let ordersUnsub = null;
+let selectedOrderId = null;
 
 function money(v) {
   const n = Number(v) || 0;
@@ -138,7 +141,11 @@ function applyFilters(rows) {
 async function deleteOrder(orderId) {
   const ok = window.confirm("¿Eliminar este pedido?");
   if (!ok) return;
-  await deleteDoc(doc(db, "businesses", activeBusinessId, "orders", orderId));
+  await fetch(DELETE_ORDER_CASCADE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ businessId: activeBusinessId, orderId }),
+  });
 }
 
 async function saveOrderFromModal(ev) {
@@ -165,17 +172,14 @@ async function saveOrderFromModal(ev) {
     });
     if (!res.ok) throw new Error("No se pudo crear el pedido manual.");
   } else {
-    await updateDoc(doc(db, "businesses", activeBusinessId, "orders", orderId), {
-      clientName: payload.clientName,
-      clientPhone: payload.clientPhone,
-      product: payload.product,
-      quantity: payload.quantity,
-      amount: payload.amount,
-      deposit: payload.deposit,
-      balance: Math.max(0, payload.amount - payload.deposit),
-      notes: payload.notes,
-      status: payload.status,
-      deliveryDate: payload.deliveryDate ? Timestamp.fromDate(new Date(`${payload.deliveryDate}T12:00:00`)) : null,
+    await fetch(UPDATE_ORDER_AND_SYNC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        businessId: activeBusinessId,
+        orderId,
+        ...payload,
+      }),
     });
     if (payload.status === "entregado") {
       await fetch(UPDATE_ORDER_STATUS_URL, {
@@ -186,6 +190,20 @@ async function saveOrderFromModal(ev) {
     }
   }
   document.getElementById("orders-modal").close();
+}
+
+function fillDetail(row) {
+  document.getElementById("od-client").textContent = row.clientName || "—";
+  document.getElementById("od-phone").textContent = row.clientPhone || "—";
+  document.getElementById("od-product").textContent = row.product || "—";
+  document.getElementById("od-qty").textContent = String(row.quantity ?? "—");
+  document.getElementById("od-amount").textContent = money(row.amount);
+  document.getElementById("od-deposit").textContent = money(row.deposit);
+  document.getElementById("od-balance").textContent = money(row.balance);
+  document.getElementById("od-status").textContent = row.status || "nuevo";
+  document.getElementById("od-delivery").textContent = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
+  document.getElementById("od-source").textContent = sourceLabel(row.source);
+  document.getElementById("od-notes").textContent = row.notes || "—";
 }
 
 function openModalFor(row = null) {
@@ -233,6 +251,12 @@ function renderRows() {
       <td>${row.notes || "—"}</td>
       <td><button class="dash-icon-btn" data-edit="${row.id}">✏️</button> <button class="dash-icon-btn" data-del="${row.id}">🗑️</button></td>
     `;
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      selectedOrderId = row.id;
+      fillDetail(row);
+      document.getElementById("orders-detail-panel").hidden = false;
+    });
     tbody.appendChild(tr);
   });
 
@@ -258,6 +282,26 @@ function wireUi() {
   ["orders-filter-status", "orders-filter-date", "orders-filter-source", "orders-filter-search"].forEach((id) => {
     document.getElementById(id).addEventListener("input", renderRows);
     document.getElementById(id).addEventListener("change", renderRows);
+  });
+  document.getElementById("orders-detail-close").addEventListener("click", () => {
+    document.getElementById("orders-detail-panel").hidden = true;
+  });
+  document.getElementById("od-edit").addEventListener("click", () => {
+    const row = allOrders.find((x) => x.id === selectedOrderId);
+    if (row) openModalFor(row);
+  });
+  document.getElementById("od-mark-delivered").addEventListener("click", async () => {
+    if (!selectedOrderId) return;
+    await fetch(UPDATE_ORDER_STATUS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ businessId: activeBusinessId, orderId: selectedOrderId, status: "entregado" }),
+    });
+  });
+  document.getElementById("od-delete").addEventListener("click", async () => {
+    if (!selectedOrderId) return;
+    await deleteOrder(selectedOrderId);
+    document.getElementById("orders-detail-panel").hidden = true;
   });
 }
 

@@ -104,107 +104,39 @@
 
       <main class="dash-main" id="dash-main">
         <div class="dash-page dash-page--summary">
-          <div class="dash-workspace dash-workspace--summary">
-            <div class="dash-workspace-primary">
-              <section class="dash-stats" aria-label="Resumen">
-                <a href="solicitudes.html" class="dash-stat-card dash-stat-card--link">
-                  <div class="dash-stat-head">
-                    <span class="dash-stat-label">Leads nuevos hoy</span>
-                    <span class="dash-stat-ico dash-stat-ico--lead" aria-hidden="true"></span>
-                  </div>
-                  <p class="dash-stat-value" id="dash-metric-leads">0</p>
-                  <div class="dash-stat-foot" id="dash-trend-leads"></div>
-                </a>
-                <a
-                  href="#"
-                  class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
-                  data-cf-soon="Pipeline de trabajos"
-                  data-cf-soon-desc="Vista detallada de trabajos confirmados, asignación a equipo y seguimiento de ingresos por trabajo."
-                >
-                  <div class="dash-stat-head">
-                    <span class="dash-stat-label">Trabajos programados</span>
-                    <span class="dash-stat-ico dash-stat-ico--check" aria-hidden="true"></span>
-                  </div>
-                  <p class="dash-stat-value" id="dash-metric-jobs">0</p>
-                  <div class="dash-stat-foot" id="dash-trend-jobs"></div>
-                </a>
-                <a
-                  href="#"
-                  class="dash-stat-card dash-stat-card--link dash-stat-card--soon"
-                  data-cf-soon="Ingresos e informes"
-                  data-cf-soon-desc="Gráficos de facturación, comparativas por servicio y exportación contable estarán disponibles pronto."
-                >
-                  <div class="dash-stat-head">
-                    <span class="dash-stat-label">Ingresos proyectados</span>
-                    <span class="dash-stat-ico dash-stat-ico--money" aria-hidden="true"></span>
-                  </div>
-                  <p class="dash-stat-value" id="dash-metric-revenue">$0</p>
-                  <div class="dash-stat-foot" id="dash-trend-revenue"></div>
-                </a>
-                <a href="campanas.html" class="dash-stat-card dash-stat-card--link">
-                  <div class="dash-stat-head">
-                    <span class="dash-stat-label">Campañas IA activas</span>
-                    <span class="dash-stat-ico dash-stat-ico--bolt" aria-hidden="true"></span>
-                  </div>
-                  <p class="dash-stat-value" id="dash-metric-campaigns">0</p>
-                  <div class="dash-stat-foot" id="dash-trend-campaigns"></div>
-                </a>
-              </section>
+          <section class="dash-alert-strip" id="dash-alert-strip">🔥 0 entregas hoy • 0 pagos pendientes • 0 clientes esperando</section>
 
-              <section
-                id="dash-campaign-summary"
-                class="dash-panel dash-campaign-compact"
-                hidden
-                aria-labelledby="dash-campaign-title"
-              >
-                <div class="dash-campaign-compact-head">
-                  <div class="dash-campaign-compact-intro">
-                    <p class="dash-campaign-compact-kicker">Rendimiento · campaña activa</p>
-                    <h2 class="dash-campaign-compact-title" id="dash-campaign-title">—</h2>
-                    <p class="dash-campaign-compact-plat" id="dash-campaign-platform">—</p>
-                  </div>
-                  <a href="campanas.html" class="dash-panel-link">Gestionar</a>
-                </div>
-                <div class="dash-campaign-compact-metrics" role="group" aria-label="Métricas de campaña">
-                  <div class="dash-campaign-metric">
-                    <span class="dash-campaign-metric-label">Personas alcanzadas (estim.)</span>
-                    <span class="dash-campaign-metric-value" id="dash-campaign-reach">—</span>
-                  </div>
-                  <div class="dash-campaign-metric">
-                    <span class="dash-campaign-metric-label">Clics (según plataforma)</span>
-                    <span class="dash-campaign-metric-value" id="dash-campaign-clicks">—</span>
-                  </div>
-                  <div class="dash-campaign-metric">
-                    <span class="dash-campaign-metric-label">Leads generados (estim. / sem.)</span>
-                    <span class="dash-campaign-metric-value" id="dash-campaign-leads">—</span>
-                  </div>
-                </div>
-                <p class="dash-campaign-compact-hint" id="dash-campaign-hint" hidden>
-                  El alcance es una estimación interna hasta conectar analíticas reales.
-                </p>
-              </section>
-
-              <section class="dash-panel dash-panel--table recent-requests" id="pedidos">
-                <div class="dash-panel-head">
-                  <h2 class="dash-panel-title">Pedidos recientes</h2>
-                </div>
-                <div class="dash-table-wrap">
-                  <table class="dash-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Cliente</th>
-                        <th scope="col">Pedido</th>
-                        <th scope="col">Estado</th>
-                        <th scope="col">Fecha</th>
-                        <th scope="col">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody id="dash-orders-tbody"></tbody>
-                  </table>
-                </div>
-              </section>
+          <section class="dash-panel">
+            <div class="dash-panel-head">
+              <h2 class="dash-panel-title">Ventas del mes</h2>
             </div>
-          </div>
+            <canvas id="dash-sales-chart" height="120" aria-label="Gráfica de ventas del mes"></canvas>
+          </section>
+
+          <section class="dash-mini-cards">
+            <a class="dash-mini-card" href="pedidos.html">📦 Pedidos activos: <strong id="dash-mini-active">0</strong></a>
+            <a class="dash-mini-card" href="finanzas.html">💰 Balance mes: <strong id="dash-mini-balance">$0</strong></a>
+            <a class="dash-mini-card" href="pedidos.html">👥 Clientes totales: <strong id="dash-mini-clients">0</strong></a>
+            <a class="dash-mini-card" href="campanas.html">📱 Campañas activas: <strong id="dash-mini-campaigns">0</strong></a>
+          </section>
+
+          <section class="dash-panel">
+            <div class="dash-panel-head">
+              <h2 class="dash-panel-title">Próximos eventos</h2>
+            </div>
+            <ul class="dash-upcoming-list" id="dash-upcoming-list"></ul>
+          </section>
+
+          <section class="dash-panel">
+            <div class="dash-panel-head">
+              <h2 class="dash-panel-title">Accesos rápidos</h2>
+            </div>
+            <div class="dash-quick-actions">
+              <a href="chat.html" class="dash-quick-btn dash-quick-btn--primary">Chat Maya</a>
+              <a href="pedidos.html" class="dash-quick-btn dash-quick-btn--primary">+ Nuevo Pedido</a>
+              <a href="finanzas.html" class="dash-quick-btn dash-quick-btn--primary">Ver Finanzas</a>
+            </div>
+          </section>
         </div>
       </main>
     </div>
