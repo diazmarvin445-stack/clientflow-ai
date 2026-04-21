@@ -8858,3 +8858,103 @@ textarea:focus {
 .dash-alert-strip {
   background: rgba(139, 92, 246, 0.18) !important;
 }
+
+/* Theme toggle + light theme */
+body,
+.dash-sidebar,
+.dash-topbar,
+.dash-panel,
+.dash-stat-card,
+.dash-mini-card,
+.auth-card,
+.yc-chat-panel,
+.yc-chat-toolbar,
+.yc-chat-composer,
+.dash-cal-pop,
+.dash-cal-day-pop,
+.dash-cal-modal,
+.orders-modal,
+.fin-modal,
+.maya-cc-wa-list,
+.maya-cc-wa-thread {
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dash-theme-toggle {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+body.light-theme {
+  --bg: #f8f9fc;
+  --bg-elevated: #ffffff;
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-solid: #ffffff;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --border: rgba(139, 92, 246, 0.15);
+  --line: rgba(139, 92, 246, 0.15);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 20px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 20px 36px rgba(139, 92, 246, 0.14);
+}
+
+body.light-theme,
+body.light-theme html {
+  background: #f8f9fc;
+  color: #1a1a2e;
+}
+
+body.light-theme .page-bg {
+  background: linear-gradient(180deg, #f8f9fc 0%, #eef2ff 100%);
+}
+
+body.light-theme .dash-sidebar,
+body.light-theme .dash-topbar,
+body.light-theme .dash-panel,
+body.light-theme .dash-stat-card,
+body.light-theme .dash-mini-card,
+body.light-theme .auth-card,
+body.light-theme .yc-chat-panel,
+body.light-theme .yc-chat-toolbar,
+body.light-theme .yc-chat-composer,
+body.light-theme .dash-cal-pop,
+body.light-theme .dash-cal-day-pop,
+body.light-theme .dash-cal-modal,
+body.light-theme .orders-modal,
+body.light-theme .fin-modal,
+body.light-theme .maya-cc-wa-list,
+body.light-theme .maya-cc-wa-list__toolbar,
+body.light-theme .maya-cc-wa-thread,
+body.light-theme .maya-cc-wa-thread__toolbar,
+body.light-theme .yc-chat-stream,
+body.light-theme .yc-chat-loading,
+body.light-theme .yc-msg-action-btn {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #1a1a2e !important;
+  border-color: rgba(139, 92, 246, 0.15) !important;
+}
+
+body.light-theme .dash-table thead th {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: #1a1a2e !important;
+}
+
+body.light-theme .dash-table tbody tr {
+  background: rgba(255, 255, 255, 0.88) !important;
+}
+body.light-theme .dash-table tbody tr:nth-child(even) {
+  background: rgba(248, 249, 252, 0.96) !important;
+}
+body.light-theme .dash-table tbody td {
+  color: #1a1a2e !important;
+}
+
+body.light-theme .dash-cal-day {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: #1a1a2e !important;
+}
+body.light-theme .dash-cal-day--outside {
+  background: rgba(243, 244, 246, 0.95) !important;
+  color: #9ca3af !important;
+}

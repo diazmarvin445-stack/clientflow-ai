@@ -26,6 +26,7 @@ let modalBackdrop = null;
 let modalDialog = null;
 let modalTitleEl = null;
 let modalDescEl = null;
+const THEME_KEY = "cf_theme";
 
 function ensureModal() {
   if (modalHost) return;
@@ -162,6 +163,54 @@ function bindComingSoonTriggers() {
       const desc = el.getAttribute("data-cf-soon-desc");
       openComingSoon(title, desc || undefined);
     });
+  });
+}
+
+function applyTheme(theme) {
+  const t = theme === "light" ? "light" : "dark";
+  document.body.classList.remove("light-theme", "dark-theme");
+  document.body.classList.add(t === "light" ? "light-theme" : "dark-theme");
+  try {
+    localStorage.setItem(THEME_KEY, t);
+  } catch {}
+  return t;
+}
+
+function readStoredTheme() {
+  try {
+    const x = localStorage.getItem(THEME_KEY);
+    return x === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function initThemeToggle() {
+  const actions = document.querySelector(".dash-topbar-actions");
+  if (!actions) return;
+  let btn = document.getElementById("dash-theme-toggle");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "dash-theme-toggle";
+    btn.className = "dash-icon-btn dash-theme-toggle";
+    actions.insertBefore(btn, actions.firstChild);
+  }
+
+  function syncUi(theme) {
+    const dark = theme !== "light";
+    btn.textContent = dark ? "🌙" : "☀️";
+    btn.setAttribute("aria-label", dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro");
+    btn.setAttribute("title", dark ? "Tema oscuro activo" : "Tema claro activo");
+  }
+
+  const initial = applyTheme(readStoredTheme());
+  syncUi(initial);
+  btn.addEventListener("click", () => {
+    const current = document.body.classList.contains("light-theme") ? "light" : "dark";
+    const next = current === "dark" ? "light" : "dark";
+    const applied = applyTheme(next);
+    syncUi(applied);
   });
 }
 
@@ -813,6 +862,7 @@ export function ensureChatNavLink() {
  */
 export function initDashShell(opts = {}) {
   const { auth, db } = opts;
+  applyTheme(readStoredTheme());
   if (!cfHashNavBound) {
     cfHashNavBound = true;
     window.addEventListener("hashchange", () => {
@@ -824,6 +874,7 @@ export function initDashShell(opts = {}) {
   ensureChatNavLink();
   initSidebar();
   bindComingSoonTriggers();
+  initThemeToggle();
   if (auth) initUserMenu(auth);
   if (auth && db) {
     onAuthStateChanged(auth, (user) => {
