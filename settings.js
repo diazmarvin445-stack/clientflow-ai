@@ -26,7 +26,7 @@ function renderHeader(business) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {

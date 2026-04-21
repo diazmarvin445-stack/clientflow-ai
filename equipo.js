@@ -460,7 +460,7 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  initDashShell(auth);
+  initDashShell({ auth, db });
 
   try {
     const business = await resolveBusinessForUser(db, user);

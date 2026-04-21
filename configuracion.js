@@ -376,7 +376,7 @@ async function loadPage(user) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
   wireLogoFile();
   wireSaveButtons();
   wireIntegrations();

@@ -1027,7 +1027,7 @@ async function loadCampanasForUser(user) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
   wireCampaignGenerator();
 
   onAuthStateChanged(auth, (user) => {

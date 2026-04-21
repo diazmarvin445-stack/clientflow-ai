@@ -31,7 +31,7 @@ function renderHeader(business) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
 
   const emailEl = document.getElementById("profile-email");
   const uidEl = document.getElementById("profile-uid");

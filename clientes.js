@@ -1,6 +1,7 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  deleteDoc,
   doc,
   serverTimestamp,
   updateDoc,
@@ -206,7 +207,38 @@ function buildClientCard(businessId, client) {
   timeLine.textContent = `Alta · ${relCreated} · ${absCreated}`;
 
   headText.append(h3, timeLine);
-  top.append(avatar, headText);
+
+  const actions = document.createElement("div");
+  actions.className = "cli-client-actions";
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "cli-delete-btn";
+  delBtn.textContent = "Eliminar";
+  delBtn.setAttribute("aria-label", `Eliminar cliente ${fullName}`);
+  delBtn.addEventListener("click", async () => {
+    if (
+      !confirm(
+        `¿Eliminar a ${fullName} de tu lista de clientes? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      return;
+    }
+    delBtn.disabled = true;
+    delBtn.setAttribute("aria-busy", "true");
+    try {
+      await deleteDoc(doc(db, "businesses", businessId, "clients", id));
+      allClients = allClients.filter((row) => row.id !== id);
+      setMetaLine(allClients.length);
+      if (cachedBusinessId) applySearch(cachedBusinessId);
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo eliminar el cliente. Inténtalo de nuevo.");
+      delBtn.disabled = false;
+      delBtn.removeAttribute("aria-busy");
+    }
+  });
+  actions.appendChild(delBtn);
+  top.append(avatar, headText, actions);
 
   const grid = document.createElement("div");
   grid.className = "cli-meta-grid";
@@ -354,7 +386,7 @@ async function loadClientesForUser(user) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
 
   document.getElementById("cli-search")?.addEventListener("input", () => {
     if (cachedBusinessId) applySearch(cachedBusinessId);

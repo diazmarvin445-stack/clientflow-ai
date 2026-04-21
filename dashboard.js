@@ -183,7 +183,7 @@ async function loadDashboardForUser(user) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
 
   let tabWasHidden = false;
   document.addEventListener("visibilitychange", () => {

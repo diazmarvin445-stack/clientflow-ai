@@ -1523,7 +1523,7 @@ async function bootWithUser(user) {
 }
 
 function boot() {
-  initDashShell({ auth });
+  initDashShell({ auth, db });
 
   onAuthStateChanged(auth, (user) => {
     if (!user) {

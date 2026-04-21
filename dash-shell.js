@@ -1,8 +1,12 @@
 /**
  * Shared dashboard chrome: sidebar mobile menu, coming-soon modal, topbar menu.
  */
-import { signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-import { clearStoredPrimaryBusiness } from "./dashboard-data.js";
+import { signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+import { clearStoredPrimaryBusiness, resolveBusinessForUser } from "./dashboard-data.js";
+import { getMenuItemsForCategory } from "./category-config.js";
+
+/** @type {boolean} */
+let cfHashNavBound = false;
 
 let modalHost = null;
 let modalBackdrop = null;
@@ -117,12 +121,14 @@ export function initSidebar() {
   if (menuBtn) menuBtn.addEventListener("click", toggleMenu);
   if (overlay) overlay.addEventListener("click", closeMenu);
 
-  sidebar &&
-    sidebar.querySelectorAll("a").forEach((link) => {
-      link.addEventListener("click", () => {
-        if (window.matchMedia("(max-width: 1024px)").matches) closeMenu();
-      });
+  const nav = sidebar?.querySelector(".dash-nav");
+  if (nav && !nav.dataset.cfNavCloseDelegation) {
+    nav.dataset.cfNavCloseDelegation = "1";
+    nav.addEventListener("click", (e) => {
+      if (!e.target.closest("a")) return;
+      if (window.matchMedia("(max-width: 1024px)").matches) closeMenu();
     });
+  }
 
   window.addEventListener("resize", () => {
     if (window.matchMedia("(min-width: 1025px)").matches) closeMenu();
@@ -220,6 +226,100 @@ function initUserMenu(auth) {
 }
 
 /**
+ * @param {string} hrefFile
+ * @param {string} currentFile
+ */
+function pathMatchesFile(hrefFile, currentFile) {
+  const f = hrefFile.replace(/^\.\//, "").split("#")[0].trim();
+  return currentFile === f || currentFile.endsWith(f);
+}
+
+/**
+ * @param {string} href
+ * @param {string} currentPath
+ * @param {string} currentHash
+ */
+function isNavItemActive(href, currentPath, currentHash) {
+  const [file, frag] = href.split("#");
+  if (!pathMatchesFile(file, currentPath)) return false;
+  if (frag) {
+    return currentHash === `#${frag}`;
+  }
+  if (currentPath === "dashboard.html") {
+    return currentHash !== "#pedidos";
+  }
+  return true;
+}
+
+/**
+ * Marca `is-active` según la ruta y el hash (p. ej. dashboard vs #pedidos).
+ * @param {HTMLElement} nav
+ */
+export function applyActiveNavLink(nav) {
+  const path = (window.location.pathname || "").split("/").pop() || "";
+  const hash = window.location.hash || "";
+  nav.querySelectorAll("a.dash-nav-link").forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    a.classList.remove("is-active");
+    a.removeAttribute("aria-current");
+    if (isNavItemActive(href, path, hash)) {
+      a.classList.add("is-active");
+      a.setAttribute("aria-current", "page");
+    }
+  });
+}
+
+/**
+ * @param {import("./category-config.js").CategoryMenuItem[]} items
+ */
+function renderCategoryNav(items) {
+  const nav = document.querySelector("#dash-sidebar .dash-nav");
+  if (!nav) return;
+  nav.innerHTML = "";
+  const path = (window.location.pathname || "").split("/").pop() || "";
+  const hash = window.location.hash || "";
+
+  for (const item of items) {
+    const a = document.createElement("a");
+    a.href = item.href;
+    a.className = "dash-nav-link";
+    if (item.id === "chat") a.id = "dash-nav-chat-link";
+    a.innerHTML = `<span class="dash-nav-ico dash-nav-ico--${item.icon}" aria-hidden="true"></span>
+        ${item.name}`;
+    if (isNavItemActive(item.href, path, hash)) {
+      a.classList.add("is-active");
+      a.setAttribute("aria-current", "page");
+    }
+    nav.appendChild(a);
+  }
+}
+
+/**
+ * @param {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js").Firestore} db
+ * @param {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").User} user
+ */
+export async function hydrateSidebarCategoryNav(db, user) {
+  if (!db || !user) return;
+  try {
+    const business = await resolveBusinessForUser(db, user);
+    const cat = business?.data && /** @type {Record<string, unknown>} */ (business.data).category;
+    const items = getMenuItemsForCategory(cat);
+    if (items && items.length) {
+      renderCategoryNav(items);
+    } else {
+      ensureChatNavLink();
+      const nav = document.querySelector("#dash-sidebar .dash-nav");
+      if (nav) applyActiveNavLink(nav);
+    }
+  } catch (e) {
+    console.warn("[DashShell] category nav", e);
+    ensureChatNavLink();
+    const nav = document.querySelector("#dash-sidebar .dash-nav");
+    if (nav) applyActiveNavLink(nav);
+  }
+}
+
+/**
  * Inserta «Chat IA» tras «Campañas IA» si no existe; marca activo en `chat.html`.
  */
 export function ensureChatNavLink() {
@@ -242,25 +342,33 @@ export function ensureChatNavLink() {
       nav.appendChild(chatLink);
     }
   }
-  const path = window.location.pathname || "";
-  const onChat = /(^|\/)chat\.html$/i.test(path) || path.endsWith("/chat");
-  if (onChat) {
-    nav.querySelectorAll(".dash-nav-link").forEach((el) => {
-      el.classList.remove("is-active");
-      el.removeAttribute("aria-current");
-    });
-    chatLink.classList.add("is-active");
-    chatLink.setAttribute("aria-current", "page");
-  }
+  applyActiveNavLink(nav);
 }
 
 /**
  * @param {{ auth?: import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").Auth }} opts
  */
 export function initDashShell(opts = {}) {
-  const { auth } = opts;
+  const { auth, db } = opts;
+  if (!cfHashNavBound) {
+    cfHashNavBound = true;
+    window.addEventListener("hashchange", () => {
+      const n = document.querySelector("#dash-sidebar .dash-nav");
+      if (n) applyActiveNavLink(n);
+    });
+  }
+
   ensureChatNavLink();
   initSidebar();
   bindComingSoonTriggers();
   if (auth) initUserMenu(auth);
+
+  if (auth && db) {
+    onAuthStateChanged(auth, (user) => {
+      if (user) void hydrateSidebarCategoryNav(db, user);
+    });
+  } else if (auth) {
+    const nav = document.querySelector("#dash-sidebar .dash-nav");
+    if (nav) applyActiveNavLink(nav);
+  }
 }
