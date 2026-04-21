@@ -2623,14 +2623,14 @@ body.dash-menu-open {
 .dash-cal-pop {
   position: absolute;
   right: 0;
-  top: calc(100% + 0.5rem);
+  top: calc(100% + 0.35rem);
   width: min(420px, 90vw);
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 0.9rem;
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.12);
   padding: 0.75rem;
-  z-index: 35;
+  z-index: 9999;
 }
 
 .dash-cal-pop__head,
@@ -2694,9 +2694,16 @@ body.dash-menu-open {
 
 .dash-cal-week-item {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px 1fr auto;
   gap: 0.5rem;
   font-size: 0.78rem;
+  align-items: center;
+}
+
+.dash-cal-item-actions {
+  display: inline-flex;
+  gap: 0.3rem;
+  white-space: nowrap;
 }
 
 .dash-cal-modal {
