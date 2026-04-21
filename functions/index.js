@@ -353,6 +353,8 @@ async function processNewOrder(db, businessId, rawOrder) {
     source,
   });
 
+  const expensesInit = Math.max(0, Number(rawOrder.expenses) || 0);
+
   const orderRef = await db.collection("businesses").doc(businessId).collection("orders").add({
     clientId: client.id,
     clientName,
@@ -362,6 +364,9 @@ async function processNewOrder(db, businessId, rawOrder) {
     amount,
     deposit,
     balance,
+    expenses: expensesInit,
+    deliverySettled: false,
+    netProfit: 0,
     status,
     deliveryDate: Timestamp.fromDate(deliveryDate),
     notes,
@@ -774,9 +779,11 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "assign_task",
   "list_team",
   "get_balance",
+  "set_order_expenses",
+  "mark_order_delivered",
 ]);
 
-const FINANCE_INCOME_KEYS = new Set(["ventas", "anticipos", "otros_ingresos"]);
+const FINANCE_INCOME_KEYS = new Set(["ventas", "anticipos", "otros_ingresos", "ganancias"]);
 const FINANCE_EXPENSE_KEYS = new Set([
   "materiales",
   "transporte",
@@ -868,6 +875,7 @@ function mergeMayaActionData(payload) {
     "date",
     "amount",
     "deposit",
+    "expenses",
     "amount",
     "description",
     "category",
@@ -1177,6 +1185,7 @@ function normalizeFinanceCategory(raw, kind) {
     .replace(/\s+/g, "_");
   if (kind === "income") {
     if (s === "otros_ingresos" || s === "otros" || s === "otrosingresos") return "otros_ingresos";
+    if (s === "ganancias" || s === "ganancia") return "ganancias";
     if (FINANCE_INCOME_KEYS.has(s)) return s;
     return "otros_ingresos";
   }
@@ -1259,6 +1268,155 @@ async function mayaFinanceDelete(db, businessId, payload) {
       : String(data.transactionId ?? "").trim();
   if (!tid) throw new Error("Falta transactionId para eliminar el movimiento.");
   await db.collection("businesses").doc(businessId).collection("finance").doc(tid).delete();
+}
+
+/**
+ * Cierra un pedido como entregado: cobra saldo pendiente (ventas), registra ganancia neta (ganancias) = total - gastos.
+ * Idempotente si `deliverySettled` ya es true.
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {import("firebase-admin/firestore").DocumentReference} orderRef
+ * @param {Record<string, unknown>} order
+ */
+async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
+  if (order.deliverySettled === true) {
+    await orderRef.set(
+      { status: "entregado", updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    return { already: true };
+  }
+
+  const orderId = orderRef.id;
+  const clientName = asText(order.clientName, "Cliente");
+  const product = asText(order.product, "Pedido");
+  const linkedClientId = asText(order.linkedClientId);
+
+  const amount = Math.max(0, Number(order.amount) || 0);
+  const expenses = Math.max(0, Number(order.expenses) || 0);
+  const pendingBalance = Math.max(0, Number(order.balance) || 0);
+  const netProfit = Math.max(0, amount - expenses);
+
+  /** @type {Record<string, unknown>} */
+  const patch = {
+    status: "entregado",
+    balance: 0,
+    deliverySettled: true,
+    netProfit,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (pendingBalance > 0) {
+    const finRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+      type: "income",
+      amount: pendingBalance,
+      category: "ventas",
+      description: `Saldo final: ${product} - ${clientName}`,
+      clientId: linkedClientId || null,
+      orderId,
+      linkedOrderId: orderId,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: "marvin",
+      date: Timestamp.fromDate(new Date()),
+    });
+    patch.linkedSaldoFinanceId = finRef.id;
+  }
+
+  if (netProfit > 0) {
+    const profitRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+      type: "income",
+      amount: netProfit,
+      category: "ganancias",
+      description: `Ganancia pedido ${clientName}`,
+      clientId: linkedClientId || null,
+      orderId,
+      linkedOrderId: orderId,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: "marvin",
+      date: Timestamp.fromDate(new Date()),
+    });
+    patch.linkedProfitFinanceId = profitRef.id;
+  }
+
+  const linkedCalendarId = asText(order.linkedCalendarId);
+  if (linkedCalendarId) {
+    await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("calendar")
+      .doc(linkedCalendarId)
+      .set(
+        {
+          status: "completed",
+          completedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  }
+
+  await orderRef.set(patch, { merge: true });
+  return { already: false, netProfit };
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaResolveOrderRef(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  let orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
+  if (orderId) {
+    const ref = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+    const snap = await ref.get();
+    if (snap.exists) return { ref, snap };
+  }
+  const name = typeof data.clientName === "string" ? data.clientName.trim().toLowerCase() : "";
+  if (!name) throw new Error("Falta orderId o clientName para identificar el pedido.");
+  const qs = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("orders")
+    .orderBy("createdAt", "desc")
+    .limit(80)
+    .get();
+  /** @type {import("firebase-admin/firestore").QueryDocumentSnapshot | null} */
+  let pick = null;
+  qs.forEach((doc) => {
+    if (pick) return;
+    const d = doc.data() || {};
+    const cn = typeof d.clientName === "string" ? d.clientName.trim().toLowerCase() : "";
+    if (cn && (cn.includes(name) || name.includes(cn))) pick = doc;
+  });
+  if (!pick) throw new Error("No encontré un pedido para ese cliente.");
+  return { ref: pick.ref, snap: pick };
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaSetOrderExpenses(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const exp = Number(data.expenses);
+  if (!Number.isFinite(exp) || exp < 0) throw new Error("Monto de gastos inválido.");
+  const { ref } = await mayaResolveOrderRef(db, businessId, payload);
+  await ref.set(
+    { expenses: Math.max(0, exp), updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaMarkOrderDelivered(db, businessId, payload) {
+  const { ref, snap } = await mayaResolveOrderRef(db, businessId, payload);
+  const order = snap.data() || {};
+  return finalizeOrderDeliveryAndProfit(db, businessId, ref, order);
 }
 
 /**
@@ -1425,6 +1583,14 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
       if (action === "list_team") {
         const block = await mayaTeamListBlock(db, businessId);
         extraBlocks.push(block);
+        continue;
+      }
+      if (action === "set_order_expenses") {
+        await mayaSetOrderExpenses(db, businessId, payload);
+        continue;
+      }
+      if (action === "mark_order_delivered") {
+        await mayaMarkOrderDelivered(db, businessId, payload);
         continue;
       }
     }
@@ -1646,6 +1812,7 @@ export const createManualOrder = onRequest(
           quantity: body.quantity,
           amount: body.amount,
           deposit: body.deposit,
+          expenses: body.expenses,
           deliveryDate: body.deliveryDate,
           notes: body.notes,
           source: "manual",
@@ -1691,45 +1858,12 @@ export const updateOrderStatus = onRequest(
           return;
         }
         const order = snap.data() || {};
-        let patch = { status: nextStatus, updatedAt: FieldValue.serverTimestamp() };
-        let financeId = "";
 
         if (nextStatus === "entregado") {
-          const pendingBalance = Math.max(0, Number(order.balance) || 0);
-          if (pendingBalance > 0) {
-            const financeRef = await db.collection("businesses").doc(businessId).collection("finance").add({
-              type: "income",
-              amount: pendingBalance,
-              category: "ventas",
-              description: `Saldo final: ${asText(order.product, "Pedido")} - ${asText(order.clientName, "Cliente")}`,
-              clientId: asText(order.linkedClientId),
-              orderId,
-              createdAt: FieldValue.serverTimestamp(),
-              createdBy: "marvin",
-              date: Timestamp.fromDate(new Date()),
-            });
-            financeId = financeRef.id;
-            patch.balance = 0;
-          }
-          const linkedCalendarId = asText(order.linkedCalendarId);
-          if (linkedCalendarId) {
-            await db
-              .collection("businesses")
-              .doc(businessId)
-              .collection("calendar")
-              .doc(linkedCalendarId)
-              .set(
-                {
-                  status: "completed",
-                  completedAt: FieldValue.serverTimestamp(),
-                },
-                { merge: true },
-              );
-          }
+          await finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order);
+        } else {
+          await orderRef.set({ status: nextStatus, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         }
-
-        if (financeId) patch.linkedFinanceId = financeId;
-        await orderRef.set(patch, { merge: true });
         res.status(200).json({ ok: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Error desconocido";
@@ -1775,8 +1909,10 @@ export const updateOrderAndSync = onRequest(
         const nextProduct = asText(body.product, asText(old.product, "Pedido"));
         const nextNotes = asText(body.notes, asText(old.notes));
         const nextStatus = normalizeOrderStatus(body.status ?? old.status);
+        const prevStatus = normalizeOrderStatus(old.status);
         const nextQuantity = Math.max(0, Number(body.quantity ?? old.quantity) || 0);
         const nextDeliveryDate = parseOrderDate(body.deliveryDate) || parseOrderDate(old.deliveryDate) || new Date();
+        const nextExpenses = Math.max(0, Number(body.expenses ?? old.expenses) || 0);
 
         await orderRef.set(
           {
@@ -1787,6 +1923,7 @@ export const updateOrderAndSync = onRequest(
             amount: nextAmount,
             deposit: nextDeposit,
             balance: nextBalance,
+            expenses: nextExpenses,
             notes: nextNotes,
             status: nextStatus,
             deliveryDate: Timestamp.fromDate(nextDeliveryDate),
@@ -1794,6 +1931,11 @@ export const updateOrderAndSync = onRequest(
           },
           { merge: true },
         );
+
+        if (nextStatus === "entregado" && prevStatus !== "entregado") {
+          const fresh = await orderRef.get();
+          await finalizeOrderDeliveryAndProfit(db, businessId, orderRef, fresh.data() || {});
+        }
 
         const clientId = asText(old.linkedClientId);
         if (clientId) {

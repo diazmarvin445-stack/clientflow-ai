@@ -159,6 +159,7 @@ async function saveOrderFromModal(ev) {
     quantity: Number(document.getElementById("orders-quantity").value || 0),
     amount: Number(document.getElementById("orders-amount").value || 0),
     deposit: Number(document.getElementById("orders-deposit").value || 0),
+    expenses: Number(document.getElementById("orders-expenses").value || 0),
     deliveryDate: document.getElementById("orders-delivery-date").value || null,
     notes: document.getElementById("orders-notes").value.trim(),
     status: document.getElementById("orders-status").value,
@@ -181,13 +182,6 @@ async function saveOrderFromModal(ev) {
         ...payload,
       }),
     });
-    if (payload.status === "entregado") {
-      await fetch(UPDATE_ORDER_STATUS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: activeBusinessId, orderId, status: "entregado" }),
-      });
-    }
   }
   document.getElementById("orders-modal").close();
 }
@@ -200,10 +194,32 @@ function fillDetail(row) {
   document.getElementById("od-amount").textContent = money(row.amount);
   document.getElementById("od-deposit").textContent = money(row.deposit);
   document.getElementById("od-balance").textContent = money(row.balance);
-  document.getElementById("od-status").textContent = row.status || "nuevo";
+  const exp = Number(row.expenses) || 0;
+  const expEl = document.getElementById("od-expenses");
+  if (expEl && "value" in expEl) expEl.value = String(exp);
+  const expDisp = document.getElementById("od-expenses-display");
+  if (expDisp) expDisp.textContent = money(exp);
+  const amt = Number(row.amount) || 0;
+  const netProfit = Math.max(0, amt - exp);
+  const stRaw = String(row.status || "nuevo").toLowerCase();
+  const delivered = stRaw === "entregado";
+  const statusLabels = {
+    entregado: "Entregado",
+    cancelado: "Cancelado",
+    nuevo: "Nuevo",
+    produccion: "Producción",
+    listo: "Listo",
+  };
+  const npEl = document.getElementById("od-net-profit");
+  if (npEl) {
+    npEl.textContent = delivered ? money(row.netProfit != null ? row.netProfit : netProfit) : "—";
+  }
+  document.getElementById("od-status").textContent = statusLabels[stRaw] || "Pendiente";
   document.getElementById("od-delivery").textContent = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
   document.getElementById("od-source").textContent = sourceLabel(row.source);
   document.getElementById("od-notes").textContent = row.notes || "—";
+  const btnDel = document.getElementById("od-mark-delivered");
+  if (btnDel) btnDel.disabled = delivered;
 }
 
 function openModalFor(row = null) {
@@ -216,6 +232,7 @@ function openModalFor(row = null) {
   document.getElementById("orders-quantity").value = row?.quantity ?? "";
   document.getElementById("orders-amount").value = row?.amount ?? "";
   document.getElementById("orders-deposit").value = row?.deposit ?? "";
+  document.getElementById("orders-expenses").value = row?.expenses ?? "0";
   const dd = toDate(row?.deliveryDate);
   document.getElementById("orders-delivery-date").value = dd ? dd.toISOString().slice(0, 10) : "";
   document.getElementById("orders-notes").value = row?.notes || "";
@@ -298,6 +315,23 @@ function wireUi() {
       body: JSON.stringify({ businessId: activeBusinessId, orderId: selectedOrderId, status: "entregado" }),
     });
   });
+  const saveExp = document.getElementById("od-save-expenses");
+  if (saveExp) {
+    saveExp.addEventListener("click", async () => {
+      if (!selectedOrderId) return;
+      const input = document.getElementById("od-expenses");
+      const expenses = input && "value" in input ? Number(input.value) || 0 : 0;
+      await fetch(UPDATE_ORDER_AND_SYNC_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessId: activeBusinessId,
+          orderId: selectedOrderId,
+          expenses,
+        }),
+      });
+    });
+  }
   document.getElementById("od-delete").addEventListener("click", async () => {
     if (!selectedOrderId) return;
     await deleteOrder(selectedOrderId);

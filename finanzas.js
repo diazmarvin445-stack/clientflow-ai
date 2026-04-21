@@ -24,6 +24,7 @@ import { initDashShell } from "./dash-shell.js";
 const INCOME_OPTIONS = [
   { value: "ventas", label: "Ventas" },
   { value: "anticipos", label: "Anticipos" },
+  { value: "ganancias", label: "Ganancias (pedidos)" },
   { value: "otros_ingresos", label: "Otros ingresos" },
 ];
 

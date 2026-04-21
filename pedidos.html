@@ -155,6 +155,13 @@
               <div><strong>Total:</strong> <span id="od-amount">—</span></div>
               <div><strong>Depósito:</strong> <span id="od-deposit">—</span></div>
               <div><strong>Saldo:</strong> <span id="od-balance">—</span></div>
+              <div><strong>Gastos del pedido:</strong> <span id="od-expenses-display">$0.00</span></div>
+              <div class="orders-detail-exp-edit">
+                <label for="od-expenses">Editar gastos (total)</label>
+                <input id="od-expenses" class="orders-input" type="number" min="0" step="0.01" placeholder="0" />
+                <button type="button" class="dash-quick-btn" id="od-save-expenses">Guardar gastos</button>
+              </div>
+              <div><strong>GANANCIA NETA:</strong> <span id="od-net-profit">—</span> <span class="dash-table-muted">(visible al marcar entregado)</span></div>
               <div><strong>Estado:</strong> <span id="od-status">—</span></div>
               <div><strong>Entrega:</strong> <span id="od-delivery">—</span></div>
               <div><strong>Fuente:</strong> <span id="od-source">—</span></div>
@@ -162,7 +169,9 @@
             </div>
             <div class="orders-detail-actions">
               <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="od-edit">Editar</button>
-              <button type="button" class="dash-quick-btn" id="od-mark-delivered">Marcar entregado</button>
+              <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="od-mark-delivered">
+                Marcar pedido como entregado y cobrado
+              </button>
               <button type="button" class="dash-quick-btn" id="od-delete">Eliminar</button>
             </div>
           </section>
@@ -181,6 +190,7 @@
           <input id="orders-quantity" class="orders-input" type="number" min="1" placeholder="Cantidad" required />
           <input id="orders-amount" class="orders-input" type="number" min="0" step="0.01" placeholder="Total" required />
           <input id="orders-deposit" class="orders-input" type="number" min="0" step="0.01" placeholder="Depósito" />
+          <input id="orders-expenses" class="orders-input" type="number" min="0" step="0.01" placeholder="Gastos del pedido" />
           <input id="orders-delivery-date" class="orders-input" type="date" />
           <select id="orders-status" class="orders-input">
             <option value="nuevo">Nuevo</option>
