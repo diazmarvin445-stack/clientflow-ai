@@ -48,6 +48,8 @@ const DELIVERY_DAYS_OFFSET = 12;
 /** @type {ReturnType<typeof setTimeout> | null} */
 let panelChatIdleTimer = null;
 let panelChatUserIdCache = "";
+/** Marca de tiempo de la última actividad en el chat (mensaje, scroll, etc.) para la ventana de 1 minuto al cambiar de página. */
+let lastPanelChatActivityAt = 0;
 
 /** @type {{ role: 'user' | 'assistant', content: string }[]} */
 let apiConversation = [];
@@ -704,6 +706,91 @@ function trimApiMessages() {
   apiConversation = apiConversation.slice(-MAX_CHAT_MEMORY);
 }
 
+function panelChatSessionStorageKey(userId, businessId) {
+  return `cf_maya_panel_chat_v1_${userId}_${businessId}`;
+}
+
+function touchPanelChatActivityTime() {
+  lastPanelChatActivityAt = Date.now();
+}
+
+/**
+ * Guarda la conversación en sessionStorage al salir de la página (otra pestaña del panel).
+ * Al volver antes de 1 min desde la última actividad, se restaura el hilo.
+ */
+function persistChatToSessionStorage() {
+  const uid = auth.currentUser?.uid;
+  const bid = activeBusiness?.id;
+  if (!uid || !bid) return;
+  const key = panelChatSessionStorageKey(uid, bid);
+  try {
+    if (!apiConversation.length) {
+      sessionStorage.removeItem(key);
+      return;
+    }
+    const lastAt = lastPanelChatActivityAt || Date.now();
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        messages: apiConversation.slice(-MAX_CHAT_MEMORY).map((m) => ({
+          role: m.role,
+          content: String(m.content || "").slice(0, 12000),
+        })),
+        lastActivityAt: lastAt,
+      }),
+    );
+  } catch (e) {
+    console.warn("[YourColor Chat] sessionStorage save", e);
+  }
+}
+
+function clearChatSessionStorage(uid, businessId) {
+  if (!uid || !businessId) return;
+  try {
+    sessionStorage.removeItem(panelChatSessionStorageKey(uid, businessId));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * @returns {boolean} true si se restauró una sesión reciente (< 1 min desde última actividad)
+ */
+function tryRestoreChatFromSessionStorage(businessId, userId) {
+  const key = panelChatSessionStorageKey(userId, businessId);
+  let raw;
+  try {
+    raw = sessionStorage.getItem(key);
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    sessionStorage.removeItem(key);
+    return false;
+  }
+  const messages = parsed.messages;
+  const lastAt = Number(parsed.lastActivityAt) || 0;
+  if (!Array.isArray(messages) || !messages.length) {
+    sessionStorage.removeItem(key);
+    return false;
+  }
+  const elapsed = Date.now() - lastAt;
+  if (elapsed >= PANEL_CHAT_IDLE_MS) {
+    sessionStorage.removeItem(key);
+    return false;
+  }
+  apiConversation = messages
+    .filter((x) => x && (x.role === "user" || x.role === "assistant") && typeof x.content === "string")
+    .map((x) => ({ role: /** @type {'user'|'assistant'} */ (x.role), content: x.content }))
+    .slice(-MAX_CHAT_MEMORY);
+  lastPanelChatActivityAt = lastAt;
+  return apiConversation.length > 0;
+}
+
 async function persistPanelChatHistory(businessId, userId) {
   if (!businessId || !userId || !apiConversation.length) return;
   const messages = apiConversation.slice(-MAX_CHAT_MEMORY).map((m) => ({
@@ -746,29 +833,45 @@ function renderChatHistoryFromMemory() {
   stream.scrollTop = stream.scrollHeight;
 }
 
-function bumpPanelChatActivity() {
+async function executePanelChatSessionIdleCleanup() {
+  const bid = activeBusiness?.id;
+  const uid = auth.currentUser?.uid;
+  if (bid && uid) {
+    clearChatSessionStorage(uid, bid);
+    try {
+      if (apiConversation.length) {
+        await persistPanelChatHistory(bid, uid);
+      }
+    } catch (e) {
+      console.warn("[YourColor Chat] idle save", e);
+    }
+  }
+  apiConversation = [];
+  lastPanelChatActivityAt = 0;
+  const stream = document.getElementById("yc-chat-stream");
+  if (stream) {
+    stream.innerHTML = "";
+    showWelcomeAssistant();
+  }
+}
+
+/**
+ * Programa el cierre por inactividad (1 min desde `lastPanelChatActivityAt`).
+ * @param {number} [delayMs] por defecto ventana completa; al volver de otra página se usa el tiempo restante.
+ */
+function schedulePanelChatIdleTimer(delayMs = PANEL_CHAT_IDLE_MS) {
   if (!activeBusiness || apiConversation.length === 0) return;
   if (panelChatIdleTimer) window.clearTimeout(panelChatIdleTimer);
   panelChatIdleTimer = window.setTimeout(() => {
     panelChatIdleTimer = null;
-    const bid = activeBusiness?.id;
-    const uid = auth.currentUser?.uid;
-    void (async () => {
-      if (bid && uid) {
-        try {
-          await persistPanelChatHistory(bid, uid);
-        } catch (e) {
-          console.warn("[YourColor Chat] idle save", e);
-        }
-      }
-      apiConversation = [];
-      const stream = document.getElementById("yc-chat-stream");
-      if (stream) {
-        stream.innerHTML = "";
-        showWelcomeAssistant();
-      }
-    })();
-  }, PANEL_CHAT_IDLE_MS);
+    void executePanelChatSessionIdleCleanup();
+  }, delayMs);
+}
+
+function bumpPanelChatActivity() {
+  if (!activeBusiness || apiConversation.length === 0) return;
+  touchPanelChatActivityTime();
+  schedulePanelChatIdleTimer();
 }
 
 function wirePanelChatIdleAndActivity() {
@@ -2031,19 +2134,43 @@ async function bootWithUser(user) {
 
     mayaInitControlCenter(business);
 
-    const hadHistory = await loadPanelChatHistory(business.id, user.uid);
+    const restoredFromTab = tryRestoreChatFromSessionStorage(business.id, user.uid);
+    let hadHistory = restoredFromTab;
+    if (!restoredFromTab) {
+      hadHistory = await loadPanelChatHistory(business.id, user.uid);
+    }
 
     if (loading) loading.hidden = true;
     if (stream) {
       stream.hidden = false;
       stream.innerHTML = "";
-      if (hadHistory) renderChatHistoryFromMemory();
-      else showWelcomeAssistant();
+      if (hadHistory) {
+        renderChatHistoryFromMemory();
+        if (restoredFromTab) {
+          const elapsed = Date.now() - lastPanelChatActivityAt;
+          const remaining = Math.max(0, PANEL_CHAT_IDLE_MS - elapsed);
+          schedulePanelChatIdleTimer(remaining);
+        } else {
+          touchPanelChatActivityTime();
+          schedulePanelChatIdleTimer();
+        }
+      } else {
+        showWelcomeAssistant();
+      }
     }
 
     setComposerEnabled(true);
     wireComposer();
     wirePanelChatIdleAndActivity();
+    if (!window.__cfMayaPagehideWired) {
+      window.__cfMayaPagehideWired = true;
+      window.addEventListener("pagehide", () => {
+        persistChatToSessionStorage();
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") persistChatToSessionStorage();
+      });
+    }
     document.getElementById("yc-chat-input")?.focus();
 
     void loadFirebaseContext(business, { bootstrap: true }).catch((e) => {
