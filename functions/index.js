@@ -438,6 +438,11 @@ function asNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isSameCalendarDay(a, b) {
+  if (!a || !b || Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 function extractJsonObject(rawText) {
   const text = asText(rawText);
   if (!text) return null;
@@ -992,6 +997,7 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "create_calendar_event",
   "delete_order",
   "delete_client",
+  "delete_calendar_event",
   "delete_transaction",
   "add_team_member",
   "update_team_member",
@@ -1109,6 +1115,9 @@ function mergeMayaActionData(payload) {
     "role",
     "permissions",
     "changes",
+    "eventId",
+    "eventTitle",
+    "weekday",
   ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
@@ -1123,26 +1132,9 @@ function mergeMayaActionData(payload) {
  * @param {Record<string, unknown>} payload
  */
 async function mayaDeleteOrderCascade(db, businessId, payload) {
-  const data = mergeMayaActionData(payload);
-  let orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
-  if (!orderId) {
-    const name = typeof data.clientName === "string" ? data.clientName.trim().toLowerCase() : "";
-    if (!name) throw new Error("Falta orderId o clientName para eliminar la orden.");
-    const snap = await db.collection("businesses").doc(businessId).collection("orders").limit(200).get();
-    let picked = null;
-    snap.forEach((x) => {
-      if (picked) return;
-      const d = x.data() || {};
-      const cName = typeof d.clientName === "string" ? d.clientName.trim().toLowerCase() : "";
-      if (cName && cName.includes(name)) picked = x;
-    });
-    if (!picked) throw new Error("No encontré una orden para ese cliente.");
-    orderId = picked.id;
-  }
-
-  const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
-  const orderSnap = await orderRef.get();
+  const { ref: orderRef, snap: orderSnap } = await mayaResolveOrderRef(db, businessId, payload);
   if (!orderSnap.exists) throw new Error("La orden indicada no existe.");
+  const orderId = orderRef.id;
   const order = orderSnap.data() || {};
 
   const linkedCalendarId =
@@ -1173,6 +1165,155 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
   }
 
   await orderRef.delete();
+}
+
+/**
+ * Elimina un cliente por `clientId` o búsqueda por nombre (`clientName` / `name`).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaDeleteClientByPayload(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  let clientId =
+    typeof data.clientId === "string"
+      ? data.clientId.trim()
+      : String(data.clientId ?? "").trim();
+  if (clientId) {
+    const ref = db.collection("businesses").doc(businessId).collection("clients").doc(clientId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Cliente no encontrado con ese id.");
+    await ref.delete();
+    return;
+  }
+  const nameRaw =
+    typeof data.clientName === "string" && data.clientName.trim()
+      ? data.clientName.trim()
+      : typeof data.name === "string" && data.name.trim()
+        ? data.name.trim()
+        : "";
+  const name = nameRaw.toLowerCase();
+  if (!name) throw new Error("Falta clientId o clientName para eliminar el cliente.");
+  const snap = await db.collection("businesses").doc(businessId).collection("clients").limit(400).get();
+  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; full: string }[]} */
+  const matches = [];
+  snap.forEach((d) => {
+    const x = d.data() || {};
+    const fn = typeof x.fullName === "string" ? x.fullName.trim().toLowerCase() : "";
+    const n = typeof x.name === "string" ? x.name.trim().toLowerCase() : "";
+    const cand = fn || n;
+    if (!cand) return;
+    if (cand.includes(name) || name.includes(cand)) matches.push({ doc: d, full: cand });
+  });
+  if (matches.length === 0) throw new Error("No encontré un cliente con ese nombre.");
+  if (matches.length > 1) {
+    const exact = matches.find((m) => m.full === name);
+    if (exact) {
+      await exact.doc.ref.delete();
+      return;
+    }
+    throw new Error(
+      "Hay varios clientes con nombres parecidos; pasá el clientId del contexto Firebase o el nombre completo exacto.",
+    );
+  }
+  await matches[0].doc.ref.delete();
+}
+
+/** Día de la semana en JS (0=domingo … 6=sábado) desde texto en español. */
+const MAYA_WEEKDAY_ES = {
+  domingo: 0,
+  lunes: 1,
+  martes: 2,
+  "miércoles": 3,
+  miercoles: 3,
+  jueves: 4,
+  viernes: 5,
+  "sábado": 6,
+  sabado: 6,
+};
+
+/**
+ * Elimina un evento por `eventId` o por criterios (título, día de la semana, fecha ISO).
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaDeleteCalendarEvent(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const eventId = typeof data.eventId === "string" ? data.eventId.trim() : "";
+  if (eventId) {
+    const ref = db.collection("businesses").doc(businessId).collection("calendar").doc(eventId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Evento de calendario no encontrado.");
+    await ref.delete();
+    return;
+  }
+
+  const titleNeedle = (
+    typeof data.title === "string" && data.title.trim()
+      ? data.title.trim()
+      : typeof data.eventTitle === "string" && data.eventTitle.trim()
+        ? data.eventTitle.trim()
+        : ""
+  ).toLowerCase();
+
+  const weekdayRaw = typeof data.weekday === "string" ? data.weekday.trim().toLowerCase() : "";
+  let targetWd = MAYA_WEEKDAY_ES[weekdayRaw];
+
+  let wantDay = null;
+  if (data.date != null && String(data.date).trim()) {
+    wantDay = parseFinanceMovementDate(data.date);
+  }
+
+  const snap = await db.collection("businesses").doc(businessId).collection("calendar").limit(500).get();
+  /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; dt: Date | null }[]} */
+  const candidates = [];
+  snap.forEach((doc) => {
+    const row = doc.data() || {};
+    let dt = null;
+    if (row.date && typeof row.date.toDate === "function") {
+      try {
+        dt = row.date.toDate();
+      } catch {
+        dt = null;
+      }
+    }
+    const t = typeof row.title === "string" ? row.title.toLowerCase() : "";
+    let ok = true;
+    if (titleNeedle && !t.includes(titleNeedle)) ok = false;
+    if (targetWd !== undefined && dt && dt.getDay() !== targetWd) ok = false;
+    if (wantDay && dt && !isSameCalendarDay(dt, wantDay)) ok = false;
+    if (ok) candidates.push({ doc, dt });
+  });
+
+  if (candidates.length === 0) {
+    throw new Error("No encontré un evento de calendario con esos criterios.");
+  }
+
+  if (candidates.length === 1) {
+    await candidates[0].doc.ref.delete();
+    return;
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  if (targetWd !== undefined && !titleNeedle && !wantDay) {
+    const future = candidates.filter((c) => c.dt && c.dt >= todayStart);
+    future.sort((a, b) => (a.dt?.getTime() || 0) - (b.dt?.getTime() || 0));
+    if (future.length) {
+      await future[0].doc.ref.delete();
+      return;
+    }
+    const past = [...candidates].filter((c) => c.dt).sort((a, b) => (b.dt?.getTime() || 0) - (a.dt?.getTime() || 0));
+    if (past.length) {
+      await past[0].doc.ref.delete();
+      return;
+    }
+  }
+
+  throw new Error(
+    "Hay varios eventos que coinciden; pasá el eventId del contexto o más detalle (título, fecha o día de la semana único).",
+  );
 }
 
 /**
@@ -1294,7 +1435,18 @@ function mergeFinancePayload(payload) {
       ? /** @type {Record<string, unknown>} */ ({ ...payload.data })
       : {};
   const out = { ...nested };
-  for (const k of ["amount", "description", "category", "date", "period", "transactionId", "clientId", "orderId"]) {
+  for (const k of [
+    "amount",
+    "description",
+    "category",
+    "date",
+    "period",
+    "transactionId",
+    "clientId",
+    "orderId",
+    "dateHint",
+    "type",
+  ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
     }
@@ -1486,8 +1638,83 @@ async function mayaFinanceDelete(db, businessId, payload) {
     typeof data.transactionId === "string"
       ? data.transactionId.trim()
       : String(data.transactionId ?? "").trim();
-  if (!tid) throw new Error("Falta transactionId para eliminar el movimiento.");
-  await db.collection("businesses").doc(businessId).collection("finance").doc(tid).delete();
+  if (tid) {
+    const ref = db.collection("businesses").doc(businessId).collection("finance").doc(tid);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Movimiento financiero no encontrado.");
+    await ref.delete();
+    return;
+  }
+
+  const amountHint = data.amount != null ? Number(data.amount) : NaN;
+  const dateHintRaw =
+    typeof data.dateHint === "string"
+      ? data.dateHint.trim().toLowerCase()
+      : typeof data.date === "string"
+        ? data.date.trim().toLowerCase()
+        : "";
+  const descHint = typeof data.description === "string" ? data.description.trim().toLowerCase() : "";
+  const typeRaw = typeof data.type === "string" ? data.type.trim().toLowerCase() : "";
+
+  const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(800).get();
+  /** @type {import("firebase-admin/firestore").QueryDocumentSnapshot[]} */
+  const candidates = [];
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  snap.forEach((doc) => {
+    const row = doc.data() || {};
+    const rowAmt = Number(row.amount);
+    const rowDesc = typeof row.description === "string" ? row.description.toLowerCase() : "";
+    const rowType = typeof row.type === "string" ? row.type.toLowerCase() : "";
+    let rowDate = null;
+    if (row.date && typeof row.date.toDate === "function") {
+      try {
+        rowDate = row.date.toDate();
+      } catch {
+        rowDate = null;
+      }
+    }
+
+    let dateOk = true;
+    if (dateHintRaw === "ayer" || dateHintRaw === "yesterday") {
+      dateOk = !!(rowDate && isSameCalendarDay(rowDate, yesterdayStart));
+    } else if (dateHintRaw === "hoy" || dateHintRaw === "today") {
+      dateOk = !!(rowDate && isSameCalendarDay(rowDate, todayStart));
+    } else if (dateHintRaw && /^\d{4}-\d{2}-\d{2}/.test(dateHintRaw)) {
+      const d = new Date(dateHintRaw.includes("T") ? dateHintRaw : `${dateHintRaw}T12:00:00`);
+      dateOk = !!(rowDate && !Number.isNaN(d.getTime()) && isSameCalendarDay(rowDate, d));
+    }
+
+    if (!dateOk) return;
+
+    if (typeRaw === "gasto" || typeRaw === "expense") {
+      if (rowType !== "expense") return;
+    } else if (typeRaw === "ingreso" || typeRaw === "income") {
+      if (rowType !== "income") return;
+    }
+
+    if (Number.isFinite(amountHint) && amountHint > 0) {
+      if (Math.abs(rowAmt - amountHint) > 0.02) return;
+    }
+
+    if (descHint && !rowDesc.includes(descHint)) return;
+
+    candidates.push(doc);
+  });
+
+  if (candidates.length === 0) {
+    throw new Error("No encontré un movimiento que coincida con esos criterios (usa transactionId del contexto si sigue fallando).");
+  }
+  if (candidates.length > 1) {
+    throw new Error(
+      "Hay varios movimientos que coinciden; pasá el transactionId del contexto o más detalles (monto + fecha + tipo).",
+    );
+  }
+  await candidates[0].ref.delete();
 }
 
 /**
@@ -1700,6 +1927,10 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         await mayaFinanceDelete(db, businessId, payload);
         continue;
       }
+      if (action === "delete_calendar_event") {
+        await mayaDeleteCalendarEvent(db, businessId, payload);
+        continue;
+      }
       if (action === "delete_order") {
         await mayaDeleteOrderCascade(db, businessId, payload);
         continue;
@@ -1777,11 +2008,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         continue;
       }
       if (action === "delete_client") {
-        const data = mergeMayaActionData(payload);
-        const clientId =
-          typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
-        if (!clientId) throw new Error("Falta clientId para eliminar el cliente.");
-        await db.collection("businesses").doc(businessId).collection("clients").doc(clientId).delete();
+        await mayaDeleteClientByPayload(db, businessId, payload);
         continue;
       }
       if (action === "add_team_member") {
