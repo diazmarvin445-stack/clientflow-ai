@@ -7,7 +7,12 @@ import {
   orderBy,
   query,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
+import {
+  resolveBusinessForUser,
+  formatBusinessMeta,
+  initialsFromName,
+  financeIncomeCountsTowardRealized,
+} from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
 /** @type {(() => void) | null} */
@@ -69,6 +74,7 @@ function renderDashboardSnapshot(business, orders, clients, financeRows, calenda
   const daily = Array.from({ length: daysInMonth }, () => 0);
   financeRows.forEach((r) => {
     if (r.type !== "income") return;
+    if (!financeIncomeCountsTowardRealized(r)) return;
     const d = toDate(r.date || r.createdAt);
     if (!d || d < monthStart || d > monthEnd) return;
     daily[d.getDate() - 1] += Number(r.amount) || 0;

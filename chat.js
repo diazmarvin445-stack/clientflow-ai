@@ -12,6 +12,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -24,6 +25,7 @@ import {
   fetchFinanceTransactionsCurrentMonth,
   fetchCalendarEventsForChat,
   formatBusinessMeta,
+  financeIncomeCountsTowardRealized,
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
@@ -37,7 +39,15 @@ const MAYA_WELCOME_STATIC = "Hola Marvin 👋";
 
 /** Últimos turnos enviados a Claude (memoria reciente; calidad de conversación). */
 const MAX_API_MESSAGES = 20;
+/** Máximo de turnos guardados en memoria local y en Firestore (historial del panel). */
+const MAX_CHAT_MEMORY = 80;
+/** Tras este tiempo sin actividad se guarda el historial y se limpia la vista (sesión de chat). */
+const PANEL_CHAT_IDLE_MS = 60000;
 const DELIVERY_DAYS_OFFSET = 12;
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let panelChatIdleTimer = null;
+let panelChatUserIdCache = "";
 
 /** @type {{ role: 'user' | 'assistant', content: string }[]} */
 let apiConversation = [];
@@ -690,8 +700,87 @@ function setComposerEnabled(on) {
 }
 
 function trimApiMessages() {
-  if (apiConversation.length <= MAX_API_MESSAGES) return;
-  apiConversation = apiConversation.slice(-MAX_API_MESSAGES);
+  if (apiConversation.length <= MAX_CHAT_MEMORY) return;
+  apiConversation = apiConversation.slice(-MAX_CHAT_MEMORY);
+}
+
+async function persistPanelChatHistory(businessId, userId) {
+  if (!businessId || !userId || !apiConversation.length) return;
+  const messages = apiConversation.slice(-MAX_CHAT_MEMORY).map((m) => ({
+    role: m.role,
+    content: String(m.content || "").slice(0, 12000),
+  }));
+  await setDoc(
+    doc(db, "businesses", businessId, "internalChatHistory", userId),
+    { messages, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+}
+
+async function loadPanelChatHistory(businessId, userId) {
+  try {
+    const s = await getDoc(doc(db, "businesses", businessId, "internalChatHistory", userId));
+    if (!s.exists()) return false;
+    const data = s.data();
+    const m = data?.messages;
+    if (!Array.isArray(m) || !m.length) return false;
+    apiConversation = m
+      .filter((x) => x && (x.role === "user" || x.role === "assistant") && typeof x.content === "string")
+      .map((x) => ({ role: /** @type {'user'|'assistant'} */ (x.role), content: x.content }))
+      .slice(-MAX_CHAT_MEMORY);
+    return apiConversation.length > 0;
+  } catch (e) {
+    console.warn("[YourColor Chat] load history", e);
+    return false;
+  }
+}
+
+function renderChatHistoryFromMemory() {
+  const stream = document.getElementById("yc-chat-stream");
+  if (!stream) return;
+  stream.innerHTML = "";
+  for (const m of apiConversation) {
+    if (m.role === "user") appendUserBubble(m.content);
+    else appendAssistantBubble(m.content);
+  }
+  stream.scrollTop = stream.scrollHeight;
+}
+
+function bumpPanelChatActivity() {
+  if (!activeBusiness || apiConversation.length === 0) return;
+  if (panelChatIdleTimer) window.clearTimeout(panelChatIdleTimer);
+  panelChatIdleTimer = window.setTimeout(() => {
+    panelChatIdleTimer = null;
+    const bid = activeBusiness?.id;
+    const uid = auth.currentUser?.uid;
+    void (async () => {
+      if (bid && uid) {
+        try {
+          await persistPanelChatHistory(bid, uid);
+        } catch (e) {
+          console.warn("[YourColor Chat] idle save", e);
+        }
+      }
+      apiConversation = [];
+      const stream = document.getElementById("yc-chat-stream");
+      if (stream) {
+        stream.innerHTML = "";
+        showWelcomeAssistant();
+      }
+    })();
+  }, PANEL_CHAT_IDLE_MS);
+}
+
+function wirePanelChatIdleAndActivity() {
+  const stream = document.getElementById("yc-chat-stream");
+  const input = document.getElementById("yc-chat-input");
+  const shell = document.querySelector(".yc-chat-page") || document.querySelector(".dash-shell");
+  const bump = () => bumpPanelChatActivity();
+  stream?.addEventListener("scroll", bump, { passive: true });
+  input?.addEventListener("keydown", bump);
+  input?.addEventListener("input", bump);
+  input?.addEventListener("focus", bump);
+  shell?.addEventListener("pointerdown", bump);
 }
 
 function conversationSnippet(maxLen = 4000) {
@@ -1086,6 +1175,7 @@ async function sendToClaude() {
 
   apiConversation.push({ role: "user", content: text });
   trimApiMessages();
+  bumpPanelChatActivity();
 
   if (btn) {
     btn.disabled = true;
@@ -1101,7 +1191,7 @@ async function sendToClaude() {
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
       body: JSON.stringify({
-        messages: apiConversation,
+        messages: apiConversation.slice(-MAX_API_MESSAGES),
         firebaseContext: firebaseContextPayload,
         stream: true,
       }),
@@ -1147,6 +1237,7 @@ async function sendToClaude() {
     const { visible: assistantVisible, actionPayload } = appendAssistantBubble(reply);
     apiConversation.push({ role: "assistant", content: assistantVisible });
     trimApiMessages();
+    bumpPanelChatActivity();
 
     if (activeBusiness) {
       void loadFirebaseContext(activeBusiness).catch((e) => {
@@ -1336,7 +1427,7 @@ async function loadFirebaseContext(business, options = {}) {
     const amt = Number(row.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
     if (row.type === "expense") monthExpense += amt;
-    else monthIncome += amt;
+    else if (financeIncomeCountsTowardRealized(row)) monthIncome += amt;
   }
 
   const campaignsShort = (campAgg.campaigns || []).slice(0, campaignCap);
@@ -1940,15 +2031,19 @@ async function bootWithUser(user) {
 
     mayaInitControlCenter(business);
 
+    const hadHistory = await loadPanelChatHistory(business.id, user.uid);
+
     if (loading) loading.hidden = true;
     if (stream) {
       stream.hidden = false;
       stream.innerHTML = "";
-      showWelcomeAssistant();
+      if (hadHistory) renderChatHistoryFromMemory();
+      else showWelcomeAssistant();
     }
 
     setComposerEnabled(true);
     wireComposer();
+    wirePanelChatIdleAndActivity();
     document.getElementById("yc-chat-input")?.focus();
 
     void loadFirebaseContext(business, { bootstrap: true }).catch((e) => {
@@ -1966,17 +2061,41 @@ async function bootWithUser(user) {
 function boot() {
   initDashShell({ auth, db });
 
+  /** Evita tratar el primer `null` como cierre de sesión antes de restaurar persistencia. */
+  let previousAuthUser = null;
+
   onAuthStateChanged(auth, (user) => {
-    if (!user) {
-      window.location.replace("login.html");
+    if (user) {
+      panelChatUserIdCache = user.uid;
+      previousAuthUser = user;
+      bootWithUser(user).catch((err) => {
+        console.error(err);
+        const ld = document.getElementById("yc-chat-loading");
+        if (ld) ld.hidden = true;
+        showError("Error inesperado al iniciar el chat.");
+      });
       return;
     }
-    bootWithUser(user).catch((err) => {
-      console.error(err);
-      const ld = document.getElementById("yc-chat-loading");
-      if (ld) ld.hidden = true;
-      showError("Error inesperado al iniciar el chat.");
-    });
+
+    if (previousAuthUser) {
+      const bid = activeBusiness?.id;
+      const uid = panelChatUserIdCache;
+      void (async () => {
+        try {
+          if (bid && uid && apiConversation.length) {
+            await persistPanelChatHistory(bid, uid);
+          }
+        } catch (e) {
+          console.warn("[YourColor Chat] save before sign-out", e);
+        } finally {
+          window.location.replace("login.html");
+        }
+      })();
+      previousAuthUser = null;
+      return;
+    }
+
+    window.location.replace("login.html");
   });
 }
 

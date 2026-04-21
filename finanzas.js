@@ -16,6 +16,7 @@ import {
   resolveBusinessForUser,
   formatBusinessMeta,
   initialsFromName,
+  financeIncomeCountsTowardRealized,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
@@ -202,8 +203,10 @@ function summarize(rows) {
   for (const r of rows) {
     const a = Number(r.amount);
     if (!Number.isFinite(a) || a <= 0) continue;
-    if (r.type === "income") income += a;
-    else if (r.type === "expense") expense += a;
+    if (r.type === "income") {
+      if (!financeIncomeCountsTowardRealized(r)) continue;
+      income += a;
+    } else if (r.type === "expense") expense += a;
   }
   return { income, expense, net: income - expense };
 }
@@ -312,7 +315,14 @@ function buildRow(row) {
       : row.createdBy === "marvin"
         ? ""
         : "";
-  sub.textContent = `${catLabel}${by}`;
+  const st = typeof row.status === "string" ? row.status.trim().toLowerCase() : "";
+  const statusNote =
+    row.type === "income" && st === "retenido"
+      ? " · Depósito retenido (no ingreso hasta entrega)"
+      : row.type === "income" && st === "cancelado"
+        ? " · Anulado"
+        : "";
+  sub.textContent = `${catLabel}${by}${statusNote}`;
 
   main.append(title, sub);
 
@@ -452,6 +462,7 @@ function wireModal() {
         description,
         clientId: null,
         orderId: null,
+        status: "cobrado",
         createdAt: serverTimestamp(),
         createdBy: "marvin",
         date: Timestamp.fromDate(d),
@@ -516,6 +527,7 @@ function subscribeFinance(bid) {
           description: typeof data.description === "string" ? data.description : "",
           date,
           createdBy: typeof data.createdBy === "string" ? data.createdBy : undefined,
+          status: typeof data.status === "string" ? data.status : "",
         });
       });
       renderList();

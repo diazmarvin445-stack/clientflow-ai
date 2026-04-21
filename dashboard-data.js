@@ -82,6 +82,20 @@ function clipText(s, max) {
 }
 
 /**
+ * Ingresos en `finance`: solo `status` cobrado (o sin status, legado) cuentan como ingreso real del mes.
+ * Depósitos retenidos al crear pedido usan status "retenido"; al anularse usan "cancelado".
+ * @param {Record<string, unknown>} row
+ */
+export function financeIncomeCountsTowardRealized(row) {
+  if (!row || row.type !== "income") return false;
+  const s = String(row.status ?? "cobrado")
+    .trim()
+    .toLowerCase();
+  if (s === "retenido" || s === "cancelado") return false;
+  return true;
+}
+
+/**
  * Build audience fallback from services checklist + optional "other" service detail.
  * @param {Record<string, unknown>} d normalized business
  */

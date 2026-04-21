@@ -382,11 +382,13 @@ async function processNewOrder(db, businessId, rawOrder) {
   if (deposit > 0) {
     const financeRef = await db.collection("businesses").doc(businessId).collection("finance").add({
       type: "income",
+      status: "retenido",
       amount: deposit,
-      category: "ventas",
-      description: `Depósito: ${product} - ${clientName}`,
+      category: "anticipos",
+      description: `Depósito retenido (no es ingreso hasta entrega): ${product} - ${clientName}`,
       clientId: client.id,
       orderId: orderRef.id,
+      linkedOrderId: orderRef.id,
       createdAt: FieldValue.serverTimestamp(),
       createdBy,
       date: Timestamp.fromDate(new Date()),
@@ -441,6 +443,16 @@ function asNumber(value, fallback = 0) {
 function isSameCalendarDay(a, b) {
   if (!a || !b || Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** Ingresos: solo cobrado (o sin status, legado) cuentan en totales. retenido/cancelado no. */
+function financeIncomeCountsAsRealizedAdmin(row) {
+  if (!row || row.type !== "income") return false;
+  const s = String(row.status ?? "cobrado")
+    .trim()
+    .toLowerCase();
+  if (s === "retenido" || s === "cancelado") return false;
+  return true;
 }
 
 function extractJsonObject(rawText) {
@@ -812,7 +824,7 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
     const amt = Number(row.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
     if (row.type === "expense") monthExpense += amt;
-    else monthIncome += amt;
+    else if (financeIncomeCountsAsRealizedAdmin(row)) monthIncome += amt;
   }
 
   const financeRecentCap = financeMonth.slice(0, 95);
@@ -1541,7 +1553,7 @@ async function aggregateFinanceTotals(db, businessId, period) {
     const amt = Number(d.amount);
     if (!Number.isFinite(amt) || amt <= 0) return;
     if (d.type === "expense") expense += amt;
-    else income += amt;
+    else if (financeIncomeCountsAsRealizedAdmin(d)) income += amt;
   });
   return { income, expense, net: income - expense };
 }
@@ -1616,6 +1628,7 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
 
   await db.collection("businesses").doc(businessId).collection("finance").add({
     type: kind,
+    status: "cobrado",
     amount: amt,
     category,
     description,
@@ -1718,7 +1731,8 @@ async function mayaFinanceDelete(db, businessId, payload) {
 }
 
 /**
- * Cierra un pedido como entregado: cobra saldo pendiente (ventas), registra ganancia neta (ganancias) = total - gastos.
+ * Cierra un pedido como entregado: anula el depósito retenido en finance, registra un único ingreso real
+ * (`status: cobrado`) por el total del pedido; `netProfit` queda en el documento del pedido.
  * Idempotente si `deliverySettled` ya es true.
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {string} businessId
@@ -1741,7 +1755,6 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
 
   const amount = Math.max(0, Number(order.amount) || 0);
   const expenses = Math.max(0, Number(order.expenses) || 0);
-  const pendingBalance = Math.max(0, Number(order.balance) || 0);
   const netProfit = Math.max(0, amount - expenses);
 
   /** @type {Record<string, unknown>} */
@@ -1753,28 +1766,29 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  if (pendingBalance > 0) {
-    const finRef = await db.collection("businesses").doc(businessId).collection("finance").add({
-      type: "income",
-      amount: pendingBalance,
-      category: "ventas",
-      description: `Saldo final: ${product} - ${clientName}`,
-      clientId: linkedClientId || null,
-      orderId,
-      linkedOrderId: orderId,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy: "marvin",
-      date: Timestamp.fromDate(new Date()),
-    });
-    patch.linkedSaldoFinanceId = finRef.id;
+  const linkedFinanceDeposit = asText(order.linkedFinanceId);
+  if (linkedFinanceDeposit) {
+    const depRef = db.collection("businesses").doc(businessId).collection("finance").doc(linkedFinanceDeposit);
+    const depSnap = await depRef.get();
+    if (depSnap.exists) {
+      await depRef.set(
+        {
+          status: "cancelado",
+          cancelledReason: "Pedido entregado: depósito retenido absorbido en cobro total",
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
   }
 
-  if (netProfit > 0) {
-    const profitRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+  if (amount > 0) {
+    const finRef = await db.collection("businesses").doc(businessId).collection("finance").add({
       type: "income",
-      amount: netProfit,
-      category: "ganancias",
-      description: `Ganancia pedido ${clientName}`,
+      status: "cobrado",
+      amount,
+      category: "ventas",
+      description: `Cobro total pedido entregado: ${product} - ${clientName}`,
       clientId: linkedClientId || null,
       orderId,
       linkedOrderId: orderId,
@@ -1782,7 +1796,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
       createdBy: "marvin",
       date: Timestamp.fromDate(new Date()),
     });
-    patch.linkedProfitFinanceId = profitRef.id;
+    patch.linkedCobroTotalFinanceId = finRef.id;
   }
 
   const linkedCalendarId = asText(order.linkedCalendarId);
@@ -2431,6 +2445,7 @@ export const updateOrderAndSync = onRequest(
         if (nextAmount !== oldAmount && nextDeposit > 0) {
           await db.collection("businesses").doc(businessId).collection("finance").add({
             type: "income",
+            status: "cobrado",
             amount: nextDeposit,
             category: "ventas",
             description: `Ajuste pedido: ${nextProduct} - ${nextClientName}`,
