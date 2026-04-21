@@ -580,8 +580,14 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "add_income",
   "add_expense",
   "create_calendar_event",
+  "delete_order",
   "delete_client",
   "delete_transaction",
+  "add_team_member",
+  "update_team_member",
+  "delete_team_member",
+  "assign_task",
+  "list_team",
   "get_balance",
 ]);
 
@@ -684,12 +690,186 @@ function mergeMayaActionData(payload) {
     "deliveryDate",
     "notes",
     "status",
+    "orderId",
+    "memberId",
+    "task",
+    "role",
+    "permissions",
+    "changes",
   ]) {
     if (k in payload && payload[k] !== undefined && out[k] === undefined) {
       out[k] = payload[k];
     }
   }
   return out;
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaDeleteOrderCascade(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  let orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
+  if (!orderId) {
+    const name = typeof data.clientName === "string" ? data.clientName.trim().toLowerCase() : "";
+    if (!name) throw new Error("Falta orderId o clientName para eliminar la orden.");
+    const snap = await db.collection("businesses").doc(businessId).collection("orders").limit(200).get();
+    let picked = null;
+    snap.forEach((x) => {
+      if (picked) return;
+      const d = x.data() || {};
+      const cName = typeof d.clientName === "string" ? d.clientName.trim().toLowerCase() : "";
+      if (cName && cName.includes(name)) picked = x;
+    });
+    if (!picked) throw new Error("No encontré una orden para ese cliente.");
+    orderId = picked.id;
+  }
+
+  const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+  const orderSnap = await orderRef.get();
+  if (!orderSnap.exists) throw new Error("La orden indicada no existe.");
+  const order = orderSnap.data() || {};
+
+  const linkedCalendarId =
+    typeof order.linkedCalendarId === "string" && order.linkedCalendarId.trim()
+      ? order.linkedCalendarId.trim()
+      : "";
+  if (linkedCalendarId) {
+    await db.collection("businesses").doc(businessId).collection("calendar").doc(linkedCalendarId).delete();
+  }
+
+  if (typeof order.linkedFinanceId === "string" && order.linkedFinanceId.trim()) {
+    await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("finance")
+      .doc(order.linkedFinanceId.trim())
+      .delete();
+  }
+
+  const financeSnap = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("finance")
+    .where("orderId", "==", orderId)
+    .get();
+  for (const d of financeSnap.docs) {
+    await d.ref.delete();
+  }
+
+  await orderRef.delete();
+}
+
+/**
+ * @param {import("firebase-admin/firestore").Firestore} db
+ * @param {string} businessId
+ * @param {Record<string, unknown>} payload
+ */
+async function mayaTeamAddMember(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const name = typeof data.name === "string" ? data.name.trim() : "";
+  if (!name) throw new Error("Falta nombre del miembro.");
+  const role = typeof data.role === "string" && data.role.trim() ? data.role.trim() : "miembro";
+  const phone = typeof data.phone === "string" ? data.phone.trim() : "";
+  const email = typeof data.email === "string" ? data.email.trim() : "";
+  const permissions = Array.isArray(data.permissions) ? data.permissions.filter((x) => typeof x === "string") : [];
+  await db.collection("businesses").doc(businessId).collection("team").add({
+    name,
+    phone,
+    email,
+    role,
+    permissions,
+    status: "active",
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: "maya",
+  });
+}
+
+async function mayaResolveTeamMemberId(db, businessId, data) {
+  let memberId = typeof data.memberId === "string" ? data.memberId.trim() : "";
+  if (memberId) return memberId;
+  const name = typeof data.name === "string" ? data.name.trim().toLowerCase() : "";
+  if (!name) throw new Error("Falta memberId o nombre del miembro.");
+  const snap = await db.collection("businesses").doc(businessId).collection("team").limit(200).get();
+  let found = "";
+  snap.forEach((d) => {
+    if (found) return;
+    const v = d.data() || {};
+    const n = typeof v.name === "string" ? v.name.trim().toLowerCase() : "";
+    if (n && n.includes(name)) found = d.id;
+  });
+  if (!found) throw new Error("No encontré miembro de equipo con ese nombre.");
+  return found;
+}
+
+async function mayaTeamUpdateMember(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const memberId = await mayaResolveTeamMemberId(db, businessId, data);
+  const changes =
+    data.changes && typeof data.changes === "object"
+      ? { ...data.changes }
+      : {};
+  for (const k of ["name", "phone", "email", "role", "status", "permissions"]) {
+    if (data[k] !== undefined && changes[k] === undefined) changes[k] = data[k];
+  }
+  const out = {};
+  if (typeof changes.name === "string") out.name = changes.name.trim();
+  if (typeof changes.phone === "string") out.phone = changes.phone.trim();
+  if (typeof changes.email === "string") out.email = changes.email.trim();
+  if (typeof changes.role === "string") out.role = changes.role.trim();
+  if (typeof changes.status === "string") out.status = changes.status.trim();
+  if (Array.isArray(changes.permissions)) out.permissions = changes.permissions.filter((x) => typeof x === "string");
+  if (!Object.keys(out).length) throw new Error("No hay cambios válidos para actualizar miembro.");
+  out.updatedAt = FieldValue.serverTimestamp();
+  out.updatedBy = "maya";
+  await db.collection("businesses").doc(businessId).collection("team").doc(memberId).update(out);
+}
+
+async function mayaTeamDeleteMember(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const memberId = await mayaResolveTeamMemberId(db, businessId, data);
+  await db.collection("businesses").doc(businessId).collection("team").doc(memberId).delete();
+}
+
+async function mayaTeamAssignTask(db, businessId, payload) {
+  const data = mergeMayaActionData(payload);
+  const memberId = await mayaResolveTeamMemberId(db, businessId, data);
+  const task = typeof data.task === "string" ? data.task.trim() : "";
+  if (!task) throw new Error("Falta tarea para asignar.");
+  const t = {
+    text: task,
+    status: "pending",
+    assignedAt: new Date().toISOString(),
+    assignedBy: "maya",
+  };
+  await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("team")
+    .doc(memberId)
+    .set(
+      {
+        tasks: FieldValue.arrayUnion(t),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+}
+
+async function mayaTeamListBlock(db, businessId) {
+  const snap = await db.collection("businesses").doc(businessId).collection("team").limit(100).get();
+  if (snap.empty) return "Equipo: no hay miembros registrados todavía.";
+  const lines = [];
+  snap.forEach((d) => {
+    const x = d.data() || {};
+    const n = typeof x.name === "string" && x.name.trim() ? x.name.trim() : "Sin nombre";
+    const r = typeof x.role === "string" && x.role.trim() ? x.role.trim() : "miembro";
+    const s = typeof x.status === "string" && x.status.trim() ? x.status.trim() : "active";
+    lines.push(`- ${n} (${r}) [${s}] id:${d.id}`);
+  });
+  return `Equipo actual:\n${lines.join("\n")}`;
 }
 
 /**
@@ -957,6 +1137,10 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         await mayaFinanceDelete(db, businessId, payload);
         continue;
       }
+      if (action === "delete_order") {
+        await mayaDeleteOrderCascade(db, businessId, payload);
+        continue;
+      }
       if (action === "create_client") {
         const data = mergeMayaActionData(payload);
         const name = typeof data.name === "string" ? data.name.trim() : "";
@@ -1035,6 +1219,27 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
           typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
         if (!clientId) throw new Error("Falta clientId para eliminar el cliente.");
         await db.collection("businesses").doc(businessId).collection("clients").doc(clientId).delete();
+        continue;
+      }
+      if (action === "add_team_member") {
+        await mayaTeamAddMember(db, businessId, payload);
+        continue;
+      }
+      if (action === "update_team_member") {
+        await mayaTeamUpdateMember(db, businessId, payload);
+        continue;
+      }
+      if (action === "delete_team_member") {
+        await mayaTeamDeleteMember(db, businessId, payload);
+        continue;
+      }
+      if (action === "assign_task") {
+        await mayaTeamAssignTask(db, businessId, payload);
+        continue;
+      }
+      if (action === "list_team") {
+        const block = await mayaTeamListBlock(db, businessId);
+        extraBlocks.push(block);
         continue;
       }
     }

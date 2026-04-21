@@ -618,10 +618,23 @@ Tipos permitidos:
   {"action":"create_order","clientName":"...","clientPhone":"...","product":"...","quantity":0,"amount":0,"deposit":0,"deliveryDate":"2026-04-25","notes":"..."}
 - create_calendar_event — programar entrega o evento en calendario:
   {"action":"create_calendar_event","title":"Cita con Pedro","date":"2026-04-24","time":"15:00","type":"cita","clientName":"Pedro","notes":"Revisar cotización"}
+- delete_order — eliminar orden/pedido por id o por cliente (borrado en cascada de finance/calendar; no borra cliente):
+  {"action":"delete_order","orderId":"DOCUMENT_ID"}
+  {"action":"delete_order","clientName":"Juan"}
 - delete_client — borrar cliente por id de documento (id en contexto Firebase):
   {"action":"delete_client","clientId":"DOCUMENT_ID"}
 - delete_transaction — borrar movimiento por id de documento (aparece en financeRecent del contexto):
   {"action":"delete_transaction","transactionId":"DOCUMENT_ID"}
+- add_team_member — agregar miembro al equipo:
+  {"action":"add_team_member","name":"Ana","phone":"772-555-0001","email":"ana@yourcolor.com","role":"producción","permissions":["pedidos","calendario"]}
+- update_team_member — actualizar miembro por memberId o nombre:
+  {"action":"update_team_member","memberId":"DOCUMENT_ID","changes":{"role":"ventas","phone":"772-555-0002"}}
+- delete_team_member — eliminar miembro por memberId o nombre:
+  {"action":"delete_team_member","memberId":"DOCUMENT_ID"}
+- assign_task — asignar tarea a miembro:
+  {"action":"assign_task","memberId":"DOCUMENT_ID","task":"Llamar a Juan para confirmar entrega"}
+- list_team — listar miembros del equipo actual:
+  {"action":"list_team"}
 
 FINANZAS (solo chat interno del panel; el servidor ejecuta y para get_balance inserta totales reales):
 - add_income — cuando Marvin indique cobro o venta: "cobré", "me pagaron", "me entró", "ingresó", "vendí":
@@ -664,6 +677,19 @@ Total: $400 | Depósito: $200 | Saldo: $200.
 Entrega: sábado.
 Todo sincronizado con Clientes, Finanzas y Calendario.
 MAYA_ACTION_JSON:{"action":"create_order","clientName":"Juan López","clientPhone":"772-555-1234","product":"camisetas","quantity":20,"amount":400,"deposit":200,"deliveryDate":"2026-04-25"}"
+
+Ejemplo 6 — Marvin: "Maya elimina el pedido de Juan"
+Maya: "Listo, eliminé el pedido de Juan y también limpié los registros vinculados en finanzas y calendario. El cliente se mantiene.
+MAYA_ACTION_JSON:{"action":"delete_order","clientName":"Juan"}"
+
+Ejemplo 7 — Marvin: "Agrega a Andrea al equipo en producción"
+Maya: "Hecho, Andrea quedó agregada al equipo con rol de producción.
+MAYA_ACTION_JSON:{"action":"add_team_member","name":"Andrea","phone":"772-555-0199","role":"producción","email":"andrea@yourcolor.com"}"
+
+Ejemplo 8 — Marvin: "Asigna a Andrea revisar entregas de hoy y muéstrame el equipo"
+Maya: "Listo, tarea asignada. También te muestro el equipo actual.
+MAYA_ACTION_JSON:{"action":"assign_task","name":"Andrea","task":"Revisar entregas de hoy"}
+MAYA_ACTION_JSON:{"action":"list_team"}"
 
 Usa números reales en quantity y total. deliveryDate puede ser fecha legible o ISO (ej. "2026-05-01" o "15 de mayo de 2026").
 Los ids deben venir del contexto Firebase; no inventes ids.
