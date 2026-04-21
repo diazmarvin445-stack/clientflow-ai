@@ -571,8 +571,8 @@ function asChatMessages(raw) {
 
 /** Últimos turnos enviados a Claude (panel Chat Maya). */
 const MAYA_MAX_CONVERSATION_MESSAGES = 20;
-/** Objetivo por debajo del límite de entrada (~200k tokens); margen para el modelo. */
-const MAYA_TARGET_TOTAL_INPUT_TOKENS = 150000;
+/** Objetivo por debajo del límite de entrada (~200k tokens); priorizar calidad si el prompt es rico. */
+const MAYA_TARGET_TOTAL_INPUT_TOKENS = 170000;
 
 function estimateTokensFromCharLength(len) {
   return Math.ceil(Number(len) / 4);
@@ -598,17 +598,19 @@ function mayaAnthropicInputTokenEstimate(systemStr, messages) {
 
 function shrinkFirebaseContextInitial(fc) {
   const c = fc && typeof fc === "object" ? cloneJsonSafe(fc) : {};
-  if (Array.isArray(c.calendarNextTwoWeeks) && c.calendarNextTwoWeeks.length > 12) {
-    c.calendarNextTwoWeeks = c.calendarNextTwoWeeks.slice(0, 12);
+  const cal = c.calendarUpcomingFourWeeks ?? c.calendarNextTwoWeeks;
+  if (Array.isArray(cal) && cal.length > 90) {
+    if (c.calendarUpcomingFourWeeks) c.calendarUpcomingFourWeeks = cal.slice(0, 90);
+    else c.calendarNextTwoWeeks = cal.slice(0, 90);
   }
-  if (Array.isArray(c.campaigns) && c.campaigns.length > 18) {
-    c.campaigns = c.campaigns.slice(0, 15);
+  if (Array.isArray(c.campaigns) && c.campaigns.length > 26) {
+    c.campaigns = c.campaigns.slice(0, 22);
   }
-  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 45) {
-    c.financeRecent = c.financeRecent.slice(0, 40);
+  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 100) {
+    c.financeRecent = c.financeRecent.slice(0, 95);
   }
-  if (Array.isArray(c.clients) && c.clients.length > 22) {
-    c.clients = c.clients.slice(0, 20);
+  if (Array.isArray(c.clients) && c.clients.length > 34) {
+    c.clients = c.clients.slice(0, 30);
   }
   if (Array.isArray(c.orders) && c.orders.length > 55) {
     c.orders = c.orders.slice(0, 50);
@@ -616,35 +618,77 @@ function shrinkFirebaseContextInitial(fc) {
   if (Array.isArray(c.jobs) && c.jobs.length > 55) {
     c.jobs = c.jobs.slice(0, 50);
   }
+  if (Array.isArray(c.jobsRecentDelivered) && c.jobsRecentDelivered.length > 14) {
+    c.jobsRecentDelivered = c.jobsRecentDelivered.slice(0, 12);
+  }
+  if (Array.isArray(c.ordersRecentDelivered) && c.ordersRecentDelivered.length > 14) {
+    c.ordersRecentDelivered = c.ordersRecentDelivered.slice(0, 12);
+  }
   return c;
+}
+
+/**
+ * @param {Record<string, unknown>} c
+ * @returns {Set<string>}
+ */
+function mayaDataFocusProtectSet(c) {
+  const raw = c.dataFocus;
+  if (!Array.isArray(raw)) return new Set();
+  return new Set(raw.map((x) => String(x).toLowerCase()));
 }
 
 function mayaAggressiveShrinkFirebaseContext(c) {
   if (!c || typeof c !== "object") return false;
-  if (Array.isArray(c.calendarNextTwoWeeks) && c.calendarNextTwoWeeks.length > 2) {
-    c.calendarNextTwoWeeks = c.calendarNextTwoWeeks.slice(0, Math.max(1, Math.floor(c.calendarNextTwoWeeks.length / 2)));
+  const prot = mayaDataFocusProtectSet(c);
+
+  if (!prot.has("campaigns") && Array.isArray(c.campaigns) && c.campaigns.length > 2) {
+    c.campaigns = c.campaigns.slice(0, Math.max(2, Math.floor(c.campaigns.length / 2)));
     return true;
   }
-  if (Array.isArray(c.campaigns) && c.campaigns.length > 2) {
-    c.campaigns = c.campaigns.slice(0, Math.max(1, Math.floor(c.campaigns.length / 2)));
+
+  const calKey = Array.isArray(c.calendarUpcomingFourWeeks)
+    ? "calendarUpcomingFourWeeks"
+    : Array.isArray(c.calendarNextTwoWeeks)
+      ? "calendarNextTwoWeeks"
+      : null;
+  if (!prot.has("calendar") && calKey && c[calKey].length > 2) {
+    c[calKey] = c[calKey].slice(0, Math.max(2, Math.floor(c[calKey].length / 2)));
     return true;
   }
-  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 4) {
+
+  if (!prot.has("finance") && Array.isArray(c.financeRecent) && c.financeRecent.length > 4) {
     c.financeRecent = c.financeRecent.slice(0, Math.max(3, Math.floor(c.financeRecent.length / 2)));
     return true;
   }
-  if (Array.isArray(c.clients) && c.clients.length > 4) {
+
+  if (Array.isArray(c.jobsRecentDelivered) && c.jobsRecentDelivered.length > 2) {
+    c.jobsRecentDelivered = c.jobsRecentDelivered.slice(0, Math.max(1, Math.floor(c.jobsRecentDelivered.length / 2)));
+    return true;
+  }
+  if (Array.isArray(c.ordersRecentDelivered) && c.ordersRecentDelivered.length > 2) {
+    c.ordersRecentDelivered = c.ordersRecentDelivered.slice(0, Math.max(1, Math.floor(c.ordersRecentDelivered.length / 2)));
+    return true;
+  }
+
+  if (!prot.has("clients") && Array.isArray(c.clients) && c.clients.length > 4) {
     c.clients = c.clients.slice(0, Math.max(3, Math.floor(c.clients.length / 2)));
     return true;
   }
-  if (Array.isArray(c.orders) && c.orders.length > 4) {
+
+  if (!prot.has("orders") && Array.isArray(c.orders) && c.orders.length > 4) {
     c.orders = c.orders.slice(0, Math.max(3, Math.floor(c.orders.length / 2)));
     return true;
   }
-  if (Array.isArray(c.jobs) && c.jobs.length > 4) {
+  if (!prot.has("orders") && Array.isArray(c.jobs) && c.jobs.length > 4) {
     c.jobs = c.jobs.slice(0, Math.max(3, Math.floor(c.jobs.length / 2)));
     return true;
   }
+
+  if (Array.isArray(c.clientsMentionedInMessage) && c.clientsMentionedInMessage.length > 1) {
+    c.clientsMentionedInMessage = c.clientsMentionedInMessage.slice(0, 1);
+    return true;
+  }
+
   if (c.profile && typeof c.profile === "object") {
     delete c.profile.businessDescription;
     delete c.profile.description;
@@ -656,6 +700,10 @@ function mayaAggressiveShrinkFirebaseContext(c) {
   }
   if (typeof c.contextNote === "string" && c.contextNote.length > 12) {
     c.contextNote = "…";
+    return true;
+  }
+  if (typeof c.dataFocusHint === "string" && c.dataFocusHint.length > 8) {
+    c.dataFocusHint = "";
     return true;
   }
   return false;

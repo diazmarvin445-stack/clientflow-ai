@@ -17,8 +17,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
-  fetchJobsForChatContext,
-  fetchOrdersForChatContext,
+  fetchJobsSplitForChat,
+  fetchOrdersSplitForChat,
   fetchClientsForChatContext,
   fetchCampaignsListAndStats,
   fetchFinanceTransactionsCurrentMonth,
@@ -32,7 +32,7 @@ import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
 
-/** Últimos turnos enviados a Claude (evitar exceder límite de contexto). */
+/** Últimos turnos enviados a Claude (memoria reciente; calidad de conversación). */
 const MAX_API_MESSAGES = 20;
 const DELIVERY_DAYS_OFFSET = 12;
 
@@ -436,6 +436,76 @@ function serializeForAi(val, seen = new WeakSet()) {
     return o;
   }
   return String(val);
+}
+
+/**
+ * Heurística: qué bloques de datos son más relevantes según el último mensaje (ahorro inteligente de tokens).
+ * @param {string} text
+ */
+function inferMayaDataFocus(text) {
+  const t = String(text || "").toLowerCase();
+  const flags = {
+    finance:
+      /\b(finanz|balance|gast(o|é|e)|ingres|cobr|pag(ué|o)|cobré|dinero|dólar|presupuesto|margen|rentabil|flujo)/i.test(
+        t,
+      ) || /\$\s*\d/.test(t),
+    calendar:
+      /\b(calendari|entrega(s)?|cita|agend|reuni|program(ar|ación)|mañana|pasado mañana|esta semana|próxim)/i.test(
+        t,
+      ) || /\b20\d{2}-\d{2}-\d{2}\b/.test(t),
+    orders:
+      /\b(pedido|orden(es)?|trabajo|pendiente|producci|imprimir|dtf|bordad)/i.test(t),
+    clients: /\b(cliente|contacto|llamar|tel(e|é)fono|whatsapp|correo|email)\b/i.test(t),
+    campaigns: /\b(campañ|marketing|meta|facebook|instagram|anunci|publicidad|alcance)\b/i.test(t),
+  };
+  /** @type {string[]} */
+  const priority = [];
+  if (flags.finance) priority.push("finance");
+  if (flags.calendar) priority.push("calendar");
+  if (flags.orders) priority.push("orders");
+  if (flags.clients) priority.push("clients");
+  if (flags.campaigns) priority.push("campaigns");
+  if (!priority.length) priority.push("general");
+  return { flags, priority };
+}
+
+/**
+ * Clientes cuyo nombre aparece mencionado en el texto (priorizar contexto personalizado).
+ * @param {string} text
+ * @param {Record<string, unknown>[]} clients
+ */
+function findClientsMentionedInText(text, clients) {
+  const raw = String(text || "").trim();
+  if (!raw || !Array.isArray(clients) || !clients.length) return [];
+  const low = stripAccents(raw).toLowerCase();
+  /** @type {Record<string, unknown>[]} */
+  const out = [];
+  const seen = new Set();
+  for (const c of clients) {
+    const name = String(c.fullName ?? c.name ?? "")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (name.length < 3) continue;
+    const nameLow = stripAccents(name).toLowerCase();
+    if (low.includes(nameLow)) {
+      if (!seen.has(name)) {
+        seen.add(name);
+        out.push(c);
+      }
+      continue;
+    }
+    const parts = nameLow.split(/\s+/).filter((p) => p.length > 2);
+    for (const p of parts) {
+      if (p.length >= 3 && low.includes(p)) {
+        if (!seen.has(name)) {
+          seen.add(name);
+          out.push(c);
+        }
+        break;
+      }
+    }
+  }
+  return out.slice(0, 5);
 }
 
 function formatTime(d = new Date()) {
@@ -1001,7 +1071,7 @@ async function sendToClaude() {
   const input = document.getElementById("yc-chat-input");
   const btn = document.getElementById("yc-chat-send");
   const text = input && "value" in input ? String(input.value).trim() : "";
-  if (!text || !firebaseContextPayload) return;
+  if (!text || !activeBusiness) return;
 
   hideError();
   appendUserBubble(text);
@@ -1017,6 +1087,8 @@ async function sendToClaude() {
   if (input) input.disabled = true;
 
   try {
+    await loadFirebaseContext(activeBusiness, { userMessage: text });
+
     const res = await fetch(CHAT_WITH_AI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1106,7 +1178,7 @@ function showWelcomeAssistant() {
   const bubble = document.createElement("div");
   bubble.className = "yc-msg-bubble";
   bubble.textContent =
-    "Hola, soy el asistente de YourColor. Ya tengo cargados tu perfil, órdenes, clientes y campañas guardadas. Pregúntame por precios, estrategias o lo que necesites.";
+    "Hola Marvin, soy Maya. Ya tengo a mano lo importante del negocio (pedidos, clientes, finanzas del mes y la agenda). Cuéntame en qué te ayudo hoy — precios, seguimiento, ideas… aquí estoy.";
   const time = document.createElement("div");
   time.className = "yc-msg-time";
   time.textContent = formatTime();
@@ -1118,18 +1190,25 @@ function showWelcomeAssistant() {
 
 /**
  * @param {{ id: string, data: Record<string, unknown> }} business
+ * @param {{ userMessage?: string }} [options]
  */
-async function loadFirebaseContext(business) {
-  const [jobs, orders, clients, campAgg, financeMonth, calendarNext] = await Promise.all([
-    fetchJobsForChatContext(db, business.id),
-    fetchOrdersForChatContext(db, business.id),
-    fetchClientsForChatContext(db, business.id, 20),
+async function loadFirebaseContext(business, options = {}) {
+  const userMessage = typeof options.userMessage === "string" ? options.userMessage : "";
+  const { flags, priority } = inferMayaDataFocus(userMessage);
+
+  const campaignCap = flags.campaigns ? 22 : flags.finance ? 8 : 14;
+  const financeDetailCap = flags.finance ? 95 : 60;
+
+  const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext] = await Promise.all([
+    fetchJobsSplitForChat(db, business.id),
+    fetchOrdersSplitForChat(db, business.id),
+    fetchClientsForChatContext(db, business.id, 30),
     fetchCampaignsListAndStats(db, business.id),
-    fetchFinanceTransactionsCurrentMonth(db, business.id, 250),
-    fetchCalendarEventsForChat(db, business.id, 14),
+    fetchFinanceTransactionsCurrentMonth(db, business.id, 280),
+    fetchCalendarEventsForChat(db, business.id, 28),
   ]);
 
-  const financeRows = financeMonth.slice(0, 50);
+  const financeRows = financeMonth.slice(0, financeDetailCap);
 
   let monthIncome = 0;
   let monthExpense = 0;
@@ -1140,17 +1219,33 @@ async function loadFirebaseContext(business) {
     else monthIncome += amt;
   }
 
-  const campaignsShort = (campAgg.campaigns || []).slice(0, 15);
+  const campaignsShort = (campAgg.campaigns || []).slice(0, campaignCap);
+  const clientsMentioned = findClientsMentionedInText(userMessage, clientsRaw);
 
   const profile = slimBusinessProfileForChat(business.data) || {};
   firebaseContextPayload = {
     businessId: business.id,
     profile,
-    jobs: serializeForAi(jobs),
-    orders: serializeForAi(orders),
-    clients: serializeForAi(clients),
+    dataFocus: priority,
+    dataFocusHint: flags.finance
+      ? "Prioridad: finanzas del mes."
+      : flags.calendar
+        ? "Prioridad: agenda y entregas."
+        : flags.orders
+          ? "Prioridad: pedidos y producción."
+          : flags.clients
+            ? "Prioridad: clientes y seguimiento."
+            : flags.campaigns
+              ? "Prioridad: campañas y marketing."
+              : "Contexto general del negocio.",
+    jobs: serializeForAi(jobSplit.active),
+    jobsRecentDelivered: serializeForAi(jobSplit.recentDelivered),
+    orders: serializeForAi(orderSplit.active),
+    ordersRecentDelivered: serializeForAi(orderSplit.recentDelivered),
+    clients: serializeForAi(clientsRaw),
+    clientsMentionedInMessage: serializeForAi(clientsMentioned),
     campaigns: serializeForAi(campaignsShort),
-    calendarNextTwoWeeks: serializeForAi(calendarNext),
+    calendarUpcomingFourWeeks: serializeForAi(calendarNext),
     financeThisMonth: {
       income: monthIncome,
       expense: monthExpense,
@@ -1158,20 +1253,22 @@ async function loadFirebaseContext(business) {
     },
     financeRecent: serializeForAi(financeRows),
     stats: {
-      jobsActiveCount: jobs.length,
-      ordersActiveCount: orders.length,
-      clientCount: clients.length,
+      jobsActiveCount: jobSplit.active.length,
+      jobsDeliveredListed: jobSplit.recentDelivered.length,
+      ordersActiveCount: orderSplit.active.length,
+      ordersDeliveredListed: orderSplit.recentDelivered.length,
+      clientCount: clientsRaw.length,
       campaignCount: campaignsShort.length,
       financeMonthCount: financeMonth.length,
       calendarEventCount: calendarNext.length,
     },
     contextNote:
-      "Contexto acotado: trabajos y pedidos solo activos (no entregados/cancelados); últimos 20 clientes; finanzas del mes actual; calendario próximas 2 semanas; hasta 15 campañas.",
+      "Datos cargados con foco inteligente: últimos 30 clientes; trabajos/pedidos activos + últimas 10 entregas por colección; finanzas del mes; calendario próximas 4 semanas. Si falta algo, dilo con naturalidad y pide a Marvin lo que necesites.",
   };
 
   const meta = document.getElementById("yc-chat-context-meta");
   if (meta) {
-    meta.textContent = `${jobs.length} trabajos activos · ${orders.length} pedidos activos · ${clients.length} clientes (últimos 20)`;
+    meta.textContent = `${jobSplit.active.length} trabajos activos · ${orderSplit.active.length} pedidos activos · ${clientsRaw.length} clientes recientes`;
   }
 }
 

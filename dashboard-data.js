@@ -610,7 +610,7 @@ export async function fetchClientsForBusiness(db, businessId) {
   return rows;
 }
 
-/** Pedidos/órdenes ya cerrados: no incluir en contexto Chat Maya (ahorro de tokens). */
+/** Pedidos/órdenes ya cerrados (entregados o cancelados). */
 const CHAT_INACTIVE_ORDER_STATUSES = new Set([
   "entregado",
   "cancelado",
@@ -619,6 +619,9 @@ const CHAT_INACTIVE_ORDER_STATUSES = new Set([
   "completed",
   "done",
 ]);
+
+/** Entregas completadas (últimas N para contexto). */
+const CHAT_DELIVERED_STATUSES = new Set(["entregado", "completed", "done"]);
 
 /**
  * @param {Record<string, unknown>} row
@@ -633,9 +636,35 @@ export function isChatActiveOrderOrJob(row) {
 }
 
 /**
- * Trabajos (`jobs`) recientes; solo activos, tope razonable para el contexto de Maya.
+ * @param {Record<string, unknown>} row
+ * @returns {boolean}
  */
-export async function fetchJobsForChatContext(db, businessId, maxFetch = 120, maxActive = 50) {
+export function isChatDeliveredOrderOrJob(row) {
+  const s = String(row?.status ?? "")
+    .trim()
+    .toLowerCase();
+  return CHAT_DELIVERED_STATUSES.has(s);
+}
+
+function orderRowSortTime(row) {
+  const u = toDate(row.updatedAt);
+  const c = toDate(row.createdAt);
+  const tu = u && !Number.isNaN(u.getTime()) ? u.getTime() : 0;
+  const tc = c && !Number.isNaN(c.getTime()) ? c.getTime() : 0;
+  return Math.max(tu, tc);
+}
+
+/**
+ * Trabajos (`jobs`): activos + últimas entregas (para memoria operativa sin cargar todo el histórico).
+ * @returns {{ active: Record<string, unknown>[], recentDelivered: Record<string, unknown>[] }}
+ */
+export async function fetchJobsSplitForChat(
+  db,
+  businessId,
+  maxFetch = 150,
+  maxActive = 50,
+  maxDelivered = 10,
+) {
   const qy = query(
     collection(db, "businesses", businessId, "jobs"),
     orderBy("createdAt", "desc"),
@@ -646,14 +675,25 @@ export async function fetchJobsForChatContext(db, businessId, maxFetch = 120, ma
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "jobs" });
   });
-  const active = rows.filter(isChatActiveOrderOrJob);
-  return active.slice(0, maxActive);
+  const active = rows.filter(isChatActiveOrderOrJob).slice(0, maxActive);
+  const delivered = rows
+    .filter(isChatDeliveredOrderOrJob)
+    .sort((a, b) => orderRowSortTime(b) - orderRowSortTime(a))
+    .slice(0, maxDelivered);
+  return { active, recentDelivered: delivered };
 }
 
 /**
- * Pedidos (`orders`) recientes; solo activos (no entregados/cancelados).
+ * Pedidos (`orders`): activos + últimas entregas.
+ * @returns {{ active: Record<string, unknown>[], recentDelivered: Record<string, unknown>[] }}
  */
-export async function fetchOrdersForChatContext(db, businessId, maxFetch = 120, maxActive = 50) {
+export async function fetchOrdersSplitForChat(
+  db,
+  businessId,
+  maxFetch = 150,
+  maxActive = 50,
+  maxDelivered = 10,
+) {
   const qy = query(
     collection(db, "businesses", businessId, "orders"),
     orderBy("createdAt", "desc"),
@@ -664,14 +704,18 @@ export async function fetchOrdersForChatContext(db, businessId, maxFetch = 120, 
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "orders" });
   });
-  const active = rows.filter(isChatActiveOrderOrJob);
-  return active.slice(0, maxActive);
+  const active = rows.filter(isChatActiveOrderOrJob).slice(0, maxActive);
+  const delivered = rows
+    .filter(isChatDeliveredOrderOrJob)
+    .sort((a, b) => orderRowSortTime(b) - orderRowSortTime(a))
+    .slice(0, maxDelivered);
+  return { active, recentDelivered: delivered };
 }
 
 /**
  * Últimos N clientes (más recientes primero) para contexto Chat Maya.
  */
-export async function fetchClientsForChatContext(db, businessId, limitN = 20) {
+export async function fetchClientsForChatContext(db, businessId, limitN = 30) {
   const qy = query(
     collection(db, "businesses", businessId, "clients"),
     orderBy("createdAt", "desc"),
@@ -710,9 +754,9 @@ export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRe
 }
 
 /**
- * Eventos de calendario desde hoy hasta `daysAhead` días.
+ * Eventos de calendario desde hoy hasta `daysAhead` días (p. ej. 28 = 4 semanas).
  */
-export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 14, maxResults = 80) {
+export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28, maxResults = 120) {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   const limitEnd = new Date(dayStart);
