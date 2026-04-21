@@ -8781,3 +8781,80 @@ textarea:focus {
     border-radius: 10px !important;
   }
 }
+
+/* Contrast pass: remove remaining light surfaces */
+.dash-cal-pop,
+.dash-cal-day-pop,
+.dash-cal-modal,
+.orders-modal,
+.fin-modal,
+.maya-cc-wa-list,
+.maya-cc-wa-list__toolbar,
+.maya-cc-wa-thread,
+.maya-cc-wa-thread__toolbar,
+.yc-chat-stream,
+.yc-chat-loading,
+.yc-msg-action-btn {
+  background: rgba(26, 26, 46, 0.9) !important;
+  color: var(--text) !important;
+  border-color: rgba(139, 92, 246, 0.22) !important;
+}
+
+.dash-cal-day {
+  background: rgba(26, 26, 46, 0.82) !important;
+  color: var(--text) !important;
+}
+
+.dash-cal-day:hover {
+  background: rgba(139, 92, 246, 0.16) !important;
+}
+
+.dash-cal-day--outside {
+  background: rgba(26, 26, 46, 0.65) !important;
+  color: #7f86a2 !important;
+}
+
+.dash-cal-day--today {
+  background: rgba(139, 92, 246, 0.26) !important;
+}
+
+.dash-cal-day--has-events:not(.dash-cal-day--today) {
+  background: rgba(139, 92, 246, 0.12) !important;
+}
+
+.dash-cal-nav__label,
+.dash-cal-day-pop__row,
+.dash-cal-day-pop__time,
+.maya-cc-wa-thread__title,
+.maya-cc-msg__body {
+  color: var(--text) !important;
+}
+
+.dash-table thead th {
+  background: rgba(26, 26, 46, 0.95) !important;
+  color: var(--text) !important;
+}
+
+.dash-table tbody tr {
+  background: rgba(26, 26, 46, 0.78) !important;
+}
+
+.dash-table tbody tr:nth-child(even) {
+  background: rgba(26, 26, 46, 0.68) !important;
+}
+
+.dash-table tbody td {
+  color: var(--text) !important;
+  border-bottom-color: rgba(139, 92, 246, 0.16) !important;
+}
+
+.dash-table-muted,
+.maya-cc-conv__preview,
+.maya-cc-conv__time,
+.yc-msg-time {
+  color: var(--text-muted) !important;
+}
+
+.dash-alert-strip {
+  background: rgba(139, 92, 246, 0.18) !important;
+}
