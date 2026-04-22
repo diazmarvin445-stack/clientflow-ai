@@ -1470,7 +1470,7 @@ function showWelcomeAssistant() {
   stream.appendChild(wrap);
 }
 
-function clearChatHistory() {
+async function clearChatHistory() {
   // Limpiar UI del chat
   const chatContainer = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
   if (chatContainer) chatContainer.innerHTML = "";
@@ -1481,6 +1481,28 @@ function clearChatHistory() {
 
   // Limpiar memoria en runtime del chat interno
   apiConversation = [];
+  lastPanelChatActivityAt = 0;
+  if (panelChatIdleTimer) {
+    window.clearTimeout(panelChatIdleTimer);
+    panelChatIdleTimer = null;
+  }
+
+  // Limpiar historial persistido en Firestore para evitar restaurar conversaciones viejas
+  const businessId = activeBusiness?.id;
+  const userId = auth.currentUser?.uid;
+  if (businessId && userId) {
+    try {
+      await deleteDoc(doc(db, "businesses", businessId, "internalChatHistory", userId));
+    } catch (e) {
+      console.warn("[YourColor Chat] clear internalChatHistory", e);
+    }
+    try {
+      const internalChatSnap = await getDocs(collection(db, "businesses", businessId, "internalChat"));
+      await Promise.all(internalChatSnap.docs.map((x) => deleteDoc(x.ref)));
+    } catch (e) {
+      console.warn("[YourColor Chat] clear internalChat", e);
+    }
+  }
 
   // Mostrar bienvenida
   const container = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
@@ -1498,7 +1520,7 @@ function clearChatHistory() {
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
-    clearChatHistory();
+    void clearChatHistory();
   }, INACTIVITY_MS);
 }
 
@@ -2223,6 +2245,7 @@ async function bootWithUser(user) {
     }
 
     mayaInitControlCenter(business);
+    await clearChatHistory();
 
     const restoredFromTab = tryRestoreChatFromSessionStorage(business.id, user.uid);
     let hadHistory = restoredFromTab;
@@ -2319,8 +2342,12 @@ function boot() {
 // Reiniciar timer con cada actividad
 document.addEventListener("click", resetInactivityTimer);
 document.addEventListener("keypress", resetInactivityTimer);
-
-// Iniciar el timer al cargar la página
-resetInactivityTimer();
+window.addEventListener("beforeunload", () => {
+  void clearChatHistory();
+});
+window.addEventListener("DOMContentLoaded", () => {
+  void clearChatHistory();
+  resetInactivityTimer();
+});
 
 boot();
