@@ -618,6 +618,22 @@ function trimMayaChatMessages(msgs, max = MAYA_MAX_CONVERSATION_MESSAGES) {
   return msgs.slice(-max);
 }
 
+const MAYA_DAYS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const MAYA_MONTHS_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
 function cloneJsonSafe(obj) {
   try {
     return JSON.parse(JSON.stringify(obj));
@@ -629,6 +645,38 @@ function cloneJsonSafe(obj) {
 function mayaAnthropicInputTokenEstimate(systemStr, messages) {
   const ser = JSON.stringify(messages);
   return estimateTokensFromCharLength(systemStr.length) + estimateTokensFromCharLength(ser.length);
+}
+
+function getRelativeDate(date) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(date);
+  target.setHours(0, 0, 0, 0);
+  const diffDays = Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "HOY";
+  if (diffDays === 1) return "MAÑANA";
+  if (diffDays === -1) return "AYER";
+  if (diffDays > 0 && diffDays <= 7) return `En ${diffDays} días`;
+  return null;
+}
+
+function formatEventsForMaya(events) {
+  if (!Array.isArray(events)) return [];
+  return events.map((event) => {
+    const d = mayaAdminToDate(event?.date ?? event?.start ?? event?.createdAt);
+    if (!d || Number.isNaN(d.getTime())) {
+      return { ...event, formattedDate: "", relativeDate: null };
+    }
+    const diaSemana = MAYA_DAYS_ES[d.getDay()];
+    const dia = d.getDate();
+    const mes = MAYA_MONTHS_ES[d.getMonth()];
+    const ano = d.getFullYear();
+    return {
+      ...event,
+      formattedDate: `${diaSemana} ${dia} de ${mes} ${ano}`,
+      relativeDate: getRelativeDate(d),
+    };
+  });
 }
 
 function shrinkFirebaseContextInitial(fc) {
@@ -683,7 +731,7 @@ function shrinkFirebaseContextInitial(fc) {
 
   const calendarRows = c.calendarUpcomingFourWeeks ?? c.calendarNextTwoWeeks;
   if (Array.isArray(calendarRows)) {
-    const upcoming = calendarRows
+    const upcomingRaw = calendarRows
       .filter((row) => {
         const d = toDateSafe(row?.date ?? row?.start ?? row?.createdAt);
         return d && d.getTime() >= now.getTime();
@@ -694,6 +742,7 @@ function shrinkFirebaseContextInitial(fc) {
         return ta - tb;
       })
       .slice(0, 10);
+    const upcoming = formatEventsForMaya(upcomingRaw);
     if (Array.isArray(c.calendarUpcomingFourWeeks)) c.calendarUpcomingFourWeeks = upcoming;
     else c.calendarNextTwoWeeks = upcoming;
   }
@@ -1007,7 +1056,9 @@ function mayaAggressiveShrinkFirebaseContext(c) {
 }
 
 function buildMayaSystemString(basePrompt, firebaseCtx) {
-  return `${basePrompt}\n\nCONTEXTO DEL NEGOCIO:\n${JSON.stringify(firebaseCtx)}`;
+  const hoy = new Date();
+  const fechaHoy = `${MAYA_DAYS_ES[hoy.getDay()]} ${hoy.getDate()} de ${MAYA_MONTHS_ES[hoy.getMonth()]} ${hoy.getFullYear()}`;
+  return `FECHA ACTUAL: ${fechaHoy}\n\n${basePrompt}\n\nCONTEXTO DEL NEGOCIO:\n${JSON.stringify(firebaseCtx)}`;
 }
 
 /**
