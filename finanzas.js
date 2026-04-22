@@ -530,6 +530,7 @@ function subscribeFinance(bid) {
           status: typeof data.status === "string" ? data.status : "",
         });
       });
+      console.log("[FINANZAS_LOAD]", rowsCache.length, "movimientos");
       renderList();
     },
     (err) => {

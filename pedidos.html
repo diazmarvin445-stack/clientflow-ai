@@ -107,9 +107,14 @@
           <section class="dash-panel">
             <div class="dash-panel-head">
               <h2 class="dash-panel-title">Pedidos</h2>
-              <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="orders-btn-add">
-                + Agregar pedido manual
-              </button>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="dash-quick-btn" id="orders-btn-repair">
+                  🔧 Reparar entregados sin finanzas
+                </button>
+                <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="orders-btn-add">
+                  + Agregar pedido manual
+                </button>
+              </div>
             </div>
 
             <div class="orders-filters">

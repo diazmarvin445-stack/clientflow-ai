@@ -1,14 +1,18 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
   Timestamp,
   updateDoc,
+  where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
@@ -34,6 +38,12 @@ function toDate(v) {
   if (v instanceof Date) return v;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function parseOrderDeliveredDate(v) {
+  const d = toDate(v);
+  if (d) return d;
+  return new Date();
 }
 
 function renderHeader(business) {
@@ -186,6 +196,89 @@ async function saveOrderFromModal(ev) {
   document.getElementById("orders-modal").close();
 }
 
+async function markOrderDelivered(orderId) {
+  const res = await fetch(UPDATE_ORDER_STATUS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ businessId: activeBusinessId, orderId, status: "entregado" }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = typeof body?.error === "string" ? body.error : "No se pudo marcar como entregado.";
+    throw new Error(msg);
+  }
+  console.log("[MARK_DELIVERED]", { orderId, ok: true });
+}
+
+async function repairDeliveredOrders() {
+  if (!activeBusinessId) throw new Error("No hay negocio activo.");
+  const ok = window.confirm(
+    "Esto creará movimientos faltantes en Finanzas para pedidos entregados. ¿Continuar?",
+  );
+  if (!ok) return;
+
+  const ordersRef = collection(db, "businesses", activeBusinessId, "orders");
+  const financeRef = collection(db, "businesses", activeBusinessId, "finance");
+  const deliveredSnap = await getDocs(query(ordersRef, where("status", "==", "entregado")));
+
+  let repaired = 0;
+  for (const d of deliveredSnap.docs) {
+    const order = d.data() || {};
+    const orderId = d.id;
+    const clientName = String(order.clientName || "Cliente");
+    const product = String(order.product || "Pedido");
+    const totalPaid = Math.max(
+      0,
+      Number(order.totalPaid ?? order.amount ?? order.total) || 0,
+    );
+    const expenses = Math.max(0, Number(order.expenses) || 0);
+    const deliveredDate = parseOrderDeliveredDate(order.deliveredAt);
+
+    const incomeExisting = await getDocs(
+      query(financeRef, where("orderId", "==", orderId), where("type", "==", "income")),
+    );
+    const expenseExisting = await getDocs(
+      query(financeRef, where("orderId", "==", orderId), where("type", "==", "expense")),
+    );
+
+    if (incomeExisting.empty && totalPaid > 0) {
+      await addDoc(financeRef, {
+        type: "income",
+        amount: totalPaid,
+        description: `Cobro total pedido entregado: ${product} - ${clientName}`,
+        orderId,
+        linkedOrderId: orderId,
+        clientName,
+        date: Timestamp.fromDate(deliveredDate),
+        category: "ventas",
+        status: "cobrado",
+        createdBy: "marvin",
+        createdAt: serverTimestamp(),
+      });
+      repaired += 1;
+    }
+
+    if (expenseExisting.empty && expenses > 0) {
+      await addDoc(financeRef, {
+        type: "expense",
+        amount: expenses,
+        description: `Gastos materiales: ${product} - ${clientName}`,
+        orderId,
+        linkedOrderId: orderId,
+        clientName,
+        date: Timestamp.fromDate(deliveredDate),
+        category: "materiales",
+        status: "cobrado",
+        createdBy: "marvin",
+        createdAt: serverTimestamp(),
+      });
+      repaired += 1;
+    }
+  }
+
+  alert(`Reparación completada. Movimientos creados: ${repaired}.`);
+}
+
 function fillDetail(row) {
   document.getElementById("od-client").textContent = row.clientName || "—";
   document.getElementById("od-phone").textContent = row.clientPhone || "—";
@@ -309,11 +402,7 @@ function wireUi() {
   });
   document.getElementById("od-mark-delivered").addEventListener("click", async () => {
     if (!selectedOrderId) return;
-    await fetch(UPDATE_ORDER_STATUS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ businessId: activeBusinessId, orderId: selectedOrderId, status: "entregado" }),
-    });
+    await markOrderDelivered(selectedOrderId);
   });
   const saveExp = document.getElementById("od-save-expenses");
   if (saveExp) {
@@ -337,6 +426,15 @@ function wireUi() {
     await deleteOrder(selectedOrderId);
     document.getElementById("orders-detail-panel").hidden = true;
   });
+  const repairBtn = document.getElementById("orders-btn-repair");
+  if (repairBtn) {
+    repairBtn.addEventListener("click", () => {
+      repairDeliveredOrders().catch((e) => {
+        console.error("[REPAIR_DELIVERED_ORDERS]", e);
+        alert(e instanceof Error ? e.message : "No se pudo reparar pedidos entregados.");
+      });
+    });
+  }
 }
 
 function subscribeOrders() {
