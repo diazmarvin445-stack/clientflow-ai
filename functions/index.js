@@ -13,16 +13,14 @@ import {
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
-/** Chat interno (Marvin ↔ Maya): rápido y económico. */
+/** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
 /** Límite de turnos enviados a Haiku (costo / contexto). */
 const MAYA_INTERNAL_CHAT_MAX_MESSAGES = 10;
 /** Respuestas cortas; MAYA_ACTION_JSON no requiere ensayos. */
 const MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS = 512;
-/** WhatsApp (cliente ↔ Maya): Sonnet para ventas. */
+/** WhatsApp (cliente ↔ Maya): Sonnet. */
 const MODEL_WHATSAPP = "claude-sonnet-4-5-20250929";
-/** Campañas / JSON estructurado: Haiku. */
-const MODEL_CAMPAIGN = "claude-haiku-4-5-20251001";
 /** WhatsApp: últimos turnos al modelo (costo). */
 const MAYA_WHATSAPP_MAX_MESSAGES = 10;
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
@@ -534,6 +532,8 @@ export const generateCampaign = onRequest(
           });
         }
 
+        console.log("[MODEL_CHECK]", MODEL_INTERNAL_CHAT);
+
         const input = parsePayload(req.body);
         const businessProfile = input.businessProfile;
         const businessName = asText(businessProfile.businessName, "Tu negocio");
@@ -546,7 +546,7 @@ export const generateCampaign = onRequest(
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: MODEL_CAMPAIGN,
+            model: MODEL_INTERNAL_CHAT,
             max_tokens: 1000,
             system: buildAnthropicCachedSystem(getYourColorSystemPrompt()),
             messages: [{ role: "user", content: buildUserPrompt(input, businessName) }],
@@ -559,7 +559,7 @@ export const generateCampaign = onRequest(
           return res.status(anthropicResponse.status).json({ error: message });
         }
 
-        logMayaCost(anthropicBody?.usage, "haiku-campaign");
+        logMayaCost(anthropicBody?.usage, "haiku-generateCampaign");
 
         const textContent = Array.isArray(anthropicBody?.content)
           ? anthropicBody.content
@@ -2588,6 +2588,8 @@ export const chatWithAI = onRequest(
           messages: recentHistory,
         };
 
+        console.log("[MODEL_CHECK]", MODEL_INTERNAL_CHAT);
+
         if (wantStream) {
           const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
@@ -3099,6 +3101,7 @@ export const whatsappWebhook = onRequest(
 
     let assistantRaw = "";
     try {
+      console.log("[MODEL_CHECK]", MODEL_WHATSAPP);
       const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {

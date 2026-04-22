@@ -84,7 +84,8 @@ import {
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
+const MODEL_WHATSAPP = "claude-sonnet-4-5-20250929";
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 const TWILIO_ACCOUNT_SID = defineSecret("TWILIO_ACCOUNT_SID");
 const TWILIO_AUTH_TOKEN = defineSecret("TWILIO_AUTH_TOKEN");
@@ -265,7 +266,7 @@ export const generateCampaign = onRequest(
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: MODEL,
+            model: MODEL_INTERNAL_CHAT,
             max_tokens: 1000,
             system: getYourColorSystemPrompt(),
             messages: [{ role: "user", content: buildUserPrompt(input, businessName) }],
@@ -364,7 +365,7 @@ export const chatWithAI = onRequest(
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: MODEL,
+            model: MODEL_INTERNAL_CHAT,
             max_tokens: 4096,
             system,
             messages,
@@ -509,7 +510,7 @@ export const whatsappWebhook = onRequest(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: MODEL_WHATSAPP,
           max_tokens: 2048,
           system: getYourColorWhatsAppWebhookPrompt(),
           messages: messagesForClaude,
@@ -1997,7 +1998,7 @@ function hasCompleteBusinessProfile(data) {
 function toRecommendationCardModel(ai, idx, inputs) {
   const platformLabel = campaignPlatformDisplayName(ai.platform);
   return {
-    id: `claude-${idx + 1}-${hashStringForDebug(`${ai.headline}|${ai.platform}|${inputs.goal}`)}`,
+    id: `yc-ai-${idx + 1}-${hashStringForDebug(`${ai.headline}|${ai.platform}|${inputs.goal}`)}`,
     name: ai.headline,
     platform: ai.platform,
     platformLabel,

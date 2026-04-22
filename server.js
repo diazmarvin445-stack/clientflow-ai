@@ -1,5 +1,8 @@
 import express from "express";
 
+/** Mismo Haiku que `generateCampaign` en Cloud Functions. */
+const MODEL_CAMPAIGN_HAIKU = "claude-haiku-4-5-20251001";
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -87,6 +90,8 @@ app.post("/api/campaign", async (req, res) => {
 
     const { inputs = {}, businessName = "", businessProfile = {} } = req.body || {};
 
+    console.log("[MODEL_CHECK]", MODEL_CAMPAIGN_HAIKU);
+
     const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -95,7 +100,7 @@ app.post("/api/campaign", async (req, res) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: MODEL_CAMPAIGN_HAIKU,
         max_tokens: 1000,
         system: buildSystemPrompt(businessName, businessProfile),
         messages: [{ role: "user", content: buildUserPrompt(inputs, businessName) }],

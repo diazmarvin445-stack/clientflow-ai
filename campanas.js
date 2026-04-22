@@ -454,7 +454,7 @@ function hasCompleteBusinessProfile(data) {
 function toRecommendationCardModel(ai, idx, inputs) {
   const platformLabel = campaignPlatformDisplayName(ai.platform);
   return {
-    id: `claude-${idx + 1}-${hashStringForDebug(`${ai.headline}|${ai.platform}|${inputs.goal}`)}`,
+    id: `yc-ai-${idx + 1}-${hashStringForDebug(`${ai.headline}|${ai.platform}|${inputs.goal}`)}`,
     name: ai.headline,
     platform: ai.platform,
     platformLabel,

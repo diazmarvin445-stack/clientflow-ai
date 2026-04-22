@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 
 const envContent = readFileSync('.env', 'utf8').replace(/\r?\n/g, '');
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+
 const match = envContent.match(/ANTHROPIC_API_KEY=(.+)/);
 const key = match ? match[1].trim() : null;
 
@@ -14,7 +16,7 @@ const response = await fetch("https://api.anthropic.com/v1/messages", {
     "content-type": "application/json"
   },
   body: JSON.stringify({
-    model: "claude-haiku-4-5-20251001",
+    model: MODEL_HAIKU,
     max_tokens: 100,
     messages: [{ role: "user", content: "Di hola en español" }]
   })
