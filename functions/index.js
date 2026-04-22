@@ -15,6 +15,10 @@ import {
 
 /** Chat interno (Marvin ↔ Maya): rápido y económico. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
+/** Límite de turnos enviados a Haiku (costo / contexto). */
+const MAYA_INTERNAL_CHAT_MAX_MESSAGES = 10;
+/** Respuestas cortas; MAYA_ACTION_JSON no requiere ensayos. */
+const MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS = 1024;
 /** WhatsApp (cliente ↔ Maya): Sonnet para ventas y conversación con clientes. */
 const MODEL_WHATSAPP = "claude-sonnet-4-6";
 /** Otras rutas (p. ej. generateCampaign). */
@@ -994,6 +998,34 @@ function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw
     break;
   }
   return { system, messages };
+}
+
+/**
+ * System prompt con caché efímera (Anthropic prompt caching; ~5 min TTL).
+ * @param {string} systemPrompt
+ * @returns {{ type: string, text: string, cache_control: { type: string } }[]}
+ */
+function buildMayaInternalChatAnthropicSystem(systemPrompt) {
+  return [
+    {
+      type: "text",
+      text: systemPrompt,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+}
+
+/**
+ * @param {unknown} usage
+ */
+function logAnthropicInternalChatTokenUsage(usage) {
+  const u = usage && typeof usage === "object" ? usage : {};
+  console.log("[TOKENS]", {
+    input: /** @type {Record<string, unknown>} */ (u).input_tokens,
+    output: /** @type {Record<string, unknown>} */ (u).output_tokens,
+    cache_read: /** @type {Record<string, unknown>} */ (u).cache_read_input_tokens,
+    cache_write: /** @type {Record<string, unknown>} */ (u).cache_creation_input_tokens,
+  });
 }
 
 const MAYA_PANEL_ACTION_PREFIX = "MAYA_ACTION_JSON:";
@@ -2404,16 +2436,51 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
  * Parsea el stream SSE de Anthropic Messages y acumula texto del asistente.
  * @param {import("node:stream").Readable | ReadableStream<Uint8Array> | null} body
  * @param {(chunk: string) => void} onDelta
- * @returns {Promise<string>}
+ * @returns {Promise<{ text: string, usage: Record<string, unknown> | null }>}
  */
 async function readAnthropicMessageStream(body, onDelta) {
   if (!body || typeof body.getReader !== "function") {
-    return "";
+    return { text: "", usage: null };
   }
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let lineBuf = "";
   let fullText = "";
+  /** @type {Record<string, unknown> | null} */
+  let mergedUsage = null;
+
+  /**
+   * @param {unknown} evt
+   */
+  function absorbUsage(evt) {
+    if (!evt || typeof evt !== "object") return;
+    const e = /** @type {Record<string, unknown>} */ (evt);
+    const fromMsg = e.message && typeof e.message === "object" ? /** @type {Record<string, unknown>} */ (e.message).usage : null;
+    const direct = e.usage;
+    const u = (fromMsg && typeof fromMsg === "object" ? fromMsg : null) || (direct && typeof direct === "object" ? direct : null);
+    if (!u) return;
+    mergedUsage = { ...mergedUsage, .../** @type {Record<string, unknown>} */ (u) };
+  }
+
+  /**
+   * @param {unknown} evt
+   */
+  function handleEvt(evt) {
+    absorbUsage(evt);
+    if (!evt || typeof evt !== "object") return;
+    const e = /** @type {Record<string, unknown>} */ (evt);
+    if (
+      e.type === "content_block_delta" &&
+      e.delta &&
+      typeof e.delta === "object" &&
+      /** @type {Record<string, unknown>} */ (e.delta).type === "text_delta" &&
+      typeof /** @type {Record<string, unknown>} */ (e.delta).text === "string"
+    ) {
+      const t = /** @type {string} */ (/** @type {Record<string, unknown>} */ (e.delta).text);
+      fullText += t;
+      onDelta(t);
+    }
+  }
 
   while (true) {
     const { done, value } = await reader.read();
@@ -2432,11 +2499,7 @@ async function readAnthropicMessageStream(body, onDelta) {
       } catch {
         continue;
       }
-      if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && typeof evt.delta.text === "string") {
-        const t = evt.delta.text;
-        fullText += t;
-        onDelta(t);
-      }
+      handleEvt(evt);
     }
   }
 
@@ -2451,12 +2514,9 @@ async function readAnthropicMessageStream(body, onDelta) {
     } catch {
       continue;
     }
-    if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta" && typeof evt.delta.text === "string") {
-      fullText += evt.delta.text;
-      onDelta(evt.delta.text);
-    }
+    handleEvt(evt);
   }
-  return fullText;
+  return { text: fullText, usage: mergedUsage };
 }
 
 export const chatWithAI = onRequest(
@@ -2494,19 +2554,20 @@ export const chatWithAI = onRequest(
 
         const basePrompt = getMayaInternalChatPrompt();
         const { system, messages } = prepareMayaAnthropicPayload(basePrompt, firebaseContext, body.messages);
+        const recentHistory = messages.slice(-MAYA_INTERNAL_CHAT_MAX_MESSAGES);
 
-        if (!messages.length) {
+        if (!recentHistory.length) {
           return res.status(400).json({ error: "Se requiere al menos un mensaje de usuario." });
         }
-        if (messages[messages.length - 1].role !== "user") {
+        if (recentHistory[recentHistory.length - 1].role !== "user") {
           return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
         }
 
         const anthropicPayload = {
           model: MODEL_INTERNAL_CHAT,
-          max_tokens: 4096,
-          system,
-          messages,
+          max_tokens: MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS,
+          system: buildMayaInternalChatAnthropicSystem(system),
+          messages: recentHistory,
         };
 
         if (wantStream) {
@@ -2539,9 +2600,13 @@ export const chatWithAI = onRequest(
           res.setHeader("Cache-Control", "no-cache, no-transform");
           res.setHeader("X-Accel-Buffering", "no");
 
-          const rawAccum = await readAnthropicMessageStream(anthropicResponse.body, (chunk) => {
-            res.write(`${JSON.stringify({ type: "delta", text: chunk })}\n`);
-          });
+          const { text: rawAccum, usage: streamUsage } = await readAnthropicMessageStream(
+            anthropicResponse.body,
+            (chunk) => {
+              res.write(`${JSON.stringify({ type: "delta", text: chunk })}\n`);
+            },
+          );
+          logAnthropicInternalChatTokenUsage(streamUsage);
 
           const db = getAdminDb();
           const replyOut = await applyMayaActionsFromPanelReply(db, firebaseContext, rawAccum);
@@ -2565,6 +2630,8 @@ export const chatWithAI = onRequest(
           const message = asText(anthropicBody?.error?.message, "Anthropic API request failed.");
           return res.status(anthropicResponse.status).json({ error: message });
         }
+
+        logAnthropicInternalChatTokenUsage(anthropicBody?.usage);
 
         const textContent = Array.isArray(anthropicBody?.content)
           ? anthropicBody.content
