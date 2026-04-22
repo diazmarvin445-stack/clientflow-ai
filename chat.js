@@ -50,6 +50,8 @@ let panelChatIdleTimer = null;
 let panelChatUserIdCache = "";
 /** Marca de tiempo de la última actividad en el chat (mensaje, scroll, etc.) para la ventana de 1 minuto al cambiar de página. */
 let lastPanelChatActivityAt = 0;
+let inactivityTimer = null;
+const INACTIVITY_MS = 60 * 1000; // 1 minuto
 
 /** @type {{ role: 'user' | 'assistant', content: string }[]} */
 let apiConversation = [];
@@ -1468,6 +1470,38 @@ function showWelcomeAssistant() {
   stream.appendChild(wrap);
 }
 
+function clearChatHistory() {
+  // Limpiar UI del chat
+  const chatContainer = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
+  if (chatContainer) chatContainer.innerHTML = "";
+
+  // Limpiar localStorage
+  localStorage.removeItem("mayaConversationHistory");
+  localStorage.removeItem("lastMayaMessage");
+
+  // Limpiar memoria en runtime del chat interno
+  apiConversation = [];
+
+  // Mostrar bienvenida
+  const container = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
+  if (container) {
+    if (container.id === "chatMessages") {
+      container.innerHTML = `
+      <div class="maya-message">Hola Marvin 👋</div>
+    `;
+    } else {
+      showWelcomeAssistant();
+    }
+  }
+}
+
+function resetInactivityTimer() {
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    clearChatHistory();
+  }, INACTIVITY_MS);
+}
+
 /**
  * Burbuja vacía para ir rellenando con streaming.
  * @returns {{ wrap: HTMLDivElement, bubble: HTMLDivElement } | null}
@@ -2281,5 +2315,12 @@ function boot() {
     window.location.replace("login.html");
   });
 }
+
+// Reiniciar timer con cada actividad
+document.addEventListener("click", resetInactivityTimer);
+document.addEventListener("keypress", resetInactivityTimer);
+
+// Iniciar el timer al cargar la página
+resetInactivityTimer();
 
 boot();
