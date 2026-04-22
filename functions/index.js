@@ -18,11 +18,13 @@ const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
 /** Límite de turnos enviados a Haiku (costo / contexto). */
 const MAYA_INTERNAL_CHAT_MAX_MESSAGES = 10;
 /** Respuestas cortas; MAYA_ACTION_JSON no requiere ensayos. */
-const MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS = 1024;
-/** WhatsApp (cliente ↔ Maya): Sonnet para ventas y conversación con clientes. */
-const MODEL_WHATSAPP = "claude-sonnet-4-6";
-/** Otras rutas (p. ej. generateCampaign). */
-const MODEL = MODEL_WHATSAPP;
+const MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS = 512;
+/** WhatsApp (cliente ↔ Maya): Sonnet para ventas. */
+const MODEL_WHATSAPP = "claude-sonnet-4-5-20250929";
+/** Campañas / JSON estructurado: Haiku. */
+const MODEL_CAMPAIGN = "claude-haiku-4-5-20251001";
+/** WhatsApp: últimos turnos al modelo (costo). */
+const MAYA_WHATSAPP_MAX_MESSAGES = 10;
 const ANTHROPIC_KEY = defineSecret("ANTHROPIC_KEY");
 /** Token de la API de WhatsApp Cloud (Meta) para enviar mensajes. */
 const META_ACCESS_TOKEN = defineSecret("META_ACCESS_TOKEN");
@@ -544,9 +546,9 @@ export const generateCampaign = onRequest(
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            model: MODEL,
+            model: MODEL_CAMPAIGN,
             max_tokens: 1000,
-            system: getYourColorSystemPrompt(),
+            system: buildAnthropicCachedSystem(getYourColorSystemPrompt()),
             messages: [{ role: "user", content: buildUserPrompt(input, businessName) }],
           }),
         });
@@ -556,6 +558,8 @@ export const generateCampaign = onRequest(
           const message = asText(anthropicBody?.error?.message, "Anthropic API request failed.");
           return res.status(anthropicResponse.status).json({ error: message });
         }
+
+        logMayaCost(anthropicBody?.usage, "haiku-campaign");
 
         const textContent = Array.isArray(anthropicBody?.content)
           ? anthropicBody.content
@@ -1005,7 +1009,7 @@ function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw
  * @param {string} systemPrompt
  * @returns {{ type: string, text: string, cache_control: { type: string } }[]}
  */
-function buildMayaInternalChatAnthropicSystem(systemPrompt) {
+function buildAnthropicCachedSystem(systemPrompt) {
   return [
     {
       type: "text",
@@ -1016,15 +1020,29 @@ function buildMayaInternalChatAnthropicSystem(systemPrompt) {
 }
 
 /**
+ * Estimación de coste USD (aprox.; ver precios actuales en consola Anthropic).
  * @param {unknown} usage
+ * @param {string} modelLabel
  */
-function logAnthropicInternalChatTokenUsage(usage) {
-  const u = usage && typeof usage === "object" ? usage : {};
-  console.log("[TOKENS]", {
-    input: /** @type {Record<string, unknown>} */ (u).input_tokens,
-    output: /** @type {Record<string, unknown>} */ (u).output_tokens,
-    cache_read: /** @type {Record<string, unknown>} */ (u).cache_read_input_tokens,
-    cache_write: /** @type {Record<string, unknown>} */ (u).cache_creation_input_tokens,
+function logMayaCost(usage, modelLabel) {
+  const u = usage && typeof usage === "object" ? /** @type {Record<string, unknown>} */ (usage) : {};
+  const input = Number(u.input_tokens) || 0;
+  const output = Number(u.output_tokens) || 0;
+  const cacheRead = Number(u.cache_read_input_tokens) || 0;
+  const cacheWrite = Number(u.cache_creation_input_tokens) || 0;
+  const cost = (
+    (input * 1) / 1_000_000 +
+    (output * 5) / 1_000_000 +
+    (cacheRead * 0.1) / 1_000_000 +
+    (cacheWrite * 1.25) / 1_000_000
+  ).toFixed(6);
+  console.log("[MAYA_COST]", {
+    model: modelLabel,
+    input: u.input_tokens,
+    output: u.output_tokens,
+    cache_read: cacheRead,
+    cache_write: cacheWrite,
+    cost_usd: cost,
   });
 }
 
@@ -2566,7 +2584,7 @@ export const chatWithAI = onRequest(
         const anthropicPayload = {
           model: MODEL_INTERNAL_CHAT,
           max_tokens: MAYA_INTERNAL_CHAT_MAX_OUTPUT_TOKENS,
-          system: buildMayaInternalChatAnthropicSystem(system),
+          system: buildAnthropicCachedSystem(system),
           messages: recentHistory,
         };
 
@@ -2606,7 +2624,7 @@ export const chatWithAI = onRequest(
               res.write(`${JSON.stringify({ type: "delta", text: chunk })}\n`);
             },
           );
-          logAnthropicInternalChatTokenUsage(streamUsage);
+          logMayaCost(streamUsage, "haiku-internal");
 
           const db = getAdminDb();
           const replyOut = await applyMayaActionsFromPanelReply(db, firebaseContext, rawAccum);
@@ -2631,7 +2649,7 @@ export const chatWithAI = onRequest(
           return res.status(anthropicResponse.status).json({ error: message });
         }
 
-        logAnthropicInternalChatTokenUsage(anthropicBody?.usage);
+        logMayaCost(anthropicBody?.usage, "haiku-internal");
 
         const textContent = Array.isArray(anthropicBody?.content)
           ? anthropicBody.content
@@ -3077,7 +3095,7 @@ export const whatsappWebhook = onRequest(
     }
 
     const userMessage = { role: "user", content: effectiveInbound };
-    const messagesForClaude = [...priorMessages, userMessage];
+    const messagesForClaude = [...priorMessages, userMessage].slice(-MAYA_WHATSAPP_MAX_MESSAGES);
 
     let assistantRaw = "";
     try {
@@ -3091,7 +3109,7 @@ export const whatsappWebhook = onRequest(
         body: JSON.stringify({
           model: MODEL_WHATSAPP,
           max_tokens: 2048,
-          system: getMayaWhatsAppSystemPrompt(),
+          system: buildAnthropicCachedSystem(getMayaWhatsAppSystemPrompt()),
           messages: messagesForClaude,
         }),
       });
@@ -3117,6 +3135,8 @@ export const whatsappWebhook = onRequest(
         res.status(200).type("application/json").send({ ok: true, fallback: "anthropic_error" });
         return;
       }
+
+      logMayaCost(anthropicBody?.usage, "sonnet-whatsapp");
 
       assistantRaw = Array.isArray(anthropicBody?.content)
         ? anthropicBody.content
