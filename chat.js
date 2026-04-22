@@ -577,6 +577,15 @@ function formatTime(d = new Date()) {
   return d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
 }
 
+function cleanMayaMessage(text) {
+  let out = String(text ?? "");
+  out = out.replace(/```json[\s\S]*?```/gi, "");
+  out = out.replace(/```[\s\S]*?```/g, "");
+  out = out.replace(/MAYA_[A-Z_]+:?\s*\{[\s\S]*?\}/g, "");
+  out = out.replace(/\n{3,}/g, "\n\n").trim();
+  return out;
+}
+
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
   const metaEl = document.getElementById("dash-business-meta");
@@ -628,6 +637,7 @@ function appendAssistantBubble(content, opts = {}) {
   if (!stream) return empty;
 
   const { displayText, orderPayload, actionPayload } = stripMayaPanelMetadata(content);
+  const cleanText = cleanMayaMessage(displayText);
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -637,7 +647,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   const bubble = document.createElement("div");
   bubble.className = "yc-msg-bubble";
-  bubble.textContent = displayText;
+  bubble.textContent = cleanText;
 
   const time = document.createElement("div");
   time.className = "yc-msg-time";
@@ -645,22 +655,12 @@ function appendAssistantBubble(content, opts = {}) {
 
   col.appendChild(bubble);
 
-  if (orderPayload && !opts.isWelcome && !validateOrderConsistency(displayText, orderPayload)) {
+  if (orderPayload && !opts.isWelcome && !validateOrderConsistency(cleanText, orderPayload)) {
     const warn = document.createElement("div");
     warn.className = "yc-msg-consistency-warning";
     warn.setAttribute("role", "status");
     warn.textContent = "⚠️ Los números no coinciden. Pedile a Maya que te vuelva a cotizar.";
     col.appendChild(warn);
-  }
-
-  const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(displayText, orderPayload) : null;
-  if (quote) {
-    try {
-      wrap.dataset.quoteJson = JSON.stringify(quote);
-    } catch (_) {
-      /* ignore */
-    }
-    col.appendChild(buildQuoteCardEl(quote));
   }
 
   if (!opts.isWelcome) {
@@ -673,7 +673,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnCopy.textContent = "Copiar";
     btnCopy.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(displayText);
+        await navigator.clipboard.writeText(cleanText);
         showToast("Copiado al portapapeles");
       } catch {
         showToast("No se pudo copiar", true);
@@ -684,7 +684,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnOrder.type = "button";
     btnOrder.className = "yc-msg-action-btn yc-msg-action-btn--primary";
     btnOrder.textContent = "Convertir a orden";
-    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, displayText));
+    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, cleanText));
 
     actions.append(btnCopy, btnOrder);
     col.appendChild(actions);
@@ -713,7 +713,7 @@ function appendAssistantBubble(content, opts = {}) {
     }
   }
 
-  return { visible: displayText, actionPayload };
+  return { visible: cleanText, actionPayload };
 }
 
 function showToast(message, isError = false) {
