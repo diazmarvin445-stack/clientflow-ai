@@ -200,6 +200,54 @@ function detectQuantity(text) {
 
 /**
  * @param {string} text
+ * @param {RegExp} re
+ * @returns {number | null}
+ */
+function extractNumber(text, re) {
+  const m = String(text).match(re);
+  if (!m || m[1] == null) return null;
+  const n = parseFloat(String(m[1]).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Comprueba que cantidad/total del texto coincidan con MAYA_ORDER_JSON (misma respuesta).
+ * @param {string} messageText
+ * @param {Record<string, unknown>} orderJson
+ * @returns {boolean}
+ */
+function validateOrderConsistency(messageText, orderJson) {
+  if (!orderJson || typeof orderJson !== "object") return true;
+  if (Array.isArray(orderJson.items) && orderJson.items.length > 0) {
+    return true;
+  }
+
+  const jTotalRaw = orderJson.total != null ? orderJson.total : orderJson.amount;
+  const jQtyRaw = orderJson.quantity;
+
+  let textTotal = extractNumber(messageText, /total[:\s]*\$?\s*([\d,.]+)/i);
+  if (textTotal == null) textTotal = extractNumber(messageText, /\btotal\s+de\s+\$?\s*([\d,.]+)/i);
+  if (textTotal == null) textTotal = extractNumber(messageText, /=\s*\$?\s*([\d,.]+)\s*$/im);
+
+  let textQty = extractNumber(messageText, /(\d+)\s*piezas?/i);
+  if (textQty == null) textQty = extractNumber(messageText, /cantidad[:\s]*(\d+)/i);
+
+  const jTotal = Number(jTotalRaw);
+  const jQty = Number(jQtyRaw);
+
+  if (Number.isFinite(jTotal) && textTotal != null && Math.abs(textTotal - jTotal) > 0.02) {
+    console.warn("⚠️ Total inconsistente:", textTotal, "vs", jTotal);
+    return false;
+  }
+  if (Number.isFinite(jQty) && jQty >= 1 && textQty != null && Math.round(textQty) !== Math.round(jQty)) {
+    console.warn("⚠️ Cantidad inconsistente:", textQty, "vs", jQty);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * @param {string} text
  * @param {Record<string, unknown> | null} [orderPayload] MAYA_ORDER_JSON si existe
  */
 function tryBuildQuoteFromAssistantText(text, orderPayload = null) {
@@ -594,6 +642,14 @@ function appendAssistantBubble(content, opts = {}) {
   time.textContent = formatTime();
 
   col.appendChild(bubble);
+
+  if (orderPayload && !opts.isWelcome && !validateOrderConsistency(displayText, orderPayload)) {
+    const warn = document.createElement("div");
+    warn.className = "yc-msg-consistency-warning";
+    warn.setAttribute("role", "status");
+    warn.textContent = "⚠️ Los números no coinciden. Pedile a Maya que te vuelva a cotizar.";
+    col.appendChild(warn);
+  }
 
   const quote = !opts.isWelcome ? tryBuildQuoteFromAssistantText(displayText, orderPayload) : null;
   if (quote) {

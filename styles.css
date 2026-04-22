@@ -8130,6 +8130,17 @@ body.cf-modal-open {
   max-width: 96%;
 }
 
+.yc-msg-consistency-warning {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #9a3412;
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
 .yc-quote-card {
   border-radius: 0.75rem;
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -8991,6 +9002,12 @@ body.dark-theme .yc-chat-composer {
 
 body.dark-theme .yc-msg--assistant .yc-msg-bubble {
   border-color: var(--border) !important;
+}
+
+body.dark-theme .yc-msg-consistency-warning {
+  color: #fcd34d;
+  background: rgba(180, 83, 9, 0.25);
+  border-color: rgba(251, 191, 36, 0.35);
 }
 
 body.dark-theme .yc-quote-card {
