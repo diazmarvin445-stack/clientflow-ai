@@ -1242,6 +1242,9 @@ function mergeMayaActionData(payload) {
     "transactionId",
     "title",
     "date",
+    "total",
+    "monto",
+    "price",
     "amount",
     "deposit",
     "expenses",
@@ -2403,10 +2406,12 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
   }
 
   const extraBlocks = [];
+  let lastAction = "";
   try {
     for (const payload of payloads) {
       const actionRaw = typeof payload.action === "string" ? payload.action.trim() : "";
       const action = MAYA_PANEL_ACTION_ALIASES[actionRaw] || actionRaw;
+      lastAction = action;
       if (!MAYA_PANEL_EXECUTABLE_ACTIONS.has(action)) continue;
       if (action === "get_balance") {
         const data = mergeFinancePayload(payload);
@@ -2453,12 +2458,15 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
       }
       if (action === "create_order") {
         const data = mergeMayaActionData(payload);
+        const totalNormalized = Number(data.total ?? data.amount ?? data.monto ?? data.price ?? 0) || 0;
+        console.log("[CREATE_ORDER] Datos recibidos:", JSON.stringify(data));
         await processNewOrder(db, businessId, {
           clientName: data.clientName,
           clientPhone: data.clientPhone,
           product: data.product,
           quantity: data.quantity,
-          amount: data.amount ?? data.total,
+          total: totalNormalized,
+          amount: totalNormalized,
           deposit: data.deposit,
           deliveryDate: data.deliveryDate ?? data.date,
           notes: data.notes,
@@ -2547,6 +2555,9 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
+    if (lastAction === "create_order") {
+      return `No pude guardar el pedido: ${msg}\n¿Me podés confirmar el monto total?`;
+    }
     const base = visibleText.trim();
     return (base ? `${base}\n\n` : "") + `(No se pudo completar la acción: ${msg})`;
   }
