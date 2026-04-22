@@ -11,6 +11,7 @@ import { initDashShell } from "./dash-shell.js";
 
 let allClients = [];
 let cachedBusinessId = null;
+const DELETE_CLIENT_SAFE_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/deleteClientSafe";
 
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
@@ -110,6 +111,7 @@ function renderClientList(root, businessId, list) {
         <th>Total pedidos</th>
         <th>Estado</th>
         <th>Fuente</th>
+        <th>Acciones</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -124,6 +126,7 @@ function renderClientList(root, businessId, list) {
     const totalOrders = Number(c.totalOrders || 0) || 0;
     const status = (typeof c.status === "string" && c.status.trim()) || "activo";
     const source = (typeof c.source === "string" && c.source.trim()) || "manual";
+    const clientId = typeof c.id === "string" ? c.id : "";
     tr.innerHTML = `
       <td><strong>${fullName}</strong></td>
       <td>${phoneRaw}</td>
@@ -132,9 +135,42 @@ function renderClientList(root, businessId, list) {
       <td>${totalOrders}</td>
       <td>${status}</td>
       <td>${source}</td>
+      <td><button type="button" class="dash-icon-btn" data-client-delete="${clientId}" aria-label="Borrar cliente">🗑️</button></td>
     `;
     tbody.appendChild(tr);
   }
+  tbody.querySelectorAll("[data-client-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-client-delete");
+      if (!id || !cachedBusinessId) return;
+      const ok = window.confirm("¿Seguro que quieres borrar este cliente?");
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(DELETE_CLIENT_SAFE_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ businessId: cachedBusinessId, clientId: id }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg =
+            typeof body?.error === "string" && body.error
+              ? body.error
+              : "No se pudo borrar el cliente.";
+          window.alert(msg);
+          return;
+        }
+        allClients = allClients.filter((x) => x.id !== id);
+        setMetaLine(allClients.length);
+        if (cachedBusinessId) applySearch(cachedBusinessId);
+      } catch (e) {
+        window.alert("No se pudo borrar el cliente.");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
   wrap.appendChild(table);
   root.appendChild(wrap);
 }

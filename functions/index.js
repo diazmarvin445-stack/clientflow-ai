@@ -292,6 +292,19 @@ function normalizePhoneDigits(raw) {
   return String(raw ?? "").replace(/\D/g, "");
 }
 
+function hasValidClientPhone(raw) {
+  const d = normalizePhoneDigits(raw);
+  return d.length >= 7;
+}
+
+function hasMeaningfulClientName(raw) {
+  const n = asText(raw).replace(/\s+/g, " ").trim();
+  if (!n || n.length < 2) return false;
+  const low = n.toLowerCase();
+  if (low === "cliente" || low === "client" || low === "cliente whatsapp") return false;
+  return true;
+}
+
 function parseOrderDate(raw) {
   if (raw == null || raw === "") return null;
   const s = typeof raw === "string" ? raw.trim() : String(raw);
@@ -357,6 +370,12 @@ async function syncClientRecord(db, businessId, payload) {
   const markContact = payload.markContact !== false;
   /** @type {{ id: string, data: Record<string, unknown> } | null} */
   let existing = null;
+  const allowByPhone = hasValidClientPhone(phone);
+  const allowByName = hasMeaningfulClientName(name);
+  const allowByConfirmedOrder = Boolean(orderId);
+  if (!allowByPhone && !allowByName && !allowByConfirmedOrder) {
+    return { id: "" };
+  }
 
   if (phone) {
     const byPhone = await clientsCol.where("phone", "==", phone).limit(1).get();
@@ -379,8 +398,8 @@ async function syncClientRecord(db, businessId, payload) {
     const nextLastOrderAt = orderId ? nowIso : prev.lastOrderAt ?? null;
     const life = computeClientLifecycleStatus(nextLastContactAt, nextLastOrderAt, now);
     const patch = {
-      fullName: name || asText(prev.fullName, "Cliente"),
-      name: name || asText(prev.name, "Cliente"),
+      fullName: (allowByName ? name : "") || asText(prev.fullName, "Cliente"),
+      name: (allowByName ? name : "") || asText(prev.name, "Cliente"),
       phone: phone || asText(prev.phone),
       email: email || asText(prev.email),
       source: source || asText(prev.source, "manual"),
@@ -1398,6 +1417,7 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
   if (!orderSnap.exists) throw new Error("La orden indicada no existe.");
   const orderId = orderRef.id;
   const order = orderSnap.data() || {};
+  const linkedClientId = asText(order.linkedClientId || order.clientId);
 
   const linkedCalendarId =
     typeof order.linkedCalendarId === "string" && order.linkedCalendarId.trim()
@@ -1427,6 +1447,58 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
   }
 
   await orderRef.delete();
+  await recomputeClientAfterOrderDelete(db, businessId, linkedClientId);
+}
+
+async function recomputeClientAfterOrderDelete(db, businessId, clientId) {
+  const cleanClientId = asText(clientId);
+  if (!cleanClientId) return { touched: false };
+  const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(cleanClientId);
+  const clientSnap = await clientRef.get();
+  if (!clientSnap.exists) return { touched: false };
+  const ordersSnap = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("orders")
+    .where("linkedClientId", "==", cleanClientId)
+    .get();
+  if (ordersSnap.empty) {
+    await clientRef.delete();
+    return { touched: true, deleted: true };
+  }
+  const rows = ordersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  rows.sort((a, b) => {
+    const ta = parseDateLike(a.updatedAt || a.createdAt)?.getTime() || 0;
+    const tb = parseDateLike(b.updatedAt || b.createdAt)?.getTime() || 0;
+    return tb - ta;
+  });
+  const latest = rows[0] || {};
+  const deliveredTotalSpent = rows.reduce((sum, row) => {
+    const st = String(row.status || "").toLowerCase();
+    if (st !== "entregado") return sum;
+    return sum + (Math.max(0, Number(row.totalPaid ?? row.total ?? row.amount) || 0) || 0);
+  }, 0);
+  const life = computeClientLifecycleStatus(
+    clientSnap.data()?.lastContactAt || null,
+    latest?.updatedAt || latest?.createdAt || null,
+    new Date(),
+  );
+  await clientRef.set(
+    {
+      lastOrderAt: latest?.updatedAt || latest?.createdAt || null,
+      lastOrderId: asText(latest?.id),
+      totalOrders: rows.length,
+      totalSpent: deliveredTotalSpent,
+      status: life.status,
+      inactiveDays: life.inactivityDays,
+      inactiveSince30: life.inactivityDays >= 30,
+      inactiveSince60: life.inactivityDays >= 60,
+      inactiveSince90: life.inactivityDays >= 90,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  return { touched: true, deleted: false };
 }
 
 /**
@@ -1541,6 +1613,22 @@ async function handleDeleteClient(db, businessId, payload) {
     }
     const x = snap.data() || {};
     const display = typeof x.name === "string" && x.name.trim() ? x.name.trim() : "Cliente";
+    const ordersWithClient = await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("orders")
+      .where("linkedClientId", "==", clientId)
+      .limit(1)
+      .get();
+    if (!ordersWithClient.empty) {
+      const r = {
+        success: false,
+        error: "No se puede borrar este cliente porque tiene pedidos vinculados.",
+        blockedByOrders: true,
+      };
+      console.log("[DELETE_CLIENT] Resultado:", r);
+      return r;
+    }
     await ref.delete();
     const r = { success: true, deleted: display };
     console.log("[DELETE_CLIENT] Resultado:", r);
@@ -1583,6 +1671,22 @@ async function handleDeleteClient(db, businessId, payload) {
           : typeof exact.row.fullName === "string" && exact.row.fullName.trim()
             ? exact.row.fullName.trim()
             : nameRaw;
+      const ordersWithClient = await db
+        .collection("businesses")
+        .doc(businessId)
+        .collection("orders")
+        .where("linkedClientId", "==", exact.doc.id)
+        .limit(1)
+        .get();
+      if (!ordersWithClient.empty) {
+        const r = {
+          success: false,
+          error: "No se puede borrar este cliente porque tiene pedidos vinculados.",
+          blockedByOrders: true,
+        };
+        console.log("[DELETE_CLIENT] Resultado:", r);
+        return r;
+      }
       await exact.doc.ref.delete();
       const r = { success: true, deleted: display };
       console.log("[DELETE_CLIENT] Resultado:", r);
@@ -1606,6 +1710,22 @@ async function handleDeleteClient(db, businessId, payload) {
       : typeof matches[0].row.fullName === "string" && matches[0].row.fullName.trim()
         ? matches[0].row.fullName.trim()
         : nameRaw;
+  const ordersWithClient = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("orders")
+    .where("linkedClientId", "==", matches[0].doc.id)
+    .limit(1)
+    .get();
+  if (!ordersWithClient.empty) {
+    const r = {
+      success: false,
+      error: "No se puede borrar este cliente porque tiene pedidos vinculados.",
+      blockedByOrders: true,
+    };
+    console.log("[DELETE_CLIENT] Resultado:", r);
+    return r;
+  }
   await matches[0].doc.ref.delete();
   const r = { success: true, deleted: display };
   console.log("[DELETE_CLIENT] Resultado:", r);
@@ -2684,15 +2804,18 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
       }
       if (action === "create_client") {
         const data = mergeMayaActionData(payload);
-        const name = typeof data.name === "string" ? data.name.trim() : "";
-        await db.collection("businesses").doc(businessId).collection("clients").add({
-          fullName: name || "Cliente",
-          name: name || "Cliente",
-          phone: typeof data.phone === "string" ? data.phone.trim() : "",
-          email: typeof data.email === "string" ? data.email.trim() : "",
+        const syncResult = await syncClientRecord(db, businessId, {
+          clientName: data.name,
+          clientPhone: data.phone,
+          email: data.email,
           source: "chat-maya",
-          createdAt: FieldValue.serverTimestamp(),
+          markContact: true,
         });
+        if (!syncResult.id) {
+          throw new Error(
+            "No pude guardar el cliente: hace falta nombre válido o teléfono válido para evitar registros basura.",
+          );
+        }
         continue;
       }
       if (action === "create_order") {
@@ -3307,6 +3430,7 @@ export const deleteOrderCascade = onRequest(
           return;
         }
         const row = snap.data() || {};
+        const linkedClientId = asText(row.linkedClientId || row.clientId);
         const linkedCalendarId = asText(row.linkedCalendarId);
         if (linkedCalendarId) {
           await db.collection("businesses").doc(businessId).collection("calendar").doc(linkedCalendarId).delete();
@@ -3323,10 +3447,124 @@ export const deleteOrderCascade = onRequest(
         }
 
         await orderRef.delete();
+        await recomputeClientAfterOrderDelete(db, businessId, linkedClientId);
         res.status(200).json({ ok: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Error desconocido";
         res.status(500).json({ error: "No se pudo eliminar pedido.", details: message });
+      }
+    });
+  },
+);
+
+export const deleteClientSafe = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        const clientId = asText(body.clientId);
+        if (!businessId || !clientId) {
+          res.status(400).json({ error: "businessId y clientId son requeridos." });
+          return;
+        }
+        const db = getAdminDb();
+        const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(clientId);
+        const clientSnap = await clientRef.get();
+        if (!clientSnap.exists) {
+          res.status(404).json({ error: "Cliente no encontrado." });
+          return;
+        }
+        const ordersSnap = await db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("orders")
+          .where("linkedClientId", "==", clientId)
+          .limit(1)
+          .get();
+        if (!ordersSnap.empty) {
+          res.status(409).json({
+            error: "No se puede borrar este cliente porque tiene pedidos vinculados.",
+            blockedByOrders: true,
+          });
+          return;
+        }
+        await clientRef.delete();
+        res.status(200).json({ ok: true });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo eliminar cliente.", details: message });
+      }
+    });
+  },
+);
+
+export const cleanupJunkClients = onRequest(
+  { secrets: [] },
+  async (req, res) => {
+    corsHandler(req, res, async () => {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+      try {
+        const body = req.body && typeof req.body === "object" ? req.body : {};
+        const businessId = asText(body.businessId);
+        const applyDelete = body.applyDelete === true;
+        if (!businessId) {
+          res.status(400).json({ error: "businessId es requerido." });
+          return;
+        }
+        const db = getAdminDb();
+        const clientsSnap = await db.collection("businesses").doc(businessId).collection("clients").get();
+        /** @type {Array<{id:string,name:string,phone:string}>} */
+        const junkCandidates = [];
+        for (const doc of clientsSnap.docs) {
+          const row = doc.data() || {};
+          const name = asText(row.fullName || row.name);
+          const phone = normalizePhoneDigits(row.phone);
+          const hasIdentity = hasMeaningfulClientName(name) || hasValidClientPhone(phone);
+          if (hasIdentity) continue;
+          if (row.lastOrderAt || row.lastContactAt) continue;
+          const orderCount = Number(row.totalOrders || 0);
+          if (orderCount > 0) continue;
+          const hasOrder = await db
+            .collection("businesses")
+            .doc(businessId)
+            .collection("orders")
+            .where("linkedClientId", "==", doc.id)
+            .limit(1)
+            .get();
+          if (!hasOrder.empty) continue;
+          junkCandidates.push({ id: doc.id, name, phone });
+        }
+        if (applyDelete) {
+          for (const candidate of junkCandidates) {
+            await db.collection("businesses").doc(businessId).collection("clients").doc(candidate.id).delete();
+          }
+        }
+        res.status(200).json({
+          ok: true,
+          mode: applyDelete ? "applyDelete" : "preview",
+          candidates: junkCandidates,
+          totalCandidates: junkCandidates.length,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Error desconocido";
+        res.status(500).json({ error: "No se pudo ejecutar cleanup de clientes.", details: message });
       }
     });
   },
