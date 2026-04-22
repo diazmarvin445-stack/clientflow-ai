@@ -633,31 +633,73 @@ function mayaAnthropicInputTokenEstimate(systemStr, messages) {
 
 function shrinkFirebaseContextInitial(fc) {
   const c = fc && typeof fc === "object" ? cloneJsonSafe(fc) : {};
-  const cal = c.calendarUpcomingFourWeeks ?? c.calendarNextTwoWeeks;
-  if (Array.isArray(cal) && cal.length > 90) {
-    if (c.calendarUpcomingFourWeeks) c.calendarUpcomingFourWeeks = cal.slice(0, 90);
-    else c.calendarNextTwoWeeks = cal.slice(0, 90);
+  const now = new Date();
+  const toDateSafe = (value) => {
+    const dFromAdmin = mayaAdminToDate(value);
+    if (dFromAdmin) return dFromAdmin;
+    if (typeof value === "string" || typeof value === "number") {
+      const d = new Date(value);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    return null;
+  };
+
+  if (Array.isArray(c.clients)) {
+    c.clients = c.clients.slice(-5).map((row) => ({
+      id: row?.id,
+      name: asText(row?.name ?? row?.clientName ?? row?.nombre),
+      phone: asText(row?.phone ?? row?.phoneNumber ?? row?.telefono),
+    }));
   }
-  if (Array.isArray(c.campaigns) && c.campaigns.length > 26) {
-    c.campaigns = c.campaigns.slice(0, 22);
+
+  const activeRows = (rows) =>
+    rows
+      .filter((row) => {
+        const status = String(row?.status ?? "").trim().toLowerCase();
+        return status !== "entregado";
+      })
+      .slice(0, 10)
+      .map((row) => ({
+        id: row?.id,
+        clientName: asText(row?.clientName ?? row?.customerName ?? row?.name),
+        product: asText(row?.product ?? row?.service ?? row?.description),
+        amount: Number(row?.amount ?? row?.total ?? 0) || 0,
+        status: asText(row?.status),
+      }));
+
+  if (Array.isArray(c.orders)) c.orders = activeRows(c.orders);
+  if (Array.isArray(c.jobs)) c.jobs = activeRows(c.jobs);
+  delete c.ordersRecentDelivered;
+  delete c.jobsRecentDelivered;
+
+  if (Array.isArray(c.financeRecent)) {
+    c.financeRecent = c.financeRecent
+      .filter((row) => {
+        const d = toDateSafe(row?.date ?? row?.createdAt);
+        return d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      })
+      .slice(0, 20);
   }
-  if (Array.isArray(c.financeRecent) && c.financeRecent.length > 100) {
-    c.financeRecent = c.financeRecent.slice(0, 95);
+
+  const calendarRows = c.calendarUpcomingFourWeeks ?? c.calendarNextTwoWeeks;
+  if (Array.isArray(calendarRows)) {
+    const upcoming = calendarRows
+      .filter((row) => {
+        const d = toDateSafe(row?.date ?? row?.start ?? row?.createdAt);
+        return d && d.getTime() >= now.getTime();
+      })
+      .sort((a, b) => {
+        const ta = toDateSafe(a?.date ?? a?.start ?? a?.createdAt)?.getTime() ?? 0;
+        const tb = toDateSafe(b?.date ?? b?.start ?? b?.createdAt)?.getTime() ?? 0;
+        return ta - tb;
+      })
+      .slice(0, 10);
+    if (Array.isArray(c.calendarUpcomingFourWeeks)) c.calendarUpcomingFourWeeks = upcoming;
+    else c.calendarNextTwoWeeks = upcoming;
   }
-  if (Array.isArray(c.clients) && c.clients.length > 34) {
-    c.clients = c.clients.slice(0, 30);
-  }
-  if (Array.isArray(c.orders) && c.orders.length > 55) {
-    c.orders = c.orders.slice(0, 50);
-  }
-  if (Array.isArray(c.jobs) && c.jobs.length > 55) {
-    c.jobs = c.jobs.slice(0, 50);
-  }
-  if (Array.isArray(c.jobsRecentDelivered) && c.jobsRecentDelivered.length > 14) {
-    c.jobsRecentDelivered = c.jobsRecentDelivered.slice(0, 12);
-  }
-  if (Array.isArray(c.ordersRecentDelivered) && c.ordersRecentDelivered.length > 14) {
-    c.ordersRecentDelivered = c.ordersRecentDelivered.slice(0, 12);
+
+  if (Array.isArray(c.campaigns) && c.campaigns.length > 10) {
+    c.campaigns = c.campaigns.slice(0, 10);
   }
   return c;
 }
@@ -973,7 +1015,7 @@ function buildMayaSystemString(basePrompt, firebaseCtx) {
  * @param {string} basePrompt
  * @param {Record<string, unknown>} firebaseContextRaw
  * @param {unknown} messagesRaw
- * @returns {{ system: string, messages: { role: string, content: string }[] }}
+ * @returns {{ system: string, messages: { role: string, content: string }[], firebaseContext: Record<string, unknown> }}
  */
 function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw) {
   let messages = trimMayaChatMessages(asChatMessages(messagesRaw));
@@ -1001,7 +1043,7 @@ function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw
     }
     break;
   }
-  return { system, messages };
+  return { system, messages, firebaseContext: fc };
 }
 
 /**
@@ -2571,8 +2613,13 @@ export const chatWithAI = onRequest(
         }
 
         const basePrompt = getMayaInternalChatPrompt();
-        const { system, messages } = prepareMayaAnthropicPayload(basePrompt, firebaseContext, body.messages);
-        const recentHistory = messages.slice(-MAYA_INTERNAL_CHAT_MAX_MESSAGES);
+        const { system, messages, firebaseContext: reducedFirebaseContext } = prepareMayaAnthropicPayload(
+          basePrompt,
+          firebaseContext,
+          body.messages,
+        );
+        const MAX_MESSAGES = 10;
+        const recentHistory = messages.slice(-MAX_MESSAGES);
 
         if (!recentHistory.length) {
           return res.status(400).json({ error: "Se requiere al menos un mensaje de usuario." });
@@ -2580,6 +2627,14 @@ export const chatWithAI = onRequest(
         if (recentHistory[recentHistory.length - 1].role !== "user") {
           return res.status(400).json({ error: "El último mensaje debe ser del usuario." });
         }
+
+        const systemSize = system.length;
+        const contextSize = JSON.stringify(reducedFirebaseContext).length;
+        console.log("[PROMPT_SIZE]", {
+          system_chars: systemSize,
+          context_chars: contextSize,
+          messages_count: recentHistory.length,
+        });
 
         const anthropicPayload = {
           model: MODEL_INTERNAL_CHAT,
@@ -2626,6 +2681,11 @@ export const chatWithAI = onRequest(
               res.write(`${JSON.stringify({ type: "delta", text: chunk })}\n`);
             },
           );
+          console.log("[CACHE_STATUS]", {
+            cache_creation: streamUsage?.cache_creation_input_tokens || 0,
+            cache_read: streamUsage?.cache_read_input_tokens || 0,
+            regular_input: streamUsage?.input_tokens || 0,
+          });
           logMayaCost(streamUsage, "haiku-internal");
 
           const db = getAdminDb();
@@ -2650,6 +2710,11 @@ export const chatWithAI = onRequest(
           const message = asText(anthropicBody?.error?.message, "Anthropic API request failed.");
           return res.status(anthropicResponse.status).json({ error: message });
         }
+        console.log("[CACHE_STATUS]", {
+          cache_creation: anthropicBody?.usage?.cache_creation_input_tokens || 0,
+          cache_read: anthropicBody?.usage?.cache_read_input_tokens || 0,
+          regular_input: anthropicBody?.usage?.input_tokens || 0,
+        });
 
         logMayaCost(anthropicBody?.usage, "haiku-internal");
 
