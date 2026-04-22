@@ -337,7 +337,10 @@ async function processNewOrder(db, businessId, rawOrder) {
   const clientPhone = normalizePhoneDigits(rawOrder.clientPhone);
   const product = asText(rawOrder.product, "Pedido");
   const quantity = Math.max(0, Number(rawOrder.quantity) || 0);
-  const amount = Math.max(0, Number(rawOrder.amount) || 0);
+  const amount = Math.max(0, Number(rawOrder.total ?? rawOrder.amount) || 0);
+  if (!(amount > 0)) {
+    throw new Error("El monto total del pedido es obligatorio y debe ser mayor que cero.");
+  }
   const deposit = Math.max(0, Number(rawOrder.deposit) || 0);
   const balance = Math.max(0, amount - deposit);
   const notes = asText(rawOrder.notes);
@@ -365,6 +368,7 @@ async function processNewOrder(db, businessId, rawOrder) {
     clientPhone,
     product,
     quantity,
+    total: amount,
     amount,
     deposit,
     balance,
@@ -382,24 +386,6 @@ async function processNewOrder(db, businessId, rawOrder) {
     linkedCalendarId: "",
   });
 
-  let linkedFinanceId = "";
-  if (deposit > 0) {
-    const financeRef = await db.collection("businesses").doc(businessId).collection("finance").add({
-      type: "income",
-      status: "retenido",
-      amount: deposit,
-      category: "anticipos",
-      description: `Depósito retenido (no es ingreso hasta entrega): ${product} - ${clientName}`,
-      clientId: client.id,
-      orderId: orderRef.id,
-      linkedOrderId: orderRef.id,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy,
-      date: Timestamp.fromDate(new Date()),
-    });
-    linkedFinanceId = financeRef.id;
-  }
-
   let linkedCalendarId = "";
   const calRef = await db.collection("businesses").doc(businessId).collection("calendar").add({
     title: `Entrega: ${product} - ${clientName}`,
@@ -415,7 +401,7 @@ async function processNewOrder(db, businessId, rawOrder) {
 
   await orderRef.set(
     {
-      linkedFinanceId,
+      linkedFinanceId: "",
       linkedCalendarId,
     },
     { merge: true },
@@ -424,7 +410,7 @@ async function processNewOrder(db, businessId, rawOrder) {
   return {
     orderId: orderRef.id,
     linkedClientId: client.id,
-    linkedFinanceId,
+    linkedFinanceId: "",
     linkedCalendarId,
   };
 }
@@ -2175,15 +2161,18 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   const product = asText(order.product, "Pedido");
   const linkedClientId = asText(order.linkedClientId);
 
-  const amount = Math.max(0, Number(order.amount) || 0);
+  const amount = Math.max(0, Number(order.total ?? order.amount) || 0);
   const expenses = Math.max(0, Number(order.expenses) || 0);
-  const netProfit = Math.max(0, amount - expenses);
+  const netProfit = amount - expenses;
 
   /** @type {Record<string, unknown>} */
   const patch = {
     status: "entregado",
+    deliveredAt: FieldValue.serverTimestamp(),
     balance: 0,
     deliverySettled: true,
+    totalPaid: amount,
+    paidInFull: true,
     netProfit,
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -2949,6 +2938,7 @@ export const updateOrderAndSync = onRequest(
             clientPhone: nextClientPhone,
             product: nextProduct,
             quantity: nextQuantity,
+            total: nextAmount,
             amount: nextAmount,
             deposit: nextDeposit,
             balance: nextBalance,

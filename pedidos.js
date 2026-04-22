@@ -46,6 +46,26 @@ function parseOrderDeliveredDate(v) {
   return new Date();
 }
 
+function getOrderTotal(row) {
+  return Math.max(0, Number(row?.total ?? row?.amount) || 0);
+}
+
+function formatOrderFinanceCell(row) {
+  const total = getOrderTotal(row);
+  const expenses = Math.max(0, Number(row?.expenses) || 0);
+  const profit = total - expenses;
+  const delivered = String(row?.status || "").toLowerCase() === "entregado";
+  const dep = Math.max(0, Number(row?.deposit) || 0);
+  const bal = Math.max(0, Number(row?.balance) || 0);
+  /** @type {string[]} */
+  const lines = [];
+  lines.push(`Total: ${money(total)}`);
+  lines.push(`Gastos: -${money(expenses).replace("$", "$")}`);
+  lines.push(delivered ? `Ganancia neta: ${money(profit)} 🟢` : `Ganancia proy: ${money(profit)} 🟡`);
+  if (dep > 0) lines.push(`Depósito/Saldo: ${money(dep)} / ${money(bal)}`);
+  return lines.join("<br>");
+}
+
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
   const metaEl = document.getElementById("dash-business-meta");
@@ -104,7 +124,7 @@ function renderSummary(rows) {
   const monthTotal = rows.reduce((sum, r) => {
     const d = toDate(r.createdAt);
     if (!d || d < mb.start || d > mb.end) return sum;
-    return sum + (Number(r.amount) || 0);
+    return sum + getOrderTotal(r);
   }, 0);
   const balance = rows.reduce((sum, r) => sum + (Number(r.balance) || 0), 0);
 
@@ -168,6 +188,7 @@ async function saveOrderFromModal(ev) {
     product: document.getElementById("orders-product").value.trim(),
     quantity: Number(document.getElementById("orders-quantity").value || 0),
     amount: Number(document.getElementById("orders-amount").value || 0),
+    total: Number(document.getElementById("orders-amount").value || 0),
     deposit: Number(document.getElementById("orders-deposit").value || 0),
     expenses: Number(document.getElementById("orders-expenses").value || 0),
     deliveryDate: document.getElementById("orders-delivery-date").value || null,
@@ -219,6 +240,28 @@ async function repairDeliveredOrders() {
 
   const ordersRef = collection(db, "businesses", activeBusinessId, "orders");
   const financeRef = collection(db, "businesses", activeBusinessId, "finance");
+  const allOrdersSnap = await getDocs(ordersRef);
+  const orderById = new Map();
+  allOrdersSnap.forEach((d) => {
+    orderById.set(d.id, d.data() || {});
+  });
+
+  let removed = 0;
+  const financeSnap = await getDocs(financeRef);
+  for (const fd of financeSnap.docs) {
+    const mov = fd.data() || {};
+    const orderId = typeof mov.orderId === "string" ? mov.orderId : "";
+    if (!orderId) continue;
+    const o = orderById.get(orderId);
+    if (!o) continue;
+    const st = String(o.status || "").toLowerCase();
+    const type = String(mov.type || "").toLowerCase();
+    if (st !== "entregado" && (type === "income" || type === "expense")) {
+      await deleteDoc(fd.ref);
+      removed += 1;
+    }
+  }
+
   const deliveredSnap = await getDocs(query(ordersRef, where("status", "==", "entregado")));
 
   let repaired = 0;
@@ -227,10 +270,7 @@ async function repairDeliveredOrders() {
     const orderId = d.id;
     const clientName = String(order.clientName || "Cliente");
     const product = String(order.product || "Pedido");
-    const totalPaid = Math.max(
-      0,
-      Number(order.totalPaid ?? order.amount ?? order.total) || 0,
-    );
+    const totalPaid = Math.max(0, Number(order.totalPaid ?? order.total ?? order.amount) || 0);
     const expenses = Math.max(0, Number(order.expenses) || 0);
     const deliveredDate = parseOrderDeliveredDate(order.deliveredAt);
 
@@ -276,7 +316,7 @@ async function repairDeliveredOrders() {
     }
   }
 
-  alert(`Reparación completada. Movimientos creados: ${repaired}.`);
+  alert(`Reparación completada. Movimientos creados: ${repaired}. Movimientos incorrectos borrados: ${removed}.`);
 }
 
 function fillDetail(row) {
@@ -284,7 +324,8 @@ function fillDetail(row) {
   document.getElementById("od-phone").textContent = row.clientPhone || "—";
   document.getElementById("od-product").textContent = row.product || "—";
   document.getElementById("od-qty").textContent = String(row.quantity ?? "—");
-  document.getElementById("od-amount").textContent = money(row.amount);
+  const total = getOrderTotal(row);
+  document.getElementById("od-amount").textContent = money(total);
   document.getElementById("od-deposit").textContent = money(row.deposit);
   document.getElementById("od-balance").textContent = money(row.balance);
   const exp = Number(row.expenses) || 0;
@@ -292,7 +333,7 @@ function fillDetail(row) {
   if (expEl && "value" in expEl) expEl.value = String(exp);
   const expDisp = document.getElementById("od-expenses-display");
   if (expDisp) expDisp.textContent = money(exp);
-  const amt = Number(row.amount) || 0;
+  const amt = total;
   const netProfit = Math.max(0, amt - exp);
   const stRaw = String(row.status || "nuevo").toLowerCase();
   const delivered = stRaw === "entregado";
@@ -354,7 +395,7 @@ function renderRows() {
       <td><input type="checkbox" aria-label="Seleccionar pedido" /></td>
       <td><strong>${row.clientName || "—"}</strong><br><span class="dash-table-muted">${row.clientPhone || "—"}</span></td>
       <td>${row.product || "—"}</td>
-      <td>${money(row.amount)} / ${money(row.deposit)} / ${money(row.balance)}</td>
+      <td>${formatOrderFinanceCell(row)}</td>
       <td><span class="dash-badge ${statusBadgeClass(row.status)}">${row.status || "nuevo"}</span></td>
       <td>${sourceLabel(row.source)}</td>
       <td>${dateLabel}</td>
