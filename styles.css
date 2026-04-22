@@ -7982,6 +7982,39 @@ body.cf-modal-open {
   color: var(--text-muted);
 }
 
+.yc-ambiguity-cards {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.yc-ambiguity-card {
+  text-align: left;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #f8fafc;
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.yc-ambiguity-card:hover {
+  border-color: rgba(37, 99, 235, 0.38);
+  background: #eef4ff;
+}
+
+.yc-ambiguity-card__title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.yc-ambiguity-card__meta {
+  font-size: 0.76rem;
+  color: #475569;
+}
+
 .yc-chat-composer {
   display: flex;
   align-items: flex-end;

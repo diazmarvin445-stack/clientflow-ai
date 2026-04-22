@@ -391,6 +391,7 @@ function renderRows() {
   rows.forEach((row) => {
     const tr = document.createElement("tr");
     const dateLabel = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
+    const isDelivered = String(row.status || "").toLowerCase() === "entregado";
     tr.innerHTML = `
       <td><input type="checkbox" aria-label="Seleccionar pedido" /></td>
       <td><strong>${row.clientName || "—"}</strong><br><span class="dash-table-muted">${row.clientPhone || "—"}</span></td>
@@ -400,7 +401,16 @@ function renderRows() {
       <td>${sourceLabel(row.source)}</td>
       <td>${dateLabel}</td>
       <td>${row.notes || "—"}</td>
-      <td><button class="dash-icon-btn" data-edit="${row.id}">✏️</button> <button class="dash-icon-btn" data-del="${row.id}">🗑️</button></td>
+      <td>
+        <button class="dash-icon-btn" data-edit="${row.id}" title="Editar pedido">✏️</button>
+        <button
+          class="dash-icon-btn"
+          data-quick-deliver="${row.id}"
+          title="Marcar como entregado y cobrado"
+          ${isDelivered ? "disabled aria-disabled='true'" : ""}
+        >✅</button>
+        <button class="dash-icon-btn" data-del="${row.id}" title="Eliminar pedido">🗑️</button>
+      </td>
     `;
     tr.addEventListener("click", (e) => {
       if (e.target.closest("button")) return;
@@ -420,6 +430,15 @@ function renderRows() {
   tbody.querySelectorAll("[data-del]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       await deleteOrder(btn.getAttribute("data-del"));
+    });
+  });
+  tbody.querySelectorAll("[data-quick-deliver]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const orderId = btn.getAttribute("data-quick-deliver");
+      if (!orderId) return;
+      const ok = window.confirm("¿Marcar este pedido como entregado y cobrado?");
+      if (!ok) return;
+      await markOrderDelivered(orderId);
     });
   });
 }

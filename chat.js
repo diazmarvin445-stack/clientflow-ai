@@ -636,7 +636,7 @@ function appendAssistantBubble(content, opts = {}) {
   const stream = document.getElementById("yc-chat-stream");
   if (!stream) return empty;
 
-  const { displayText, orderPayload, actionPayload } = stripMayaPanelMetadata(content);
+  const { displayText, orderPayload, actionPayload, ambiguityPayload } = stripMayaPanelMetadata(content);
   const cleanText = cleanMayaMessage(displayText);
 
   const wrap = document.createElement("div");
@@ -661,6 +661,36 @@ function appendAssistantBubble(content, opts = {}) {
     warn.setAttribute("role", "status");
     warn.textContent = "⚠️ Los números no coinciden. Pedile a Maya que te vuelva a cotizar.";
     col.appendChild(warn);
+  }
+
+  if (!opts.isWelcome && ambiguityPayload && Array.isArray(ambiguityPayload.candidates)) {
+    const cards = document.createElement("div");
+    cards.className = "yc-ambiguity-cards";
+    for (const cand of ambiguityPayload.candidates.slice(0, 6)) {
+      if (!cand || typeof cand !== "object") continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "yc-ambiguity-card";
+      const clientName = String(cand.clientName || "Cliente");
+      const product = String(cand.product || "Pedido");
+      const total = Number(cand.total || 0);
+      const status = String(cand.status || "nuevo");
+      const date = cand.date ? new Date(String(cand.date)) : null;
+      const dateLabel = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString("es") : "sin fecha";
+      btn.innerHTML = `<span class="yc-ambiguity-card__title">${clientName}</span><span class="yc-ambiguity-card__meta">${product}</span><span class="yc-ambiguity-card__meta">Total: $${total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${status} · ${dateLabel}</span>`;
+      const orderId = String(cand.id || "").trim();
+      btn.addEventListener("click", () => {
+        if (!orderId) return;
+        const followUp = `Selecciono el pedido orderId ${orderId}. Continúa con la acción solicitada.`;
+        const input = document.getElementById("yc-chat-input");
+        if (input && "value" in input) {
+          input.value = followUp;
+        }
+        void sendToClaude();
+      });
+      cards.appendChild(btn);
+    }
+    if (cards.childElementCount > 0) col.appendChild(cards);
   }
 
   if (!opts.isWelcome) {
@@ -955,6 +985,7 @@ function conversationSnippet(maxLen = 4000) {
 const MAYA_ORDER_PREFIX = "MAYA_ORDER_JSON:";
 const MAYA_ACTION_PREFIX = "MAYA_ACTION_JSON:";
 const MAYA_HANDOFF_PREFIX = "MAYA_HANDOFF_JSON:";
+const MAYA_AMBIGUITY_PREFIX = "MAYA_AMBIGUITY_JSON:";
 
 /**
  * Extrae un bloque JSON tras `prefix` y lo elimina del texto (llaves anidadas).
@@ -999,12 +1030,13 @@ function extractAndRemoveMayaJsonLine(text, prefix) {
 /**
  * Quita MAYA_ORDER_JSON y MAYA_ACTION_JSON del mensaje (no deben verse en el chat).
  * @param {string} raw
- * @returns {{ displayText: string, orderPayload: Record<string, unknown> | null, actionPayload: { action?: string, data?: Record<string, unknown> } | null }}
+ * @returns {{ displayText: string, orderPayload: Record<string, unknown> | null, actionPayload: { action?: string, data?: Record<string, unknown> } | null, ambiguityPayload: { action?: string, followUpQuestion?: string, candidates?: Record<string, unknown>[] } | null }}
  */
 function stripMayaPanelMetadata(raw) {
   let t = String(raw ?? "").trim();
   let orderPayload = null;
   let actionPayload = null;
+  let ambiguityPayload = null;
   while (true) {
     const rOrder = extractAndRemoveMayaJsonLine(t, MAYA_ORDER_PREFIX);
     if (!rOrder.payload) break;
@@ -1024,7 +1056,22 @@ function stripMayaPanelMetadata(raw) {
     if (!rHandoff.payload) break;
     t = rHandoff.text;
   }
-  return { displayText: t, orderPayload, actionPayload };
+  while (true) {
+    const rAmb = extractAndRemoveMayaJsonLine(t, MAYA_AMBIGUITY_PREFIX);
+    if (!rAmb.payload) break;
+    t = rAmb.text;
+    if (
+      !ambiguityPayload &&
+      rAmb.payload &&
+      typeof rAmb.payload === "object" &&
+      Array.isArray(rAmb.payload.candidates)
+    ) {
+      ambiguityPayload = /** @type {{ action?: string, followUpQuestion?: string, candidates?: Record<string, unknown>[] }} */ (
+        rAmb.payload
+      );
+    }
+  }
+  return { displayText: t, orderPayload, actionPayload, ambiguityPayload };
 }
 
 /**

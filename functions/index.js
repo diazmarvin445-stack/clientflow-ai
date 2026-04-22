@@ -12,6 +12,12 @@ import {
   computeValidatedMayaCombinedOrder,
   YOURCOLOR_BUSINESS,
 } from "./yourcolor-config.js";
+import { hasMayaActionSchema } from "./maya-action-schemas.js";
+import { validateAndNormalizeMayaAction } from "./maya-action-validator.js";
+import { resolveMayaActionEntities } from "./maya-entity-resolver.js";
+import { executeMayaAction } from "./maya-action-executor.js";
+import { buildMayaActionSuccessMessage } from "./maya-response-builder.js";
+import { buildMayaContextSnapshot } from "./maya-context-snapshot.js";
 
 /** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
@@ -1059,6 +1065,7 @@ function prepareMayaAnthropicPayload(basePrompt, firebaseContextRaw, messagesRaw
   let fc = shrinkFirebaseContextInitial(
     firebaseContextRaw && typeof firebaseContextRaw === "object" ? firebaseContextRaw : {},
   );
+  fc.operatorSnapshot = buildMayaContextSnapshot(fc);
   let system = buildMayaSystemString(basePrompt, fc);
 
   for (let i = 0; i < 80 && mayaAnthropicInputTokenEstimate(system, messages) > MAYA_TARGET_TOTAL_INPUT_TOKENS; i++) {
@@ -1126,6 +1133,7 @@ function logMayaCost(usage, modelLabel) {
 }
 
 const MAYA_PANEL_ACTION_PREFIX = "MAYA_ACTION_JSON:";
+const MAYA_AMBIGUITY_PREFIX = "MAYA_AMBIGUITY_JSON:";
 const MAYA_PANEL_ACTION_ALIASES = {
   save_client: "create_client",
   schedule_delivery: "create_calendar_event",
@@ -2412,6 +2420,90 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
       const actionRaw = typeof payload.action === "string" ? payload.action.trim() : "";
       const action = MAYA_PANEL_ACTION_ALIASES[actionRaw] || actionRaw;
       lastAction = action;
+      const mergedActionData = mergeMayaActionData(payload);
+      console.log("[MAYA_ACTION]", {
+        stage: "received",
+        action,
+        raw_payload: payload,
+        merged_payload: mergedActionData,
+      });
+
+      if (hasMayaActionSchema(action)) {
+        const validation = validateAndNormalizeMayaAction(action, mergedActionData);
+        if (!validation.ok || !validation.normalized) {
+          console.log("[MAYA_ACTION]", {
+            stage: "validation_error",
+            action,
+            error: validation.error,
+          });
+          throw new Error(validation.error || "Acción inválida.");
+        }
+        const resolution = await resolveMayaActionEntities(db, businessId, action, validation.normalized);
+        if (!resolution.ok) {
+          console.log("[MAYA_ACTION]", {
+            stage: "resolve_error",
+            action,
+            normalized_payload: validation.normalized,
+            error: resolution.error,
+            resolved: resolution.resolved || null,
+            meta: resolution.meta || null,
+          });
+          if (resolution.meta?.ambiguityStatus === "ambiguous") {
+            const err = new Error(resolution.error || "Acción ambigua.");
+            err.mayaAmbiguity = {
+              action,
+              followUpQuestion:
+                resolution.resolved?.followUpQuestion ||
+                "Encontré varios pedidos posibles. ¿Cuál deseas usar?",
+              candidates: Array.isArray(resolution.resolved?.candidates) ? resolution.resolved.candidates : [],
+            };
+            throw err;
+          }
+          const followUp = resolution.resolved?.followUpQuestion ? `\n${resolution.resolved.followUpQuestion}` : "";
+          throw new Error((resolution.error || "No se pudieron resolver entidades.") + followUp);
+        }
+        const exec = await executeMayaAction({
+          db,
+          businessId,
+          action,
+          normalizedPayload: validation.normalized,
+          resolved: { ...(resolution.resolved || {}), meta: resolution.meta || null },
+          handlers: {
+            processNewOrder,
+            finalizeOrderDeliveryAndProfit,
+            mayaFinanceAddMovement,
+            FieldValue,
+          },
+        });
+        if (!exec.ok) {
+          console.log("[MAYA_ACTION]", {
+            stage: "execute_error",
+            action,
+            normalized_payload: validation.normalized,
+            resolved: resolution.resolved || {},
+            meta: resolution.meta || null,
+            result: exec.result,
+          });
+          throw new Error("No se pudo ejecutar la acción.");
+        }
+        const successMsg = buildMayaActionSuccessMessage(
+          action,
+          validation.normalized,
+          exec.result,
+          resolution.meta || null,
+        );
+        if (successMsg) extraBlocks.push(successMsg);
+        console.log("[MAYA_ACTION]", {
+          stage: "executed",
+          action,
+          normalized_payload: validation.normalized,
+          resolved: resolution.resolved || {},
+          meta: resolution.meta || null,
+          result: exec.result,
+        });
+        continue;
+      }
+
       if (!MAYA_PANEL_EXECUTABLE_ACTIONS.has(action)) continue;
       if (action === "get_balance") {
         const data = mergeFinancePayload(payload);
@@ -2555,6 +2647,18 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
+    const ambiguityPayload =
+      e && typeof e === "object" && e.mayaAmbiguity && typeof e.mayaAmbiguity === "object"
+        ? e.mayaAmbiguity
+        : null;
+    if (ambiguityPayload) {
+      const base = visibleText.trim();
+      const followUp =
+        typeof ambiguityPayload.followUpQuestion === "string" && ambiguityPayload.followUpQuestion.trim()
+          ? ambiguityPayload.followUpQuestion.trim()
+          : "Encontré varios pedidos posibles. ¿Cuál deseas usar?";
+      return `${base ? `${base}\n\n` : ""}${followUp}\n${MAYA_AMBIGUITY_PREFIX}${JSON.stringify(ambiguityPayload)}`.trim();
+    }
     if (lastAction === "create_order") {
       return `No pude guardar el pedido: ${msg}\n¿Me podés confirmar el monto total?`;
     }
