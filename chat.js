@@ -1521,6 +1521,7 @@ function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
     void clearChatHistory();
+    console.log("[CHAT_CLEARED] Por inactividad de 1 minuto");
   }, INACTIVITY_MS);
 }
 
@@ -2245,7 +2246,6 @@ async function bootWithUser(user) {
     }
 
     mayaInitControlCenter(business);
-    await clearChatHistory();
 
     const restoredFromTab = tryRestoreChatFromSessionStorage(business.id, user.uid);
     let hadHistory = restoredFromTab;
@@ -2279,9 +2279,6 @@ async function bootWithUser(user) {
       window.__cfMayaPagehideWired = true;
       window.addEventListener("pagehide", () => {
         persistChatToSessionStorage();
-      });
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "hidden") persistChatToSessionStorage();
       });
     }
     document.getElementById("yc-chat-input")?.focus();
@@ -2342,11 +2339,7 @@ function boot() {
 // Reiniciar timer con cada actividad
 document.addEventListener("click", resetInactivityTimer);
 document.addEventListener("keypress", resetInactivityTimer);
-window.addEventListener("beforeunload", () => {
-  void clearChatHistory();
-});
 window.addEventListener("DOMContentLoaded", () => {
-  void clearChatHistory();
   resetInactivityTimer();
 });
 
