@@ -112,25 +112,7 @@ export function initSidebar() {
   const menuBtn = document.getElementById("dash-menu-btn");
   const nav = sidebar?.querySelector(".dash-nav");
 
-  if (nav && !nav.querySelector('a[href="clientes.html"]')) {
-    const pedidosLink = nav.querySelector('a[href="pedidos.html"]');
-    const clientesLink = document.createElement("a");
-    clientesLink.href = "clientes.html";
-    clientesLink.className = "dash-nav-link";
-    clientesLink.innerHTML =
-      '<span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>Clientes';
-    if (window.location.pathname.endsWith("/clientes.html") || window.location.pathname.endsWith("clientes.html")) {
-      clientesLink.classList.add("is-active");
-      clientesLink.setAttribute("aria-current", "page");
-    }
-    if (pedidosLink && pedidosLink.nextSibling) {
-      nav.insertBefore(clientesLink, pedidosLink.nextSibling);
-    } else if (pedidosLink) {
-      nav.appendChild(clientesLink);
-    } else {
-      nav.prepend(clientesLink);
-    }
-  }
+  ensureClientesNavLink();
 
   function openMenu() {
     if (!sidebar || !menuBtn) return;
@@ -824,6 +806,8 @@ function renderCategoryNav(items) {
     }
     nav.appendChild(a);
   }
+  ensureClientesNavLink();
+  applyActiveNavLink(nav);
 }
 
 /**
@@ -873,6 +857,33 @@ export function ensureChatNavLink() {
     } else {
       nav.insertBefore(chatLink, nav.firstChild);
     }
+  }
+  applyActiveNavLink(nav);
+}
+
+/**
+ * Inserta «Clientes» justo debajo de «Pedidos» si no existe.
+ * Debe funcionar tanto para nav HTML estático como para nav renderizado por categoría.
+ */
+export function ensureClientesNavLink() {
+  const nav = document.querySelector("#dash-sidebar .dash-nav");
+  if (!nav) return;
+  let clientesLink = nav.querySelector('a[href="clientes.html"]');
+  if (!clientesLink) {
+    clientesLink = document.createElement("a");
+    clientesLink.href = "clientes.html";
+    clientesLink.className = "dash-nav-link";
+    clientesLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
+        Clientes`;
+  }
+  const pedidosLink = nav.querySelector('a[href="pedidos.html"]');
+  const afterPedidos = pedidosLink?.nextElementSibling;
+  if (pedidosLink) {
+    if (afterPedidos !== clientesLink) {
+      nav.insertBefore(clientesLink, afterPedidos || null);
+    }
+  } else if (!clientesLink.parentElement) {
+    nav.prepend(clientesLink);
   }
   applyActiveNavLink(nav);
 }
