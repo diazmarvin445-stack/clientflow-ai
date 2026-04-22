@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { initializeApp, getApps } from "firebase-admin/app";
 import { FieldValue, getFirestore, Timestamp } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import cors from "cors";
 import {
@@ -206,6 +207,16 @@ function conversationDocIdFromWhatsAppFrom(from) {
  */
 async function recordWhatsAppCustomerInbound(db, businessId, from, text) {
   const docId = conversationDocIdFromWhatsAppFrom(from);
+  try {
+    await syncClientRecord(db, businessId, {
+      clientName: "",
+      clientPhone: docId === "unknown" ? String(from) : docId,
+      source: "whatsapp",
+      markContact: true,
+    });
+  } catch (e) {
+    console.warn("[whatsappWebhook] syncClientRecord inbound", e);
+  }
   const convRef = db.collection("businesses").doc(businessId).collection("conversations").doc(docId);
   const snap = await convRef.get();
   const now = FieldValue.serverTimestamp();
@@ -301,10 +312,50 @@ function normalizeOrderStatus(raw) {
   return "nuevo";
 }
 
-async function findOrCreateClient(db, businessId, payload) {
+function parseDateLike(value) {
+  if (!value) return null;
+  if (typeof value?.toDate === "function") {
+    try {
+      const d = value.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function daysSinceDate(value, now = new Date()) {
+  const d = parseDateLike(value);
+  if (!d) return null;
+  return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function computeClientLifecycleStatus(lastContactAt, lastOrderAt, now = new Date()) {
+  const dc = daysSinceDate(lastContactAt, now);
+  const doo = daysSinceDate(lastOrderAt, now);
+  const best = [dc, doo].filter((x) => Number.isFinite(x)).sort((a, b) => a - b)[0];
+  if (!Number.isFinite(best)) return { status: "activo", inactivityDays: 0 };
+  return {
+    status: best >= 90 ? "inactivo" : "activo",
+    inactivityDays: best,
+  };
+}
+
+async function syncClientRecord(db, businessId, payload) {
   const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
   const name = asText(payload.clientName, "Cliente");
   const phone = normalizePhoneDigits(payload.clientPhone);
+  const email = asText(payload.email);
+  const source = asText(payload.source, "manual");
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const orderId = asText(payload.orderId);
+  const orderSource = asText(payload.orderSource || source, source);
+  const bumpOrderStats = payload.bumpOrderStats === true;
+  const markContact = payload.markContact !== false;
+  /** @type {{ id: string, data: Record<string, unknown> } | null} */
   let existing = null;
 
   if (phone) {
@@ -315,26 +366,62 @@ async function findOrCreateClient(db, businessId, payload) {
     }
   }
 
+  if (!existing && name) {
+    const byName = await clientsCol.where("name", "==", name).limit(1).get();
+    if (!byName.empty) {
+      const docSnap = byName.docs[0];
+      existing = { id: docSnap.id, data: docSnap.data() || {} };
+    }
+  }
+
+  const buildPatch = (prev = {}) => {
+    const nextLastContactAt = markContact ? nowIso : prev.lastContactAt ?? null;
+    const nextLastOrderAt = orderId ? nowIso : prev.lastOrderAt ?? null;
+    const life = computeClientLifecycleStatus(nextLastContactAt, nextLastOrderAt, now);
+    const patch = {
+      fullName: name || asText(prev.fullName, "Cliente"),
+      name: name || asText(prev.name, "Cliente"),
+      phone: phone || asText(prev.phone),
+      email: email || asText(prev.email),
+      source: source || asText(prev.source, "manual"),
+      status: life.status,
+      tags: Array.isArray(prev.tags) ? prev.tags : [],
+      notes: typeof prev.notes === "string" ? prev.notes : "",
+      inactiveDays: life.inactivityDays,
+      inactiveSince30: life.inactivityDays >= 30,
+      inactiveSince60: life.inactivityDays >= 60,
+      inactiveSince90: life.inactivityDays >= 90,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (markContact) patch.lastContactAt = nowIso;
+    if (orderId) {
+      patch.lastOrderId = orderId;
+      patch.lastOrderSource = orderSource || "manual";
+      patch.lastOrderAt = nowIso;
+    }
+    return patch;
+  };
+
   if (existing) {
-    await clientsCol.doc(existing.id).set(
-      {
-        fullName: name || existing.data.fullName || "Cliente",
-        name: name || existing.data.name || "Cliente",
-        phone: phone || existing.data.phone || "",
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    const patch = buildPatch(existing.data);
+    if (bumpOrderStats && orderId) {
+      const prevTotalOrders = Number(existing.data.totalOrders) || 0;
+      const sameOrder = asText(existing.data.lastOrderId) === orderId;
+      patch.totalOrders = sameOrder ? prevTotalOrders : prevTotalOrders + 1;
+      patch.totalSpent = Number(existing.data.totalSpent) || 0;
+    }
+    await clientsCol.doc(existing.id).set(patch, { merge: true });
     return { id: existing.id };
   }
 
-  const created = await clientsCol.add({
-    fullName: name || "Cliente",
-    name: name || "Cliente",
-    phone,
-    source: payload.source || "manual",
-    createdAt: FieldValue.serverTimestamp(),
-  });
+  const createdPatch = buildPatch({});
+  createdPatch.createdAt = FieldValue.serverTimestamp();
+  createdPatch.totalOrders = bumpOrderStats && orderId ? 1 : 0;
+  createdPatch.totalSpent = 0;
+  createdPatch.lastOrderId = orderId || "";
+  createdPatch.lastOrderSource = orderId ? orderSource || "manual" : "";
+  createdPatch.lastOrderAt = orderId ? nowIso : null;
+  const created = await clientsCol.add(createdPatch);
   return { id: created.id };
 }
 
@@ -360,10 +447,12 @@ async function processNewOrder(db, businessId, rawOrder) {
     deliveryDate = deliveryDateAfterBusinessDays(new Date(), 12);
   }
 
-  const client = await findOrCreateClient(db, businessId, {
+  const client = await syncClientRecord(db, businessId, {
     clientName,
     clientPhone,
     source,
+    email: rawOrder.email,
+    markContact: true,
   });
 
   const expensesInit = Math.max(0, Number(rawOrder.expenses) || 0);
@@ -412,6 +501,18 @@ async function processNewOrder(db, businessId, rawOrder) {
     },
     { merge: true },
   );
+
+  await syncClientRecord(db, businessId, {
+    clientName,
+    clientPhone,
+    email: rawOrder.email,
+    source,
+    orderId: orderRef.id,
+    orderSource: source,
+    orderTotal: amount,
+    bumpOrderStats: true,
+    markContact: true,
+  });
 
   return {
     orderId: orderRef.id,
@@ -689,6 +790,12 @@ function shrinkFirebaseContextInitial(fc) {
       id: row?.id,
       name: asText(row?.name ?? row?.clientName ?? row?.nombre),
       phone: asText(row?.phone ?? row?.phoneNumber ?? row?.telefono),
+      status: asText(row?.status, "activo"),
+      totalOrders: Number(row?.totalOrders || 0) || 0,
+      lastOrderAt: row?.lastOrderAt || null,
+      lastContactAt: row?.lastContactAt || null,
+      lastOrderId: asText(row?.lastOrderId),
+      interactionSummary: `estado:${asText(row?.status, "activo")}; pedidos:${Number(row?.totalOrders || 0) || 0}; ultimoPedido:${asText(row?.lastOrderAt)}; ultimoContacto:${asText(row?.lastContactAt)}`,
     }));
   }
 
@@ -2255,6 +2362,33 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   }
 
   await orderRef.set(patch, { merge: true });
+
+  const clientRefId = asText(order.linkedClientId || order.clientId);
+  if (clientRefId && amount > 0) {
+    try {
+      const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(clientRefId);
+      const clientSnap = await clientRef.get();
+      if (clientSnap.exists) {
+        const data = clientSnap.data() || {};
+        const prevSpent = Number(data.totalSpent) || 0;
+        const life = computeClientLifecycleStatus(data.lastContactAt || null, new Date().toISOString(), new Date());
+        await clientRef.set(
+          {
+            totalSpent: prevSpent + amount,
+            status: life.status,
+            inactiveDays: life.inactivityDays,
+            inactiveSince30: life.inactivityDays >= 30,
+            inactiveSince60: life.inactivityDays >= 60,
+            inactiveSince90: life.inactivityDays >= 90,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+    } catch (e) {
+      console.warn("[COMPLETE_ORDER] client spend sync", { orderId, error: String(e?.message || e) });
+    }
+  }
   console.log("[COMPLETE_ORDER]", {
     orderId,
     clientName,
@@ -2308,11 +2442,18 @@ async function mayaSetOrderExpenses(db, businessId, payload) {
   const data = mergeMayaActionData(payload);
   const exp = Number(data.expenses);
   if (!Number.isFinite(exp) || exp < 0) throw new Error("Monto de gastos inválido.");
-  const { ref } = await mayaResolveOrderRef(db, businessId, payload);
+  const { ref, snap } = await mayaResolveOrderRef(db, businessId, payload);
+  const order = snap.data() || {};
   await ref.set(
     { expenses: Math.max(0, exp), updatedAt: FieldValue.serverTimestamp() },
     { merge: true },
   );
+  await syncClientRecord(db, businessId, {
+    clientName: asText(order.clientName, "Cliente"),
+    clientPhone: asText(order.clientPhone),
+    source: asText(order.source, "maya-internal"),
+    markContact: true,
+  });
 }
 
 /**
@@ -2323,6 +2464,12 @@ async function mayaSetOrderExpenses(db, businessId, payload) {
 async function mayaMarkOrderDelivered(db, businessId, payload) {
   const { ref, snap } = await mayaResolveOrderRef(db, businessId, payload);
   const order = snap.data() || {};
+  await syncClientRecord(db, businessId, {
+    clientName: asText(order.clientName, "Cliente"),
+    clientPhone: asText(order.clientPhone),
+    source: asText(order.source, "maya-internal"),
+    markContact: true,
+  });
   return finalizeOrderDeliveryAndProfit(db, businessId, ref, order);
 }
 
@@ -3626,26 +3773,13 @@ export const whatsappWebhook = onRequest(
               updatedAt: FieldValue.serverTimestamp(),
             });
 
-            const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
             const calCol = db.collection("businesses").doc(businessId).collection("calendar");
-
-            const dupClient = await clientsCol.where("sourceLeadId", "==", leadId).limit(1).get();
-            if (dupClient.empty) {
-              await clientsCol.add({
-                fullName: customerName,
-                name: customerName,
-                phone: phoneClean,
-                product: productLabel,
-                quantity: Number.isFinite(qtyLead) ? qtyLead : 0,
-                total: Number.isFinite(total) ? total : 0,
-                deposit: Number.isFinite(depositPaid) ? depositPaid : 0,
-                deliveryDate: deliveryTs,
-                status: "in_production",
-                sourceLeadId: leadId,
-                source: "whatsapp-yourcolor-deposit",
-                createdAt: FieldValue.serverTimestamp(),
-              });
-            }
+            await syncClientRecord(db, businessId, {
+              clientName: customerName,
+              clientPhone: phoneClean,
+              source: "whatsapp",
+              markContact: true,
+            });
 
             const dupCal = await calCol.where("sourceLeadId", "==", leadId).limit(1).get();
             if (dupCal.empty) {
@@ -3766,6 +3900,59 @@ export const whatsappWebhook = onRequest(
 
     const graphSent = await sendWhatsAppViaMetaGraph(metaToken, from, outbound);
     res.status(200).type("application/json").send({ ok: true, sent: graphSent });
+  },
+);
+
+export const clientsLifecycleDaily = onSchedule(
+  {
+    schedule: "0 3 * * *",
+    timeZone: "America/Guayaquil",
+    memory: "256MiB",
+  },
+  async () => {
+    const db = getAdminDb();
+    const businessesSnap = await db.collection("businesses").get();
+    let totalScanned = 0;
+    let totalUpdated = 0;
+    const now = new Date();
+
+    for (const businessDoc of businessesSnap.docs) {
+      const clientsSnap = await db.collection("businesses").doc(businessDoc.id).collection("clients").get();
+      for (const clientDoc of clientsSnap.docs) {
+        totalScanned += 1;
+        const row = clientDoc.data() || {};
+        const life = computeClientLifecycleStatus(row.lastContactAt || null, row.lastOrderAt || null, now);
+        const currentStatus = asText(row.status, "activo");
+        const currentInactiveDays = Number(row.inactiveDays);
+        const current30 = row.inactiveSince30 === true;
+        const current60 = row.inactiveSince60 === true;
+        const current90 = row.inactiveSince90 === true;
+        const next30 = life.inactivityDays >= 30;
+        const next60 = life.inactivityDays >= 60;
+        const next90 = life.inactivityDays >= 90;
+        if (
+          currentStatus !== life.status ||
+          currentInactiveDays !== life.inactivityDays ||
+          current30 !== next30 ||
+          current60 !== next60 ||
+          current90 !== next90
+        ) {
+          await clientDoc.ref.set(
+            {
+              status: life.status,
+              inactiveDays: life.inactivityDays,
+              inactiveSince30: next30,
+              inactiveSince60: next60,
+              inactiveSince90: next90,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+          totalUpdated += 1;
+        }
+      }
+    }
+    console.log("[CLIENT_LIFECYCLE_DAILY]", { totalScanned, totalUpdated });
   },
 );
 

@@ -110,6 +110,27 @@ export function initSidebar() {
   const sidebar = document.getElementById("dash-sidebar");
   const overlay = document.getElementById("dash-sidebar-overlay");
   const menuBtn = document.getElementById("dash-menu-btn");
+  const nav = sidebar?.querySelector(".dash-nav");
+
+  if (nav && !nav.querySelector('a[href="clientes.html"]')) {
+    const pedidosLink = nav.querySelector('a[href="pedidos.html"]');
+    const clientesLink = document.createElement("a");
+    clientesLink.href = "clientes.html";
+    clientesLink.className = "dash-nav-link";
+    clientesLink.innerHTML =
+      '<span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>Clientes';
+    if (window.location.pathname.endsWith("/clientes.html") || window.location.pathname.endsWith("clientes.html")) {
+      clientesLink.classList.add("is-active");
+      clientesLink.setAttribute("aria-current", "page");
+    }
+    if (pedidosLink && pedidosLink.nextSibling) {
+      nav.insertBefore(clientesLink, pedidosLink.nextSibling);
+    } else if (pedidosLink) {
+      nav.appendChild(clientesLink);
+    } else {
+      nav.prepend(clientesLink);
+    }
+  }
 
   function openMenu() {
     if (!sidebar || !menuBtn) return;
@@ -135,7 +156,6 @@ export function initSidebar() {
   if (menuBtn) menuBtn.addEventListener("click", toggleMenu);
   if (overlay) overlay.addEventListener("click", closeMenu);
 
-  const nav = sidebar?.querySelector(".dash-nav");
   if (nav && !nav.dataset.cfNavCloseDelegation) {
     nav.dataset.cfNavCloseDelegation = "1";
     nav.addEventListener("click", (e) => {

@@ -1,19 +1,11 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  updateDoc,
-} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import {
   resolveBusinessForUser,
   fetchClientsForBusiness,
   formatBusinessMeta,
-  formatLeadRelativeTimeEs,
   formatShortDate,
   initialsFromName,
-  SERVICE_LABELS,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
@@ -40,25 +32,6 @@ function renderHeader(business) {
   if (nameEl) nameEl.textContent = displayName;
   if (metaEl) metaEl.textContent = metaLine;
   if (av) av.textContent = initialsFromName(displayName);
-}
-
-function serviceLabel(raw) {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  if (!s) return "—";
-  return SERVICE_LABELS[s] || s;
-}
-
-function formatMoney(raw) {
-  const v = Number(raw);
-  if (!Number.isFinite(v) || v <= 0) return null;
-  return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-}
-
-function telHref(phone) {
-  const s = typeof phone === "string" ? phone.trim() : "";
-  if (!s) return null;
-  const cleaned = s.replace(/[^\d+]/g, "");
-  return cleaned ? `tel:${cleaned}` : null;
 }
 
 function setMetaLine(count) {
@@ -102,10 +75,6 @@ function clientMatchesQuery(client, qRaw) {
   const hay = [
     client.fullName,
     client.phone,
-    client.address,
-    client.primaryService,
-    serviceLabel(client.primaryService),
-    client.notes,
   ]
     .filter(Boolean)
     .join(" ")
@@ -127,9 +96,47 @@ function renderClientList(root, businessId, list) {
     renderEmpty(root);
     return;
   }
-  list.forEach((c) => {
-    root.appendChild(buildClientCard(businessId, c));
-  });
+  const wrap = document.createElement("div");
+  wrap.className = "dash-table-wrap";
+  const table = document.createElement("table");
+  table.className = "dash-table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Teléfono</th>
+        <th>Último pedido</th>
+        <th>Último contacto</th>
+        <th>Total pedidos</th>
+        <th>Estado</th>
+        <th>Fuente</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector("tbody");
+  for (const c of list) {
+    const tr = document.createElement("tr");
+    const fullName = (typeof c.fullName === "string" && c.fullName.trim()) || c.name || "Sin nombre";
+    const phoneRaw = typeof c.phone === "string" ? c.phone.trim() : "—";
+    const lastOrderAt = c.lastOrderAt ? formatShortDate(c.lastOrderAt) : "—";
+    const lastContactAt = c.lastContactAt ? formatShortDate(c.lastContactAt) : "—";
+    const totalOrders = Number(c.totalOrders || 0) || 0;
+    const status = (typeof c.status === "string" && c.status.trim()) || "activo";
+    const source = (typeof c.source === "string" && c.source.trim()) || "manual";
+    tr.innerHTML = `
+      <td><strong>${fullName}</strong></td>
+      <td>${phoneRaw}</td>
+      <td>${lastOrderAt}</td>
+      <td>${lastContactAt}</td>
+      <td>${totalOrders}</td>
+      <td>${status}</td>
+      <td>${source}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  wrap.appendChild(table);
+  root.appendChild(wrap);
 }
 
 function applySearch(businessId) {
@@ -147,205 +154,6 @@ function applySearch(businessId) {
     return;
   }
   renderClientList(root, businessId, filtered);
-}
-
-function metaRow(label, valueNode) {
-  const row = document.createElement("div");
-  row.className = "cli-meta-row";
-  const lab = document.createElement("span");
-  lab.className = "cli-meta-label";
-  lab.textContent = label;
-  const val = document.createElement("div");
-  val.className = "cli-meta-value";
-  val.appendChild(valueNode);
-  row.append(lab, val);
-  return row;
-}
-
-function textNode(text) {
-  const s = document.createElement("span");
-  s.textContent = text;
-  return s;
-}
-
-function buildClientCard(businessId, client) {
-  const id = client.id;
-  const fullName =
-    (typeof client.fullName === "string" && client.fullName.trim()) || "Sin nombre";
-  const phoneRaw = typeof client.phone === "string" ? client.phone.trim() : "";
-  const address = (typeof client.address === "string" && client.address.trim()) || "—";
-  const relCreated = formatLeadRelativeTimeEs(client.createdAt);
-  const absCreated = formatShortDate(client.createdAt);
-  const lastRaw = client.lastServiceDate;
-  const hasLast = lastRaw != null;
-  const relLast = hasLast ? formatLeadRelativeTimeEs(lastRaw) : "";
-  const absLast = hasLast ? formatShortDate(lastRaw) : "";
-  const totalLine = formatMoney(client.totalValue);
-  const notesVal = client.notes != null ? String(client.notes) : "";
-
-  const article = document.createElement("article");
-  article.className = "cli-client-card";
-  article.dataset.clientId = id;
-
-  const top = document.createElement("div");
-  top.className = "cli-client-top";
-
-  const avatar = document.createElement("div");
-  avatar.className = "cli-client-avatar";
-  avatar.setAttribute("aria-hidden", "true");
-  avatar.textContent = initialsFromName(fullName);
-
-  const headText = document.createElement("div");
-  headText.className = "cli-client-head-text";
-
-  const h3 = document.createElement("h3");
-  h3.className = "cli-client-name";
-  h3.textContent = fullName;
-
-  const timeLine = document.createElement("p");
-  timeLine.className = "cli-client-time";
-  timeLine.textContent = `Alta · ${relCreated} · ${absCreated}`;
-
-  headText.append(h3, timeLine);
-
-  const actions = document.createElement("div");
-  actions.className = "cli-client-actions";
-  const delBtn = document.createElement("button");
-  delBtn.type = "button";
-  delBtn.className = "cli-delete-btn";
-  delBtn.textContent = "Eliminar";
-  delBtn.setAttribute("aria-label", `Eliminar cliente ${fullName}`);
-  delBtn.addEventListener("click", async () => {
-    if (
-      !confirm(
-        `¿Eliminar a ${fullName} de tu lista de clientes? Esta acción no se puede deshacer.`,
-      )
-    ) {
-      return;
-    }
-    delBtn.disabled = true;
-    delBtn.setAttribute("aria-busy", "true");
-    try {
-      await deleteDoc(doc(db, "businesses", businessId, "clients", id));
-      allClients = allClients.filter((row) => row.id !== id);
-      setMetaLine(allClients.length);
-      if (cachedBusinessId) applySearch(cachedBusinessId);
-    } catch (err) {
-      console.error(err);
-      alert("No se pudo eliminar el cliente. Inténtalo de nuevo.");
-      delBtn.disabled = false;
-      delBtn.removeAttribute("aria-busy");
-    }
-  });
-  actions.appendChild(delBtn);
-  top.append(avatar, headText, actions);
-
-  const grid = document.createElement("div");
-  grid.className = "cli-meta-grid";
-
-  const phoneNode = document.createElement("span");
-  if (phoneRaw) {
-    const tel = telHref(phoneRaw);
-    if (tel) {
-      const a = document.createElement("a");
-      a.href = tel;
-      a.className = "cli-phone-link";
-      a.textContent = phoneRaw;
-      phoneNode.appendChild(a);
-    } else {
-      phoneNode.textContent = phoneRaw;
-    }
-  } else {
-    phoneNode.textContent = "—";
-  }
-  grid.appendChild(metaRow("Teléfono", phoneNode));
-  grid.appendChild(metaRow("Dirección", textNode(address)));
-  grid.appendChild(metaRow("Servicio principal", textNode(serviceLabel(client.primaryService))));
-
-  if (hasLast) {
-    const lastWrap = document.createElement("span");
-    lastWrap.textContent = `${relLast} · ${absLast}`;
-    grid.appendChild(metaRow("Último servicio", lastWrap));
-  }
-
-  if (totalLine) {
-    grid.appendChild(metaRow("Valor acumulado", textNode(totalLine)));
-  }
-
-  article.append(top, grid);
-
-  if (typeof client.sourceLeadId === "string" && client.sourceLeadId.trim()) {
-    const src = document.createElement("p");
-    src.className = "cli-source-hint";
-    src.textContent = "Origen: solicitud convertida";
-    article.appendChild(src);
-  }
-
-  const details = document.createElement("details");
-  details.className = "cli-notes";
-  if (notesVal.trim().length > 0) details.open = true;
-
-  const summ = document.createElement("summary");
-  summ.className = "cli-notes-summary";
-  summ.textContent = "Notas";
-
-  const notesBody = document.createElement("div");
-  notesBody.className = "cli-notes-body";
-
-  const ta = document.createElement("textarea");
-  ta.className = "cli-notes-input";
-  ta.rows = 4;
-  ta.maxLength = 8000;
-  ta.value = notesVal;
-  ta.setAttribute("aria-label", `Notas de ${fullName}`);
-  ta.placeholder = "Historial de servicios, preferencias, recordatorios…";
-
-  const foot = document.createElement("div");
-  foot.className = "cli-notes-foot";
-
-  const saveBtn = document.createElement("button");
-  saveBtn.type = "button";
-  saveBtn.className = "cli-notes-save dash-quick-btn dash-quick-btn--primary";
-  saveBtn.textContent = "Guardar notas";
-
-  const hint = document.createElement("span");
-  hint.className = "cli-inline-hint";
-  hint.setAttribute("aria-live", "polite");
-  hint.hidden = true;
-
-  foot.append(saveBtn, hint);
-  notesBody.append(ta, foot);
-  details.append(summ, notesBody);
-  article.appendChild(details);
-
-  saveBtn.addEventListener("click", async () => {
-    const text = ta.value;
-    saveBtn.disabled = true;
-    saveBtn.setAttribute("aria-busy", "true");
-    hint.hidden = true;
-    try {
-      await updateDoc(doc(db, "businesses", businessId, "clients", id), {
-        notes: text,
-        updatedAt: serverTimestamp(),
-      });
-      hint.textContent = "Notas guardadas";
-      hint.className = "cli-inline-hint cli-inline-hint--ok";
-      hint.hidden = false;
-      window.setTimeout(() => {
-        hint.hidden = true;
-      }, 2500);
-    } catch (err) {
-      console.error(err);
-      hint.textContent = "No se pudieron guardar las notas.";
-      hint.className = "cli-inline-hint cli-inline-hint--bad";
-      hint.hidden = false;
-    } finally {
-      saveBtn.disabled = false;
-      saveBtn.removeAttribute("aria-busy");
-    }
-  });
-
-  return article;
 }
 
 async function loadClientesForUser(user) {

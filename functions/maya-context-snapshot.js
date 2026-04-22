@@ -31,6 +31,18 @@ export function buildMayaContextSnapshot(firebaseCtx) {
   const delivered = Array.isArray(c.ordersRecentDelivered) ? c.ordersRecentDelivered : [];
   const finance = Array.isArray(c.financeRecent) ? c.financeRecent : [];
   const clients = Array.isArray(c.clients) ? c.clients : [];
+  const clientsRecent = clients.slice(0, 5).map((row) => ({
+    id: row?.id || null,
+    name: String(row?.name || row?.fullName || row?.clientName || ""),
+    phone: String(row?.phone || ""),
+    status: String(row?.status || "activo"),
+    totalOrders: Number(row?.totalOrders || 0) || 0,
+    lastOrderAt: toDateMaybe(row?.lastOrderAt)?.toISOString() || null,
+    lastContactAt: toDateMaybe(row?.lastContactAt)?.toISOString() || null,
+    lastOrderId: String(row?.lastOrderId || ""),
+    interactionSummary: String(row?.interactionSummary || ""),
+  }));
+  const returningClients = clientsRecent.filter((cRow) => (Number(cRow.totalOrders) || 0) > 1).slice(0, 3);
 
   const openOrders = orders
     .filter((o) => {
@@ -55,6 +67,8 @@ export function buildMayaContextSnapshot(firebaseCtx) {
   return {
     openOrders,
     deliveredOrders,
+    clientsRecent,
+    returningClients,
     pendingBalance,
     financeRecent,
     linkage: {
