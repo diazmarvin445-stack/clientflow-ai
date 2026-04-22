@@ -2153,8 +2153,8 @@ async function mayaFinanceDelete(db, businessId, payload) {
 }
 
 /**
- * Cierra un pedido como entregado: anula el depósito retenido en finance, registra un único ingreso real
- * (`status: cobrado`) por el total del pedido; `netProfit` queda en el documento del pedido.
+ * Cierra un pedido como entregado: anula el depósito retenido en finance, registra ingreso real por el total
+ * y también registra gasto de materiales si `expenses > 0`; `netProfit` queda en el documento del pedido.
  * Idempotente si `deliverySettled` ya es true.
  * @param {import("firebase-admin/firestore").Firestore} db
  * @param {string} businessId
@@ -2221,6 +2221,23 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
     patch.linkedCobroTotalFinanceId = finRef.id;
   }
 
+  if (expenses > 0) {
+    const finExpenseRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+      type: "expense",
+      status: "cobrado",
+      amount: expenses,
+      category: "materiales",
+      description: `Gastos materiales: ${product} - ${clientName}`,
+      clientId: linkedClientId || null,
+      orderId,
+      linkedOrderId: orderId,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: "marvin",
+      date: Timestamp.fromDate(new Date()),
+    });
+    patch.linkedExpenseFinanceId = finExpenseRef.id;
+  }
+
   const linkedCalendarId = asText(order.linkedCalendarId);
   if (linkedCalendarId) {
     await db
@@ -2238,7 +2255,14 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   }
 
   await orderRef.set(patch, { merge: true });
-  return { already: false, netProfit };
+  console.log("[COMPLETE_ORDER]", {
+    orderId,
+    clientName,
+    totalPaid: amount,
+    expenses,
+    netProfit,
+  });
+  return { already: false, netProfit, expenses, totalPaid: amount };
 }
 
 /**
