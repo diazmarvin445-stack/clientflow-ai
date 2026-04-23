@@ -48,6 +48,7 @@ html {
   scroll-behavior: smooth;
   overflow-x: hidden;
   touch-action: manipulation;
+  height: 100%;
 }
 
 body {
@@ -60,12 +61,15 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
   touch-action: manipulation;
+  min-height: 100%;
 }
 
 /* iOS Safari: evita zoom automático al enfocar campos. */
 input,
-textarea {
-  font-size: 16px !important;
+textarea,
+select,
+button {
+  font-size: 16px;
 }
 
 .yc-chat-input {
@@ -74,14 +78,21 @@ textarea {
 
 /* Altura/scroll estable tipo app sin cambiar el diseño existente. */
 body.dash-body {
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 body.dash-body .dash-shell {
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .page-bg {
@@ -2297,8 +2308,11 @@ body.dash-body .dash-shell {
 .dash-body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   background: var(--bg);
+  overflow: hidden;
 }
 
 body.dash-menu-open {
@@ -2322,7 +2336,7 @@ body.dash-menu-open {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100%;
   background: var(--surface);
   border-right: 1px solid var(--border);
   box-shadow: 4px 0 24px rgba(15, 23, 42, 0.04);
@@ -2490,7 +2504,9 @@ body.dash-menu-open {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .dash-topbar {
@@ -2976,6 +2992,10 @@ body.dash-menu-open {
 
 .dash-main {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dash-page {
@@ -2984,6 +3004,16 @@ body.dash-menu-open {
   padding: 1.35rem 1.5rem 1.75rem;
   width: 100%;
   box-sizing: border-box;
+}
+
+.dash-workspace,
+.dash-workspace-primary,
+.dash-workspace--full,
+.eq-workspace,
+.camp-workspace,
+.fin-workspace,
+.cli-workspace {
+  min-height: 0;
 }
 
 /* Dashboard home — use full width on large screens (not a narrow phone column) */
@@ -2997,6 +3027,69 @@ body.dash-menu-open {
 
 .dash-body--summary .dash-main {
   background: linear-gradient(180deg, rgba(248, 250, 252, 0.65) 0%, var(--bg) 28%);
+}
+
+@media (max-width: 1024px) {
+  .dash-page,
+  .dash-page--summary,
+  .dash-workspace,
+  .camp-workspace {
+    padding: 1rem;
+  }
+
+  .dash-panel,
+  .dash-stat-card,
+  .dash-mini-card {
+    border-radius: 0.8rem;
+  }
+
+  .dash-panel-head {
+    padding: 0.9rem 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .dash-topbar {
+    padding: 0.65rem 0.85rem;
+  }
+
+  .dash-business-name {
+    font-size: 1rem;
+  }
+
+  .dash-business-meta {
+    font-size: 0.75rem;
+  }
+
+  .dash-page,
+  .dash-page--summary,
+  .dash-workspace,
+  .camp-workspace {
+    padding: 0.8rem;
+  }
+
+  .dash-panel-head {
+    padding: 0.75rem 0.85rem;
+    gap: 0.6rem;
+  }
+
+  .dash-panel-title {
+    font-size: 0.95rem;
+  }
+
+  .dash-table th,
+  .dash-table td {
+    padding: 0.62rem 0.72rem;
+    font-size: 0.78rem;
+  }
+
+  .orders-panel-actions,
+  .maya-cc-wa-thread__actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
 }
 
 .dash-workspace--summary {
@@ -7612,7 +7705,7 @@ body.cf-modal-open {
 
   .maya-cc-zone {
     flex: 0 0 auto;
-    min-height: min(70vh, 560px);
+    min-height: 0;
     max-height: none;
   }
 
@@ -8244,12 +8337,39 @@ body.cf-modal-open {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: min(72vh, 640px);
+  min-height: 0;
   border-radius: 1rem;
   border: 1px solid var(--border);
   background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 12%, #f1f5f9 100%);
   box-shadow: var(--shadow-md);
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .maya-cc {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .maya-cc-page .maya-cc-zone--chat .yc-chat-wrap {
+    padding: 0.5rem;
+  }
+
+  .yc-chat-wrap {
+    padding: 0.6rem;
+  }
+
+  .yc-chat-toolbar {
+    padding: 0.55rem 0.7rem;
+  }
+
+  .yc-chat-stream {
+    padding: 0.7rem 0.7rem 0.5rem;
+  }
+
+  .yc-chat-composer {
+    padding: 0.55rem 0.7rem;
+  }
 }
 
 .yc-chat-toolbar {
