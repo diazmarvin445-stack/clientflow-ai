@@ -7339,6 +7339,26 @@ body.cf-modal-open {
   gap: 0.5rem;
 }
 
+.eq-time-actions--four {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+  .eq-time-actions--four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.eq-work-simple-block {
+  margin-bottom: 0.35rem;
+}
+
+.eq-time-summary--simple {
+  margin-top: 0.5rem;
+}
+
 .eq-time-summary {
   border-top: 1px dashed var(--border);
   padding-top: 0.65rem;

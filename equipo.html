@@ -129,51 +129,52 @@
               </button>
             </div>
 
-            <div class="eq-time-panel" id="eq-time-panel" aria-label="Control de jornada">
+            <div class="eq-time-panel eq-time-panel--simple" id="eq-time-panel" aria-label="Control de jornada">
               <div class="eq-time-panel__head">
                 <h3 class="dash-panel-title">Control de jornada</h3>
                 <p class="eq-panel-sub" id="eq-time-user-label">Operador actual</p>
               </div>
               <div class="eq-time-panel__body">
-                <label class="cfg-field">
-                  <span class="cfg-label">Pedido vinculado (opcional)</span>
-                  <select id="eq-linked-order-picker" class="cfg-input">
-                    <option value="">Sin vincular</option>
-                  </select>
-                </label>
-                <div class="eq-linked-order-actions">
-                  <button type="button" class="dash-quick-btn" id="eq-btn-clear-linked-order">
-                    Limpiar pedido
-                  </button>
+                <div class="eq-work-simple-block">
+                  <label class="cfg-field">
+                    <span class="cfg-label">Pedido pendiente</span>
+                    <select id="eq-linked-order-picker" class="cfg-input" required>
+                      <option value="">— Elegir pedido —</option>
+                    </select>
+                  </label>
+                  <div class="eq-linked-order-actions">
+                    <button type="button" class="dash-quick-btn" id="eq-btn-clear-linked-order">
+                      Limpiar selección
+                    </button>
+                  </div>
+                  <p class="eq-linked-order-summary" id="eq-linked-order-summary">
+                    Selecciona un pedido pendiente.
+                  </p>
                 </div>
-                <p class="eq-linked-order-summary" id="eq-linked-order-summary">
-                  No hay pedido vinculado.
-                </p>
                 <label class="cfg-field">
-                  <span class="cfg-label">Tarifa por hora por defecto (USD)</span>
+                  <span class="cfg-label">Tarifa por hora (USD)</span>
                   <input
                     type="number"
-                    id="eq-default-hourly-rate"
+                    id="eq-work-hourly-rate"
                     class="cfg-input"
-                    min="0"
+                    min="0.01"
                     step="0.01"
                     placeholder="Ej. 15.00"
                   />
                 </label>
-                <div class="eq-time-actions">
+                <div class="eq-time-actions eq-time-actions--four">
                   <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="eq-btn-start">
                     Iniciar trabajo
                   </button>
                   <button type="button" class="dash-quick-btn" id="eq-btn-pause">Pausar</button>
+                  <button type="button" class="dash-quick-btn" id="eq-btn-resume">Retomar</button>
                   <button type="button" class="dash-quick-btn" id="eq-btn-finish">Finalizar trabajo</button>
                 </div>
-                <div class="eq-time-summary">
+                <div class="eq-time-summary eq-time-summary--simple">
                   <p><strong>Estado sesión:</strong> <span id="eq-session-state">sin_sesion</span></p>
                   <p><strong>Estado orden:</strong> <span id="eq-order-work-state">sin_iniciar</span></p>
-                  <p><strong>Sesión actual:</strong> <span id="eq-active-timer">00:00:00</span></p>
-                  <p><strong>Hoy (horas):</strong> <span id="eq-today-hours">0.00</span></p>
-                  <p><strong>Pago estimado sesión:</strong> <span id="eq-session-pay-estimate">$0.00</span></p>
-                  <p><strong>Hoy (ganancias):</strong> <span id="eq-today-earnings">$0.00</span></p>
+                  <p><strong>Tiempo acumulado:</strong> <span id="eq-active-timer">00:00:00</span></p>
+                  <p><strong>Pago estimado:</strong> <span id="eq-session-pay-estimate">$0.00</span></p>
                 </div>
                 <div class="eq-unfinished">
                   <h4 class="eq-unfinished__title">Pedidos en preparación</h4>
