@@ -77,6 +77,8 @@ let mayaSpeechRecognition = null;
 let mayaSpeechSupported = Boolean(SpeechRecognitionCtor);
 let mayaSpeechListening = false;
 let mayaSpeechStarting = false;
+let mayaSpeechBaseText = "";
+let mayaSpeechFinalTranscript = "";
 
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
@@ -882,6 +884,8 @@ function startVoiceRecognition() {
   if (!(input instanceof HTMLTextAreaElement) || input.disabled) return;
   if (mayaSpeechListening || mayaSpeechStarting) return;
   try {
+    mayaSpeechBaseText = String(input.value || "").trim();
+    mayaSpeechFinalTranscript = "";
     mayaSpeechStarting = true;
     mayaSpeechRecognition.start();
   } catch (e) {
@@ -911,7 +915,7 @@ function initVoiceInput() {
 
   mayaSpeechRecognition = new SpeechRecognitionCtor();
   mayaSpeechRecognition.lang = "es-US";
-  mayaSpeechRecognition.interimResults = false;
+  mayaSpeechRecognition.interimResults = true;
   mayaSpeechRecognition.continuous = false;
   mayaSpeechSupported = true;
   setVoiceMicUiState({ listening: false, supported: true });
@@ -924,21 +928,33 @@ function initVoiceInput() {
   });
 
   mayaSpeechRecognition.addEventListener("result", (event) => {
-    let transcript = "";
+    let interimTranscript = "";
+    let latestFinalChunk = "";
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
       const result = event.results[i];
-      if (result[0]?.transcript) {
-        transcript += `${result[0].transcript} `;
+      const chunk = String(result[0]?.transcript || "").trim();
+      if (!chunk) continue;
+      if (result.isFinal) {
+        latestFinalChunk += `${chunk} `;
+      } else {
+        interimTranscript += `${chunk} `;
       }
     }
-    const cleanTranscript = transcript.trim();
-    if (!cleanTranscript) return;
-    const current = String(input.value || "");
-    const nextValue = current.trim() ? `${current.trimEnd()} ${cleanTranscript}` : cleanTranscript;
+    const cleanInterim = interimTranscript.trim();
+    const cleanFinalChunk = latestFinalChunk.trim();
+    if (cleanFinalChunk) {
+      mayaSpeechFinalTranscript = `${mayaSpeechFinalTranscript} ${cleanFinalChunk}`.trim();
+      console.log("[Maya Voice] final transcript", cleanFinalChunk);
+    }
+    if (cleanInterim) {
+      console.log("[Maya Voice] interim transcript", cleanInterim);
+    }
+    if (!mayaSpeechFinalTranscript && !cleanInterim) return;
+    const speechText = `${mayaSpeechFinalTranscript} ${cleanInterim}`.trim();
+    const nextValue = mayaSpeechBaseText ? `${mayaSpeechBaseText} ${speechText}`.trim() : speechText;
     input.value = nextValue;
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
-    console.log("[Maya Voice] transcript received", cleanTranscript);
     input.focus();
     if (MAYA_VOICE_AUTO_SEND) {
       void sendToClaude();
@@ -962,6 +978,16 @@ function initVoiceInput() {
     console.log("[Maya Voice] mic ended");
     mayaSpeechStarting = false;
     mayaSpeechListening = false;
+    const finalText = mayaSpeechFinalTranscript.trim();
+    if (finalText) {
+      const settledValue = mayaSpeechBaseText ? `${mayaSpeechBaseText} ${finalText}`.trim() : finalText;
+      input.value = settledValue;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.focus();
+    }
+    mayaSpeechBaseText = "";
+    mayaSpeechFinalTranscript = "";
     setVoiceMicUiState({ listening: false, supported: true });
   });
 
