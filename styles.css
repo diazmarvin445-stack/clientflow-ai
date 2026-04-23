@@ -9883,3 +9883,92 @@ body.light-theme .dash-cal-day--outside {
   background: rgba(243, 244, 246, 0.95) !important;
   color: #9ca3af !important;
 }
+
+/* Global mobile hardening: prevent cut/overflow on key modules. */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select,
+  button,
+  .orders-input,
+  .cli-search,
+  .cfg-input,
+  .yc-chat-input {
+    font-size: 16px !important;
+  }
+
+  .dash-page,
+  .dash-workspace,
+  .dash-workspace--full,
+  .cli-workspace,
+  .eq-workspace,
+  .fin-workspace,
+  .camp-workspace,
+  .yc-chat-wrap,
+  .maya-cc {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .dash-panel,
+  .orders-panel,
+  .cli-client-card,
+  .eq-time-panel,
+  .eq-member-card,
+  .maya-cc-zone,
+  .maya-cc-wa-list,
+  .maya-cc-wa-thread {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .dash-panel-head,
+  .orders-panel-actions,
+  .eq-time-actions,
+  .maya-cc-wa-thread__actions,
+  .cli-client-top {
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .orders-panel-actions .dash-quick-btn,
+  .eq-time-actions .dash-quick-btn,
+  .maya-cc-wa-thread__actions .maya-cc-wa-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .orders-detail-grid,
+  .orders-mobile-card__actions,
+  .eq-unfinished__item {
+    grid-template-columns: 1fr;
+  }
+
+  .orders-mobile-card__meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cli-toolbar,
+  .cli-clients,
+  .eq-time-panel,
+  .eq-members,
+  .orders-panel,
+  .maya-cc-page .maya-cc-zone--chat .yc-chat-wrap,
+  .yc-chat-wrap {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .maya-cc-conv__top,
+  .dash-business-name,
+  .eq-unfinished__name,
+  .cli-client-name,
+  .orders-mobile-card__client,
+  .yc-msg-bubble {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
