@@ -376,8 +376,10 @@ function openModalFor(row = null) {
 
 function renderRows() {
   const tbody = document.getElementById("orders-tbody");
+  const mobileRoot = document.getElementById("orders-mobile-list");
   const rows = applyFilters(allOrders);
   tbody.innerHTML = "";
+  if (mobileRoot) mobileRoot.innerHTML = "";
   if (!rows.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
@@ -386,6 +388,13 @@ function renderRows() {
     td.textContent = "No hay pedidos para este filtro.";
     tr.appendChild(td);
     tbody.appendChild(tr);
+    if (mobileRoot) {
+      mobileRoot.hidden = false;
+      const empty = document.createElement("p");
+      empty.className = "dash-table-muted";
+      empty.textContent = "No hay pedidos para este filtro.";
+      mobileRoot.appendChild(empty);
+    }
     return;
   }
   rows.forEach((row) => {
@@ -419,6 +428,47 @@ function renderRows() {
       document.getElementById("orders-detail-panel").hidden = false;
     });
     tbody.appendChild(tr);
+
+    if (mobileRoot) {
+      const total = getOrderTotal(row);
+      const expenses = Math.max(0, Number(row?.expenses) || 0);
+      const profit = total - expenses;
+      const delivered = String(row.status || "").toLowerCase() === "entregado";
+      const dateLabel = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
+
+      const card = document.createElement("article");
+      card.className = "orders-mobile-card";
+      card.innerHTML = `
+        <div class="orders-mobile-card__head">
+          <p class="orders-mobile-card__client">${row.clientName || "—"}</p>
+          <span class="dash-badge ${statusBadgeClass(row.status)}">${row.status || "nuevo"}</span>
+        </div>
+        <p class="orders-mobile-card__product">${row.product || "—"}</p>
+        <div class="orders-mobile-card__finance">
+          <span>Total: ${money(total)}</span>
+          <span>Gastos: ${money(expenses)}</span>
+          <span>${delivered ? "Ganancia neta" : "Ganancia proy"}: ${money(profit)}</span>
+        </div>
+        <div class="orders-mobile-card__meta">
+          <span>Entrega: ${dateLabel}</span>
+          <span>${sourceLabel(row.source)}</span>
+        </div>
+        <div class="orders-mobile-card__actions">
+          <button class="dash-quick-btn" data-edit="${row.id}">Editar</button>
+          <button class="dash-quick-btn" data-quick-deliver="${row.id}" ${delivered ? "disabled aria-disabled='true'" : ""}>
+            Entregar
+          </button>
+          <button class="dash-quick-btn" data-del="${row.id}">Eliminar</button>
+        </div>
+      `;
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        selectedOrderId = row.id;
+        fillDetail(row);
+        document.getElementById("orders-detail-panel").hidden = false;
+      });
+      mobileRoot.appendChild(card);
+    }
   });
 
   tbody.querySelectorAll("[data-edit]").forEach((btn) => {
@@ -441,6 +491,30 @@ function renderRows() {
       await markOrderDelivered(orderId);
     });
   });
+
+  if (mobileRoot) {
+    mobileRoot.hidden = false;
+    mobileRoot.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = allOrders.find((x) => x.id === btn.getAttribute("data-edit"));
+        if (row) openModalFor(row);
+      });
+    });
+    mobileRoot.querySelectorAll("[data-del]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        await deleteOrder(btn.getAttribute("data-del"));
+      });
+    });
+    mobileRoot.querySelectorAll("[data-quick-deliver]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const orderId = btn.getAttribute("data-quick-deliver");
+        if (!orderId) return;
+        const ok = window.confirm("¿Marcar este pedido como entregado y cobrado?");
+        if (!ok) return;
+        await markOrderDelivered(orderId);
+      });
+    });
+  }
 }
 
 function wireUi() {

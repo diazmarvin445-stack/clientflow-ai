@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="dash-body">
+  <body class="dash-body orders-page">
     <div class="dash-sidebar-overlay" id="dash-sidebar-overlay" hidden aria-hidden="true"></div>
     <aside class="dash-sidebar" id="dash-sidebar" aria-label="Navegación principal">
       <div class="dash-sidebar-brand">
@@ -108,14 +108,18 @@
             </article>
           </section>
 
-          <section class="dash-panel">
+          <section class="dash-panel orders-panel">
             <div class="dash-panel-head">
               <h2 class="dash-panel-title">Pedidos</h2>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="dash-quick-btn" id="orders-btn-repair">
+              <div class="orders-panel-actions">
+                <button type="button" class="dash-quick-btn orders-btn-compact" id="orders-btn-repair">
                   🔧 Reparar entregados sin finanzas
                 </button>
-                <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="orders-btn-add">
+                <button
+                  type="button"
+                  class="dash-quick-btn dash-quick-btn--primary orders-btn-compact"
+                  id="orders-btn-add"
+                >
                   + Agregar pedido manual
                 </button>
               </div>
@@ -145,7 +149,7 @@
               <input id="orders-filter-search" class="orders-input" placeholder="Buscar cliente..." />
             </div>
 
-            <div class="dash-table-wrap">
+            <div class="dash-table-wrap orders-table-wrap">
               <table class="dash-table">
                 <thead>
                   <tr>
@@ -163,6 +167,7 @@
                 <tbody id="orders-tbody"></tbody>
               </table>
             </div>
+            <div id="orders-mobile-list" class="orders-mobile-list" hidden></div>
           </section>
 
           <section class="dash-panel" id="orders-detail-panel" hidden>

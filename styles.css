@@ -3520,6 +3520,120 @@ body.dash-menu-open {
   flex-wrap: wrap;
 }
 
+.orders-panel-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.orders-mobile-list {
+  display: none;
+  gap: 0.6rem;
+}
+
+.orders-mobile-card {
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: #fff;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.orders-mobile-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.orders-mobile-card__client {
+  margin: 0;
+  font-weight: 800;
+}
+
+.orders-mobile-card__product {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.orders-mobile-card__finance {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.86rem;
+}
+
+.orders-mobile-card__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.orders-mobile-card__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.orders-mobile-card__actions .dash-quick-btn {
+  width: 100%;
+  min-height: 2.15rem;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .orders-page .dash-stats {
+    gap: 0.45rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .orders-page .dash-stat-card {
+    padding: 0.6rem 0.7rem;
+    border-radius: 0.7rem;
+  }
+
+  .orders-page .dash-stat-label {
+    font-size: 0.72rem;
+  }
+
+  .orders-page .dash-stat-value {
+    font-size: 1rem;
+  }
+
+  .orders-panel {
+    padding: 0.75rem;
+  }
+
+  .orders-filters {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .orders-input {
+    padding: 0.5rem 0.6rem;
+    font-size: 0.92rem;
+  }
+
+  .orders-btn-compact {
+    padding: 0.45rem 0.62rem;
+    min-height: 2.25rem;
+    font-size: 0.82rem;
+  }
+
+  .orders-table-wrap {
+    display: none;
+  }
+
+  .orders-mobile-list {
+    display: grid;
+  }
+}
+
 .dash-alert-strip {
   border: 1px solid #fde68a;
   background: #fffbeb;
