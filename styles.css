@@ -7162,6 +7162,9 @@ body.cf-modal-open {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .eq-load-error {
@@ -7304,6 +7307,9 @@ body.cf-modal-open {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-2, #f8fafc);
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .eq-time-panel__head {
@@ -7407,6 +7413,62 @@ body.cf-modal-open {
 
 .eq-members {
   padding: 0 1.35rem 1.35rem;
+  min-width: 0;
+}
+
+/* Equipo layout stability: avoid clipping/trapped containers */
+.eq-page .dash-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.eq-page .eq-panel {
+  overflow: visible;
+}
+
+@media (max-width: 1024px) {
+  .eq-workspace {
+    padding: 1rem 0.9rem 1.25rem;
+    gap: 1rem;
+  }
+
+  .eq-compact-stats,
+  .eq-time-panel,
+  .eq-members {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .eq-workspace {
+    padding: 0.75rem 0.7rem 1rem;
+  }
+
+  .eq-panel .dash-panel-head {
+    padding: 0.7rem 0.8rem;
+  }
+
+  .eq-time-panel {
+    margin: 0;
+    padding: 0.7rem;
+  }
+
+  .eq-time-actions .dash-quick-btn,
+  .eq-linked-order-actions .dash-quick-btn,
+  .eq-unfinished__btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .eq-unfinished__item {
+    grid-template-columns: 1fr;
+  }
+
+  .eq-member-card {
+    padding: 0.85rem 0.9rem;
+  }
 }
 
 .eq-empty {

@@ -880,6 +880,20 @@ function updateTimePanelHeader() {
   label.textContent = `Operador: ${currentUserDisplayName()}`;
 }
 
+function logEquipoLayoutMetrics(source = "unknown") {
+  const main = document.getElementById("dash-main");
+  const workspace = document.querySelector(".eq-workspace");
+  const control = document.getElementById("eq-time-panel");
+  console.log("[Equipo Layout] module mounted", source, {
+    mainClientHeight: main?.clientHeight ?? null,
+    mainScrollHeight: main?.scrollHeight ?? null,
+    workspaceClientHeight: workspace instanceof HTMLElement ? workspace.clientHeight : null,
+    workspaceScrollHeight: workspace instanceof HTMLElement ? workspace.scrollHeight : null,
+    controlClientHeight: control?.clientHeight ?? null,
+    controlScrollHeight: control?.scrollHeight ?? null,
+  });
+}
+
 async function startWorkSession() {
   if (!businessId || !currentUser) return;
   const runningSession = findRunningSession();
@@ -1203,6 +1217,15 @@ onAuthStateChanged(auth, async (user) => {
     subscribePendingOrders();
     renderLinkedOrderSummary();
     showLoadError("");
+    logEquipoLayoutMetrics("auth-success");
+    let eqLayoutResizeDebounce = null;
+    if (!window.__eqLayoutResizeWired) {
+      window.__eqLayoutResizeWired = true;
+      window.addEventListener("resize", () => {
+        if (eqLayoutResizeDebounce) clearTimeout(eqLayoutResizeDebounce);
+        eqLayoutResizeDebounce = setTimeout(() => logEquipoLayoutMetrics("resize"), 120);
+      });
+    }
   } catch (e) {
     console.error(e);
     showLoadError("No se pudo cargar el equipo. Revisa tu conexión e inténtalo otra vez.");
