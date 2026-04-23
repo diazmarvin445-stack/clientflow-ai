@@ -35,6 +35,10 @@ let activeSession = null;
 let timerTicker = null;
 /** @type {(() => void) | null} */
 let unsubSessions = null;
+/** @type {(() => void) | null} */
+let unsubPendingOrders = null;
+/** @type {Record<string, unknown>[]} */
+let pendingOrders = [];
 
 const DEFAULT_HOURLY_RATE_USD = 15;
 
@@ -116,6 +120,70 @@ function tsToDate(ts) {
     }
   }
   return null;
+}
+
+function isPendingOrderStatus(raw) {
+  const s = String(raw || "").toLowerCase();
+  return s === "nuevo" || s === "produccion" || s === "listo";
+}
+
+function formatOrderPickerOptionLabel(order) {
+  const clientName = String(order.clientName || "Cliente");
+  const product = String(order.product || "Pedido");
+  const total = Number(order.total ?? order.amount) || 0;
+  const status = String(order.status || "nuevo");
+  const delivery = tsToDate(order.deliveryDate);
+  const deliveryLabel = delivery ? delivery.toLocaleDateString("es") : "sin fecha";
+  return `${clientName} · ${product} · ${formatMoney(total)} · ${status} · ${deliveryLabel}`;
+}
+
+function selectedLinkedOrder() {
+  const picker = document.getElementById("eq-linked-order-picker");
+  const selectedId = picker && "value" in picker ? String(picker.value || "").trim() : "";
+  if (!selectedId) return null;
+  return pendingOrders.find((o) => String(o.id || "") === selectedId) || null;
+}
+
+function renderLinkedOrderSummary() {
+  const summary = document.getElementById("eq-linked-order-summary");
+  if (!summary) return;
+  const selected = selectedLinkedOrder();
+  if (!selected) {
+    summary.textContent = "No hay pedido vinculado.";
+    return;
+  }
+  const clientName = String(selected.clientName || "Cliente");
+  const product = String(selected.product || "Pedido");
+  const status = String(selected.status || "nuevo");
+  const total = Number(selected.total ?? selected.amount) || 0;
+  const delivery = tsToDate(selected.deliveryDate);
+  summary.textContent = `${clientName} · ${product} · ${formatMoney(total)} · ${status}${delivery ? ` · ${delivery.toLocaleDateString("es")}` : ""}`;
+}
+
+function renderPendingOrdersPicker() {
+  const picker = document.getElementById("eq-linked-order-picker");
+  if (!(picker instanceof HTMLSelectElement)) return;
+  const selectedBefore = String(picker.value || "");
+  picker.innerHTML = "";
+
+  const noneOp = document.createElement("option");
+  noneOp.value = "";
+  noneOp.textContent = "Sin vincular";
+  picker.appendChild(noneOp);
+
+  for (const order of pendingOrders) {
+    const op = document.createElement("option");
+    op.value = String(order.id || "");
+    op.textContent = formatOrderPickerOptionLabel(order);
+    picker.appendChild(op);
+  }
+
+  if (selectedBefore && pendingOrders.some((o) => String(o.id || "") === selectedBefore)) {
+    picker.value = selectedBefore;
+  } else {
+    picker.value = "";
+  }
+  renderLinkedOrderSummary();
 }
 
 function todayCode() {
@@ -632,9 +700,8 @@ function updateTimePanelHeader() {
 async function startWorkSession() {
   if (!businessId || !currentUser) return;
   if (activeSession) return;
-  const linkedOrderInput = document.getElementById("eq-linked-order-id");
-  const linkedOrderId =
-    linkedOrderInput && "value" in linkedOrderInput ? String(linkedOrderInput.value).trim() : "";
+  const linkedOrder = selectedLinkedOrder();
+  const linkedOrderId = linkedOrder ? String(linkedOrder.id || "") : "";
   const member = memberForCurrentUser();
   const rate = memberHourlyRate(member || {});
   const userName = currentUserDisplayName();
@@ -650,6 +717,9 @@ async function startWorkSession() {
     totalPay: 0,
     hourlyRate: rate,
     linkedOrderId: linkedOrderId || null,
+    linkedOrderClientName: linkedOrder ? String(linkedOrder.clientName || "") : null,
+    linkedOrderProduct: linkedOrder ? String(linkedOrder.product || "") : null,
+    linkedOrderStatus: linkedOrder ? String(linkedOrder.status || "") : null,
     pausedAt: null,
     pausedDurationMs: 0,
     createdAt: serverTimestamp(),
@@ -716,12 +786,37 @@ async function finalizeSession() {
     amount: totalPay,
     date: Timestamp.fromDate(end),
     linkedOrderId: activeSession.linkedOrderId || null,
+    linkedOrderClientName: activeSession.linkedOrderClientName || null,
+    linkedOrderProduct: activeSession.linkedOrderProduct || null,
+    linkedOrderStatus: activeSession.linkedOrderStatus || null,
     orderId: activeSession.linkedOrderId || null,
     clientId: null,
     status: "cobrado",
     createdBy: "system",
     createdAt: serverTimestamp(),
   });
+}
+
+function subscribePendingOrders() {
+  if (!businessId) return;
+  if (unsubPendingOrders) {
+    unsubPendingOrders();
+    unsubPendingOrders = null;
+  }
+  const qy = query(collection(db, "businesses", businessId, "orders"), orderBy("createdAt", "desc"), limit(250));
+  unsubPendingOrders = onSnapshot(
+    qy,
+    (snap) => {
+      pendingOrders = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((o) => isPendingOrderStatus(o.status));
+      renderPendingOrdersPicker();
+    },
+    (err) => {
+      console.error(err);
+      showLoadError("No se pudieron cargar pedidos pendientes para vincular.");
+    },
+  );
 }
 
 function subscribeTeamSessions() {
@@ -780,6 +875,14 @@ function wireTimeTracking() {
   document.getElementById("eq-default-hourly-rate")?.addEventListener("change", () => {
     saveDefaultHourlyRateFromInput();
   });
+  document.getElementById("eq-linked-order-picker")?.addEventListener("change", () => {
+    renderLinkedOrderSummary();
+  });
+  document.getElementById("eq-btn-clear-linked-order")?.addEventListener("click", () => {
+    const picker = document.getElementById("eq-linked-order-picker");
+    if (picker && "value" in picker) picker.value = "";
+    renderLinkedOrderSummary();
+  });
 }
 
 function wireModal() {
@@ -808,10 +911,20 @@ onAuthStateChanged(auth, async (user) => {
     const business = await resolveBusinessForUser(db, user);
     if (!business) {
       showLoadError("No encontramos un negocio asociado a tu cuenta.");
+      if (unsubSessions) {
+        unsubSessions();
+        unsubSessions = null;
+      }
+      if (unsubPendingOrders) {
+        unsubPendingOrders();
+        unsubPendingOrders = null;
+      }
+      pendingOrders = [];
       renderHeader(null);
       members = [];
       renderList(members);
       updateStats(members);
+      renderPendingOrdersPicker();
       return;
     }
 
@@ -823,6 +936,8 @@ onAuthStateChanged(auth, async (user) => {
     updateStats(members);
     updateTimePanelHeader();
     subscribeTeamSessions();
+    subscribePendingOrders();
+    renderLinkedOrderSummary();
     showLoadError("");
   } catch (e) {
     console.error(e);

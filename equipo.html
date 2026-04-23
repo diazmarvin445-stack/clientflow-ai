@@ -137,8 +137,18 @@
               <div class="eq-time-panel__body">
                 <label class="cfg-field">
                   <span class="cfg-label">Pedido vinculado (opcional)</span>
-                  <input type="text" id="eq-linked-order-id" class="cfg-input" placeholder="orderId o jobsId" />
+                  <select id="eq-linked-order-picker" class="cfg-input">
+                    <option value="">Sin vincular</option>
+                  </select>
                 </label>
+                <div class="eq-linked-order-actions">
+                  <button type="button" class="dash-quick-btn" id="eq-btn-clear-linked-order">
+                    Limpiar pedido
+                  </button>
+                </div>
+                <p class="eq-linked-order-summary" id="eq-linked-order-summary">
+                  No hay pedido vinculado.
+                </p>
                 <label class="cfg-field">
                   <span class="cfg-label">Tarifa por hora por defecto (USD)</span>
                   <input
