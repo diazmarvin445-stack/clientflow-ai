@@ -76,6 +76,7 @@ const SpeechRecognitionCtor =
 let mayaSpeechRecognition = null;
 let mayaSpeechSupported = Boolean(SpeechRecognitionCtor);
 let mayaSpeechListening = false;
+let mayaSpeechStarting = false;
 
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
@@ -861,11 +862,12 @@ function setVoiceMicUiState({ listening = false, supported = true } = {}) {
 }
 
 function stopVoiceRecognition() {
-  if (mayaSpeechRecognition && mayaSpeechListening) {
+  if (mayaSpeechRecognition && (mayaSpeechListening || mayaSpeechStarting)) {
     try {
       mayaSpeechRecognition.stop();
     } catch {
       mayaSpeechListening = false;
+      mayaSpeechStarting = false;
       setVoiceMicUiState({ listening: false, supported: mayaSpeechSupported });
     }
   }
@@ -878,10 +880,14 @@ function startVoiceRecognition() {
   }
   const input = document.getElementById("yc-chat-input");
   if (!(input instanceof HTMLTextAreaElement) || input.disabled) return;
+  if (mayaSpeechListening || mayaSpeechStarting) return;
   try {
+    mayaSpeechStarting = true;
     mayaSpeechRecognition.start();
   } catch (e) {
+    mayaSpeechStarting = false;
     const msg = e instanceof Error ? e.message : "No se pudo iniciar el micrófono.";
+    console.error("[Maya Voice] speech error", e);
     showToast(msg, true);
   }
 }
@@ -895,6 +901,7 @@ function initVoiceInput() {
 
   if (!SpeechRecognitionCtor) {
     mayaSpeechSupported = false;
+    console.error("[Maya Voice] Este navegador no soporta reconocimiento de voz");
     setVoiceMicUiState({ listening: false, supported: false });
     mic.addEventListener("click", () => {
       showToast("Dictado por voz no disponible en este navegador.", true);
@@ -903,13 +910,15 @@ function initVoiceInput() {
   }
 
   mayaSpeechRecognition = new SpeechRecognitionCtor();
-  mayaSpeechRecognition.lang = "es-ES";
+  mayaSpeechRecognition.lang = "es-US";
   mayaSpeechRecognition.interimResults = false;
   mayaSpeechRecognition.continuous = false;
   mayaSpeechSupported = true;
   setVoiceMicUiState({ listening: false, supported: true });
 
   mayaSpeechRecognition.addEventListener("start", () => {
+    console.log("[Maya Voice] mic started");
+    mayaSpeechStarting = false;
     mayaSpeechListening = true;
     setVoiceMicUiState({ listening: true, supported: true });
   });
@@ -918,14 +927,18 @@ function initVoiceInput() {
     let transcript = "";
     for (let i = event.resultIndex; i < event.results.length; i += 1) {
       const result = event.results[i];
-      if (result.isFinal && result[0]?.transcript) {
+      if (result[0]?.transcript) {
         transcript += `${result[0].transcript} `;
       }
     }
     const cleanTranscript = transcript.trim();
     if (!cleanTranscript) return;
-    const current = input.value.trim();
-    input.value = current ? `${current} ${cleanTranscript}` : cleanTranscript;
+    const current = String(input.value || "");
+    const nextValue = current.trim() ? `${current.trimEnd()} ${cleanTranscript}` : cleanTranscript;
+    input.value = nextValue;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    console.log("[Maya Voice] transcript received", cleanTranscript);
     input.focus();
     if (MAYA_VOICE_AUTO_SEND) {
       void sendToClaude();
@@ -933,8 +946,10 @@ function initVoiceInput() {
   });
 
   mayaSpeechRecognition.addEventListener("error", (event) => {
+    mayaSpeechStarting = false;
     mayaSpeechListening = false;
     setVoiceMicUiState({ listening: false, supported: true });
+    console.error("[Maya Voice] speech error", event.error);
     if (event.error === "no-speech" || event.error === "aborted") return;
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       showToast("Permiso de micrófono denegado. Actívalo para usar dictado por voz.", true);
@@ -944,6 +959,8 @@ function initVoiceInput() {
   });
 
   mayaSpeechRecognition.addEventListener("end", () => {
+    console.log("[Maya Voice] mic ended");
+    mayaSpeechStarting = false;
     mayaSpeechListening = false;
     setVoiceMicUiState({ listening: false, supported: true });
   });
