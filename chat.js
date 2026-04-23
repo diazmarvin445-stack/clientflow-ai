@@ -69,6 +69,13 @@ let mayaSelectedPhoneId = null;
 let mayaAvgDebounce = null;
 /** @type {'maya' | 'whatsapp'} */
 let chatPageTab = "maya";
+const MAYA_VOICE_AUTO_SEND = false;
+const SpeechRecognitionCtor =
+  typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+/** @type {SpeechRecognition | null} */
+let mayaSpeechRecognition = null;
+let mayaSpeechSupported = Boolean(SpeechRecognitionCtor);
+let mayaSpeechListening = false;
 
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
@@ -830,12 +837,124 @@ function hideError() {
 function setComposerEnabled(on) {
   const input = document.getElementById("yc-chat-input");
   const btn = document.getElementById("yc-chat-send");
+  const mic = document.getElementById("yc-chat-mic");
   if (input) {
     input.disabled = !on;
   }
   if (btn) {
     btn.disabled = !on;
   }
+  if (mic) {
+    mic.disabled = !on;
+  }
+}
+
+function setVoiceMicUiState({ listening = false, supported = true } = {}) {
+  const mic = document.getElementById("yc-chat-mic");
+  if (!(mic instanceof HTMLButtonElement)) return;
+  mic.disabled = document.getElementById("yc-chat-input")?.disabled ?? true;
+  mic.classList.toggle("is-listening", listening);
+  mic.classList.toggle("is-unsupported", !supported);
+  mic.setAttribute("aria-pressed", listening ? "true" : "false");
+  mic.setAttribute("aria-label", listening ? "Detener dictado de voz" : "Dictar mensaje con voz");
+  mic.title = listening ? "Detener dictado de voz" : "Dictar mensaje con voz";
+}
+
+function stopVoiceRecognition() {
+  if (mayaSpeechRecognition && mayaSpeechListening) {
+    try {
+      mayaSpeechRecognition.stop();
+    } catch {
+      mayaSpeechListening = false;
+      setVoiceMicUiState({ listening: false, supported: mayaSpeechSupported });
+    }
+  }
+}
+
+function startVoiceRecognition() {
+  if (!mayaSpeechRecognition) {
+    showToast("Dictado por voz no disponible en este navegador.", true);
+    return;
+  }
+  const input = document.getElementById("yc-chat-input");
+  if (!(input instanceof HTMLTextAreaElement) || input.disabled) return;
+  try {
+    mayaSpeechRecognition.start();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "No se pudo iniciar el micrófono.";
+    showToast(msg, true);
+  }
+}
+
+function initVoiceInput() {
+  const mic = document.getElementById("yc-chat-mic");
+  const input = document.getElementById("yc-chat-input");
+  if (!(mic instanceof HTMLButtonElement) || !(input instanceof HTMLTextAreaElement)) return;
+  if (mic.dataset.wired === "1") return;
+  mic.dataset.wired = "1";
+
+  if (!SpeechRecognitionCtor) {
+    mayaSpeechSupported = false;
+    setVoiceMicUiState({ listening: false, supported: false });
+    mic.addEventListener("click", () => {
+      showToast("Dictado por voz no disponible en este navegador.", true);
+    });
+    return;
+  }
+
+  mayaSpeechRecognition = new SpeechRecognitionCtor();
+  mayaSpeechRecognition.lang = "es-ES";
+  mayaSpeechRecognition.interimResults = false;
+  mayaSpeechRecognition.continuous = false;
+  mayaSpeechSupported = true;
+  setVoiceMicUiState({ listening: false, supported: true });
+
+  mayaSpeechRecognition.addEventListener("start", () => {
+    mayaSpeechListening = true;
+    setVoiceMicUiState({ listening: true, supported: true });
+  });
+
+  mayaSpeechRecognition.addEventListener("result", (event) => {
+    let transcript = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      if (result.isFinal && result[0]?.transcript) {
+        transcript += `${result[0].transcript} `;
+      }
+    }
+    const cleanTranscript = transcript.trim();
+    if (!cleanTranscript) return;
+    const current = input.value.trim();
+    input.value = current ? `${current} ${cleanTranscript}` : cleanTranscript;
+    input.focus();
+    if (MAYA_VOICE_AUTO_SEND) {
+      void sendToClaude();
+    }
+  });
+
+  mayaSpeechRecognition.addEventListener("error", (event) => {
+    mayaSpeechListening = false;
+    setVoiceMicUiState({ listening: false, supported: true });
+    if (event.error === "no-speech" || event.error === "aborted") return;
+    if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      showToast("Permiso de micrófono denegado. Actívalo para usar dictado por voz.", true);
+      return;
+    }
+    showToast("No se pudo procesar el audio. Intenta nuevamente.", true);
+  });
+
+  mayaSpeechRecognition.addEventListener("end", () => {
+    mayaSpeechListening = false;
+    setVoiceMicUiState({ listening: false, supported: true });
+  });
+
+  mic.addEventListener("click", () => {
+    if (mayaSpeechListening) {
+      stopVoiceRecognition();
+      return;
+    }
+    startVoiceRecognition();
+  });
 }
 
 function trimApiMessages() {
@@ -1368,6 +1487,7 @@ async function sendToClaude() {
     btn.setAttribute("aria-busy", "true");
   }
   if (input) input.disabled = true;
+  setVoiceMicUiState({ listening: false, supported: mayaSpeechSupported });
 
   try {
     await loadFirebaseContext(activeBusiness, { userMessage: text });
@@ -1455,6 +1575,7 @@ async function sendToClaude() {
       btn.removeAttribute("aria-busy");
     }
     if (input) input.disabled = false;
+    setVoiceMicUiState({ listening: false, supported: mayaSpeechSupported });
     input?.focus();
   }
 }
@@ -1473,6 +1594,8 @@ function wireComposer() {
       sendToClaude();
     }
   });
+
+  initVoiceInput();
 }
 
 function showWelcomeAssistant() {
