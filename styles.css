@@ -3673,9 +3673,81 @@ body.dash-menu-open {
   gap: 0.35rem;
 }
 
+.dash-body--summary .dash-panel {
+  box-shadow: var(--shadow-sm);
+}
+
+.dash-body--summary .dash-panel-head {
+  padding: 0.95rem 1rem;
+}
+
+.dash-body--summary #dash-sales-chart {
+  display: block;
+  width: 100%;
+  max-height: 168px;
+}
+
+.dash-body--summary .dash-upcoming-list {
+  padding: 0.55rem 1rem 0.7rem;
+  gap: 0.22rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.dash-body--summary .dash-upcoming-list li {
+  color: var(--text-muted);
+}
+
 @media (max-width: 1024px) {
   .dash-mini-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .dash-body--summary .dash-page {
+    gap: 0.65rem;
+  }
+
+  .dash-body--summary .dash-alert-strip {
+    padding: 0.5rem 0.62rem;
+    font-size: 0.8rem;
+    border-radius: 0.62rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .dash-body--summary .dash-panel {
+    border-radius: 0.72rem;
+  }
+
+  .dash-body--summary .dash-panel-head {
+    padding: 0.72rem 0.78rem;
+  }
+
+  .dash-body--summary .dash-panel-title {
+    font-size: 0.94rem;
+  }
+
+  .dash-body--summary #dash-sales-chart {
+    max-height: 142px;
+  }
+
+  .dash-body--summary .dash-mini-cards {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    margin: 0.5rem 0;
+  }
+
+  .dash-body--summary .dash-mini-card {
+    padding: 0.52rem 0.62rem;
+    border-radius: 0.66rem;
+    font-size: 0.79rem;
+  }
+
+  .dash-body--summary .dash-upcoming-list {
+    padding: 0.45rem 0.78rem 0.58rem;
+    gap: 0.18rem;
+    font-size: 0.76rem;
   }
 }
 
@@ -8975,6 +9047,42 @@ body.dark-theme .dash-mini-card strong {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+body.dark-theme .dash-panel-title,
+body.dark-theme .dash-widget-title,
+body.dark-theme .dash-business-name {
+  color: #f8fafc !important;
+}
+
+body.dark-theme .dash-stat-label,
+body.dark-theme .dash-widget-sub,
+body.dark-theme .dash-business-meta,
+body.dark-theme .dash-topbar-greet,
+body.dark-theme .dash-table-muted,
+body.dark-theme .dash-upcoming-list li {
+  color: #cbd5e1 !important;
+}
+
+body.dark-theme .dash-panel-head {
+  background: linear-gradient(180deg, rgba(22, 31, 69, 0.95) 0%, rgba(18, 25, 55, 0.95) 100%) !important;
+  border-bottom-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+body.dark-theme .dash-mini-card {
+  color: #e2e8f0 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
+}
+
+body.dark-theme .dash-alert-strip {
+  border-color: rgba(165, 180, 252, 0.38) !important;
+  background: rgba(67, 56, 202, 0.2) !important;
+  color: #e2e8f0 !important;
+}
+
+body.dark-theme .dash-upcoming-list {
+  background: rgba(15, 23, 42, 0.22);
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
 }
 
 body.dark-theme .dash-badge--prog {
