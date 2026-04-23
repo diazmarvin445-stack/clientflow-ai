@@ -46,6 +46,8 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  touch-action: manipulation;
 }
 
 body {
@@ -56,6 +58,30 @@ body {
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  touch-action: manipulation;
+}
+
+/* iOS Safari: evita zoom automático al enfocar campos. */
+input,
+textarea {
+  font-size: 16px !important;
+}
+
+.yc-chat-input {
+  font-size: 16px !important;
+}
+
+/* Altura/scroll estable tipo app sin cambiar el diseño existente. */
+body.dash-body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+body.dash-body .dash-shell {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .page-bg {
