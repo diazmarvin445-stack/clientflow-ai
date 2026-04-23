@@ -92,8 +92,30 @@
 
       <main class="dash-main" id="dash-main">
         <div class="maya-cc" aria-label="Centro de Control Maya">
+          <div class="maya-cc-top-tabs" role="tablist" aria-label="Vistas de chat">
+            <button
+              type="button"
+              class="maya-cc-top-tab is-active"
+              id="maya-cc-tab-maya"
+              data-chat-tab="maya"
+              role="tab"
+              aria-selected="true"
+            >
+              Maya
+            </button>
+            <button
+              type="button"
+              class="maya-cc-top-tab"
+              id="maya-cc-tab-wa"
+              data-chat-tab="whatsapp"
+              role="tab"
+              aria-selected="false"
+            >
+              WhatsApp
+            </button>
+          </div>
           <!-- Zona 1: Chat Marvin ↔ Maya (40%) -->
-          <details class="maya-cc-zone maya-cc-zone--chat" open>
+          <details class="maya-cc-zone maya-cc-zone--chat" id="maya-cc-zone-chat" open>
             <summary class="maya-cc-zone__cap">
               <span class="maya-cc-zone__cap-main">
                 <span class="maya-cc-zone__title">💬 Chat Maya</span>
@@ -150,7 +172,7 @@
           </details>
 
           <!-- Zona 2: WhatsApp (40%) — UI lista + hilo (datos después) -->
-          <details class="maya-cc-zone maya-cc-zone--wa" open>
+          <details class="maya-cc-zone maya-cc-zone--wa" id="maya-cc-zone-wa" open hidden>
             <summary class="maya-cc-zone__cap">
               <span class="maya-cc-zone__cap-main">
                 <span class="maya-cc-zone__title">📱 Conversaciones WhatsApp</span>

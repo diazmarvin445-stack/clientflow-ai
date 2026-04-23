@@ -67,6 +67,50 @@ let mayaCcBusinessId = null;
 let mayaSelectedPhoneId = null;
 /** @type {ReturnType<typeof setTimeout> | null} */
 let mayaAvgDebounce = null;
+/** @type {'maya' | 'whatsapp'} */
+let chatPageTab = "maya";
+
+function setChatPageTab(tab) {
+  chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
+  const mayaBtn = document.getElementById("maya-cc-tab-maya");
+  const waBtn = document.getElementById("maya-cc-tab-wa");
+  const mayaZone = document.getElementById("maya-cc-zone-chat");
+  const waZone = document.getElementById("maya-cc-zone-wa");
+
+  const mayaActive = chatPageTab === "maya";
+  const waActive = !mayaActive;
+
+  if (mayaBtn) {
+    mayaBtn.classList.toggle("is-active", mayaActive);
+    mayaBtn.setAttribute("aria-selected", mayaActive ? "true" : "false");
+  }
+  if (waBtn) {
+    waBtn.classList.toggle("is-active", waActive);
+    waBtn.setAttribute("aria-selected", waActive ? "true" : "false");
+  }
+  if (mayaZone) {
+    mayaZone.hidden = !mayaActive;
+    if (mayaActive) mayaZone.open = true;
+  }
+  if (waZone) {
+    waZone.hidden = !waActive;
+    if (waActive) waZone.open = true;
+  }
+}
+
+function wireChatPageTabs() {
+  const mayaBtn = document.getElementById("maya-cc-tab-maya");
+  const waBtn = document.getElementById("maya-cc-tab-wa");
+  if (mayaBtn && mayaBtn.dataset.wired !== "1") {
+    mayaBtn.dataset.wired = "1";
+    mayaBtn.addEventListener("click", () => setChatPageTab("maya"));
+  }
+  if (waBtn && waBtn.dataset.wired !== "1") {
+    waBtn.dataset.wired = "1";
+    waBtn.addEventListener("click", () => setChatPageTab("whatsapp"));
+  }
+  setChatPageTab("maya");
+}
 
 function setText(id, text) {
   const el = document.getElementById(id);
@@ -1949,6 +1993,7 @@ async function mayaRenderAlerts(businessId, convRows) {
 
 /** @param {string} phoneDocId */
 function mayaOpenConversationInWaZone(phoneDocId) {
+  setChatPageTab("whatsapp");
   mayaSelectedPhoneId = phoneDocId;
   const zone = document.querySelector("details.maya-cc-zone--wa");
   if (zone) {
@@ -2260,6 +2305,7 @@ async function bootWithUser(user) {
 
 function boot() {
   initDashShell({ auth, db });
+  wireChatPageTabs();
 
   /** Evita tratar el primer `null` como cierre de sesión antes de restaurar persistencia. */
   let previousAuthUser = null;

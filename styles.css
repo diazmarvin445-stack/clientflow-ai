@@ -7533,6 +7533,35 @@ body.cf-modal-open {
   background: var(--bg);
 }
 
+.maya-cc-top-tabs {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.72rem;
+  background: var(--surface);
+}
+
+.maya-cc-top-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.38rem 0.75rem;
+  border-radius: 0.55rem;
+  cursor: pointer;
+}
+
+.maya-cc-top-tab.is-active {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
 @media (max-width: 1024px) {
   .maya-cc {
     display: flex;
@@ -7541,6 +7570,18 @@ body.cf-modal-open {
     -webkit-overflow-scrolling: touch;
     gap: 0.65rem;
     min-height: min-content;
+  }
+
+  .maya-cc-top-tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .maya-cc-top-tab {
+    flex: 1;
+    text-align: center;
+    min-height: 2.2rem;
+    font-size: 0.8rem;
   }
 
   .maya-cc-zone {
@@ -9242,6 +9283,20 @@ body.dark-theme .dash-alert-strip {
 /* Centro Maya + Chat IA: superficies que venían en “papel claro” */
 body.dark-theme .maya-cc {
   background: var(--bg);
+}
+
+body.dark-theme .maya-cc-top-tabs {
+  background: rgba(21, 27, 61, 0.9);
+  border-color: var(--border);
+}
+
+body.dark-theme .maya-cc-top-tab {
+  color: #cbd5e1;
+}
+
+body.dark-theme .maya-cc-top-tab.is-active {
+  background: rgba(99, 102, 241, 0.24);
+  color: #e2e8f0;
 }
 
 body.dark-theme .maya-cc-zone {
