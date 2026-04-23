@@ -7411,6 +7411,13 @@ body.cf-modal-open {
   font-weight: 700;
 }
 
+.eq-unfinished__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  justify-content: flex-end;
+}
+
 .eq-members {
   padding: 0 1.35rem 1.35rem;
   min-width: 0;
@@ -7460,6 +7467,11 @@ body.cf-modal-open {
   .eq-unfinished__btn {
     width: 100%;
     justify-content: center;
+  }
+
+  .eq-unfinished__actions {
+    width: 100%;
+    justify-content: stretch;
   }
 
   .eq-unfinished__item {

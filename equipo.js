@@ -123,6 +123,11 @@ function tsToDate(ts) {
   return null;
 }
 
+function tsToMillis(ts) {
+  const d = tsToDate(ts);
+  return d ? d.getTime() : 0;
+}
+
 function isPendingOrderStatus(raw) {
   const s = String(raw || "").toLowerCase();
   return s === "nuevo" || s === "produccion" || s === "en_preparacion" || s === "listo";
@@ -501,6 +506,13 @@ function refreshTimeSummary() {
   const earnEl = document.getElementById("eq-today-earnings");
   if (hoursEl) hoursEl.textContent = totalHoursToday.toFixed(2);
   if (earnEl) earnEl.textContent = formatMoney(totalEarningsToday);
+  console.log("[Team] top summary refreshed", {
+    sessionStatus: status,
+    orderStatus: activeSession
+      ? String(activeSession.linkedOrderWorkStatus || activeSession.linkedOrderStatus || "sin_iniciar")
+      : "sin_iniciar",
+    timer: formatDurationMs(currentSessionElapsedMs()),
+  });
 }
 
 function isUnfinishedOrder(order) {
@@ -567,12 +579,15 @@ function renderUnfinishedOrders() {
     detail.className = "eq-unfinished__detail";
     detail.textContent = `${row.workStatus} · ${formatDurationMs(row.elapsedMs)}`;
     meta.append(name, detail);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "dash-quick-btn eq-unfinished__btn";
-    btn.textContent = row.isActive ? "Activa" : "Retomar";
-    btn.disabled = row.isActive;
-    btn.addEventListener("click", () => {
+    const actions = document.createElement("div");
+    actions.className = "eq-unfinished__actions";
+
+    const resumeBtn = document.createElement("button");
+    resumeBtn.type = "button";
+    resumeBtn.className = "dash-quick-btn eq-unfinished__btn";
+    resumeBtn.textContent = row.isActive ? "Activa" : "Retomar";
+    resumeBtn.disabled = row.isActive;
+    resumeBtn.addEventListener("click", () => {
       const picker = document.getElementById("eq-linked-order-picker");
       if (picker && "value" in picker) picker.value = row.orderId;
       renderLinkedOrderSummary();
@@ -581,7 +596,30 @@ function renderUnfinishedOrders() {
         showLoadError("No se pudo retomar el pedido.");
       });
     });
-    item.append(meta, btn);
+
+    const readyBtn = document.createElement("button");
+    readyBtn.type = "button";
+    readyBtn.className = "dash-quick-btn eq-unfinished__btn";
+    readyBtn.textContent = "Marcar listo";
+    readyBtn.addEventListener("click", () => {
+      markPreparationOrderReady(row.orderId).catch((e) => {
+        console.error(e);
+        showLoadError("No se pudo marcar listo el pedido.");
+      });
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "dash-quick-btn eq-unfinished__btn";
+    removeBtn.textContent = "Quitar";
+    removeBtn.addEventListener("click", () => {
+      removePreparationOrder(row.orderId).catch((e) => {
+        console.error(e);
+        showLoadError("No se pudo quitar el pedido de preparación.");
+      });
+    });
+    actions.append(resumeBtn, readyBtn, removeBtn);
+    item.append(meta, actions);
     root.append(item);
   }
 }
@@ -665,6 +703,50 @@ async function resumePausedSession(session) {
     });
   }
   console.log("[Team] work session resumed", String(session.id));
+}
+
+async function markPreparationOrderReady(orderId) {
+  if (!businessId || !orderId) return;
+  const orderRef = doc(db, "businesses", businessId, "orders", String(orderId));
+  await updateDoc(orderRef, {
+    workStatus: "listo",
+    status: "listo",
+    currentOperatorId: null,
+    lastWorkedAt: serverTimestamp(),
+  });
+  const running = findRunningSession();
+  if (running && String(running.linkedOrderId || "") === String(orderId)) {
+    await finalizeSession();
+  }
+  console.log("[Team] preparation order marked ready", String(orderId));
+  refreshTimeSummary();
+  renderUnfinishedOrders();
+}
+
+async function removePreparationOrder(orderId) {
+  if (!businessId || !orderId) return;
+  const confirmed = window.confirm("¿Quitar este pedido de preparación? Esto no lo entrega, solo lo saca del flujo de equipo.");
+  if (!confirmed) return;
+  const orderRef = doc(db, "businesses", businessId, "orders", String(orderId));
+  const snap = await getDoc(orderRef);
+  if (!snap.exists()) return;
+  const data = snap.data() || {};
+  const nextStatus = String(data.status || "").toLowerCase() === "en_preparacion" ? "nuevo" : String(data.status || "nuevo");
+  await updateDoc(orderRef, {
+    workStatus: "sin_iniciar",
+    status: nextStatus || "nuevo",
+    currentOperatorId: null,
+    lastWorkedAt: serverTimestamp(),
+  });
+  const running = findRunningSession();
+  if (running && String(running.linkedOrderId || "") === String(orderId)) {
+    await pauseSessionById(running, "remove_preparation");
+    activeSession = null;
+    stopTimerTicker();
+  }
+  console.log("[Team] preparation order removed", String(orderId));
+  refreshTimeSummary();
+  renderUnfinishedOrders();
 }
 
 function findPausedSessionByOrder(orderId) {
@@ -918,10 +1000,20 @@ async function startWorkSession() {
   if (resumable) {
     const resumeAt = Timestamp.now();
     await resumePausedSession(resumable);
-    activeSession = { ...resumable, status: "activa", resumedAt: resumeAt, pausedAt: null };
+    activeSession = {
+      ...resumable,
+      status: "activa",
+      resumedAt: resumeAt,
+      pausedAt: null,
+      linkedOrderWorkStatus: "en_preparacion",
+      linkedOrderStatus: "en_preparacion",
+      totalTrackedMs: Number(resumable.totalTrackedMs) || 0,
+    };
+    console.log("[Team] accumulated time restored", activeSession.totalTrackedMs);
     renderSessionControlsState();
     refreshTimeSummary();
     ensureTimerTicker();
+    console.log("[Team] live timer restarted", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
   }
@@ -993,9 +1085,19 @@ async function togglePauseSession() {
   const status = normalizeSessionStatus(activeSession.status);
   if (status === "pausada") {
     await resumePausedSession(activeSession);
-    activeSession = { ...activeSession, status: "activa", resumedAt: Timestamp.now(), pausedAt: null };
+    activeSession = {
+      ...activeSession,
+      status: "activa",
+      resumedAt: Timestamp.now(),
+      pausedAt: null,
+      linkedOrderWorkStatus: "en_preparacion",
+      totalTrackedMs: Number(activeSession.totalTrackedMs) || 0,
+    };
+    console.log("[Team] accumulated time restored", activeSession.totalTrackedMs);
     renderSessionControlsState();
     refreshTimeSummary();
+    ensureTimerTicker();
+    console.log("[Team] live timer restarted", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
   }
@@ -1111,11 +1213,21 @@ function subscribeTeamSessions() {
     qy,
     (snap) => {
       teamSessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      teamSessions.sort((a, b) => {
+        const ta = Math.max(tsToMillis(a.updatedAt), tsToMillis(a.resumedAt), tsToMillis(a.createdAt), tsToMillis(a.startedAt));
+        const tb = Math.max(tsToMillis(b.updatedAt), tsToMillis(b.resumedAt), tsToMillis(b.createdAt), tsToMillis(b.startedAt));
+        return tb - ta;
+      });
       activeSession =
         teamSessions.find(
           (s) =>
             String(s.userId || "") === currentUser?.uid &&
-            (normalizeSessionStatus(s.status) === "activa" || normalizeSessionStatus(s.status) === "pausada"),
+            normalizeSessionStatus(s.status) === "activa",
+        ) ||
+        teamSessions.find(
+          (s) =>
+            String(s.userId || "") === currentUser?.uid &&
+            normalizeSessionStatus(s.status) === "pausada",
         ) ||
         null;
       renderSessionControlsState();
