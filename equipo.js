@@ -255,6 +255,24 @@ function showLoadError(msg) {
   el.hidden = !msg;
 }
 
+/** @param {unknown} err */
+function handleEquipoFirestorePermissionDenied(context, err) {
+  const code =
+    err && typeof err === "object" && err !== null && "code" in err
+      ? String(/** @type {{ code?: string }} */ (err).code || "")
+      : "";
+  const msg = err instanceof Error ? err.message : String(err || "");
+  if (
+    code === "permission-denied" ||
+    /missing or insufficient permissions|insufficient permissions|permission-denied/i.test(msg)
+  ) {
+    console.error(`[Equipo] Firestore permission denied (${context}):`, code, msg);
+    showLoadError("Permiso denegado en Firestore para control de jornada");
+    return true;
+  }
+  return false;
+}
+
 function setText(id, text) {
   const el = document.getElementById(id);
   if (el) el.textContent = text;
@@ -708,7 +726,9 @@ function renderUnfinishedOrders() {
     readyBtn.addEventListener("click", () => {
       markPreparationOrderReady(row.orderId).catch((e) => {
         console.error(e);
-        showLoadError("No se pudo marcar listo el pedido.");
+        if (!handleEquipoFirestorePermissionDenied("marcar listo", e)) {
+          showLoadError("No se pudo marcar listo el pedido.");
+        }
       });
     });
 
@@ -719,7 +739,9 @@ function renderUnfinishedOrders() {
     removeBtn.addEventListener("click", () => {
       removePreparationOrder(row.orderId).catch((e) => {
         console.error(e);
-        showLoadError("No se pudo quitar el pedido de preparación.");
+        if (!handleEquipoFirestorePermissionDenied("quitar preparación", e)) {
+          showLoadError("No se pudo quitar el pedido de preparación.");
+        }
       });
     });
     actions.append(resumeBtn, readyBtn, removeBtn);
@@ -959,7 +981,9 @@ async function confirmDelete(id, name) {
     updateStats(members);
   } catch (e) {
     console.error(e);
-    showLoadError("No se pudo eliminar. Revisa tu conexión e inténtalo otra vez.");
+    if (!handleEquipoFirestorePermissionDenied("eliminar miembro", e)) {
+      showLoadError("No se pudo eliminar. Revisa tu conexión e inténtalo otra vez.");
+    }
   }
 }
 
@@ -1013,7 +1037,11 @@ async function submitForm(ev) {
     prefillWorkHourlyRate();
   } catch (e) {
     console.error(e);
-    showFormError("No se pudo guardar. Revisa tu conexión e inténtalo otra vez.");
+    if (handleEquipoFirestorePermissionDenied("guardar miembro", e)) {
+      showFormError("");
+    } else {
+      showFormError("No se pudo guardar. Revisa tu conexión e inténtalo otra vez.");
+    }
   }
 }
 
@@ -1182,7 +1210,9 @@ async function startWork() {
   } catch (e) {
     console.log("startWork failed:", e instanceof Error ? e.message : String(e));
     console.error(e);
-    showLoadError("No se pudo iniciar la jornada.");
+    if (!handleEquipoFirestorePermissionDenied("startWork", e)) {
+      showLoadError("No se pudo iniciar la jornada.");
+    }
   }
 }
 
@@ -1219,7 +1249,9 @@ async function pauseWork() {
     renderUnfinishedOrders();
   } catch (e) {
     console.error(e);
-    showLoadError("No se pudo pausar.");
+    if (!handleEquipoFirestorePermissionDenied("pauseWork", e)) {
+      showLoadError("No se pudo pausar.");
+    }
   }
 }
 
@@ -1256,7 +1288,9 @@ async function resumeWork() {
     renderUnfinishedOrders();
   } catch (e) {
     console.error(e);
-    showLoadError("No se pudo retomar.");
+    if (!handleEquipoFirestorePermissionDenied("resumeWork", e)) {
+      showLoadError("No se pudo retomar.");
+    }
   }
 }
 
@@ -1316,7 +1350,9 @@ async function finalizeWork() {
           });
         }
       } catch (e) {
-        console.warn("[Team] update order labor fields", e);
+        if (!handleEquipoFirestorePermissionDenied("finalizeWork order labor", e)) {
+          console.warn("[Team] update order labor fields", e);
+        }
       }
     }
 
@@ -1333,7 +1369,9 @@ async function finalizeWork() {
     renderUnfinishedOrders();
   } catch (e) {
     console.error(e);
-    showLoadError("No se pudo finalizar la jornada.");
+    if (!handleEquipoFirestorePermissionDenied("finalizeWork", e)) {
+      showLoadError("No se pudo finalizar la jornada.");
+    }
   }
 }
 
@@ -1355,7 +1393,9 @@ function subscribePendingOrders() {
     },
     (err) => {
       console.error(err);
-      showLoadError("No se pudieron cargar pedidos pendientes para vincular.");
+      if (!handleEquipoFirestorePermissionDenied("subscribePendingOrders", err)) {
+        showLoadError("No se pudieron cargar pedidos pendientes para vincular.");
+      }
     },
   );
 }
@@ -1398,7 +1438,9 @@ function subscribeTeamSessions() {
     },
     (err) => {
       console.error(err);
-      showLoadError("No se pudo cargar el control de jornada.");
+      if (!handleEquipoFirestorePermissionDenied("subscribeTeamSessions", err)) {
+        showLoadError("No se pudo cargar el control de jornada.");
+      }
     },
   );
 }
@@ -1498,7 +1540,9 @@ onAuthStateChanged(auth, async (user) => {
     }
   } catch (e) {
     console.error(e);
-    showLoadError("No se pudo cargar el equipo. Revisa tu conexión e inténtalo otra vez.");
+    if (!handleEquipoFirestorePermissionDenied("carga inicial equipo", e)) {
+      showLoadError("No se pudo cargar el equipo. Revisa tu conexión e inténtalo otra vez.");
+    }
   }
 });
 

@@ -14,6 +14,17 @@ service cloud.firestore {
         || resource.data.ownerUid == '';
     }
 
+    /* Dueño del negocio (documento businesses/{businessId}). */
+    function businessOwnerUid(businessId) {
+      return get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid;
+    }
+
+    function isBusinessOwner(businessId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/businesses/$(businessId))
+        && businessOwnerUid(businessId) == request.auth.uid;
+    }
+
     match /businesses/{businessId} {
       /* Crear: dueño explícito (hasAll sobre keys fallaba en algunos payloads con FieldValue). */
       allow create: if request.auth != null
@@ -53,63 +64,59 @@ service cloud.firestore {
           && request.resource.data.status == 'new'
           && request.resource.data.estimatedPrice == 0;
 
-        allow read, update, delete: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, update, delete: if isBusinessOwner(businessId);
       }
 
       match /jobs/{jobId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       match /campaigns/{campaignId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       match /clients/{clientId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       match /teamMembers/{memberId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
+      /* Jornada / sesiones de trabajo (Equipo). Antes no existía regla → denegaba todo. */
+      match /teamSessions/{sessionId} {
+        allow read, create, update: if isBusinessOwner(businessId);
+        allow delete: if isBusinessOwner(businessId);
       }
 
       /* Centro de Control Maya — WhatsApp: una conversación por número (doc id = phoneNumber). */
       match /conversations/{phoneNumber} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
 
         match /messages/{messageId} {
-          allow read, write: if request.auth != null
-            && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+          allow read, write: if isBusinessOwner(businessId);
         }
       }
 
-      /* Pedidos confirmados por Maya (estadísticas / historial); distinto de `jobs` usado en el panel legacy. */
+      /* Pedidos (incl. workStatus, totalLabor*, lastWorkedAt para Equipo). */
       match /orders/{orderId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       match /finance/{transactionId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       /* Calendario global (header, pedidos, Maya): eventos por negocio. Dueño = ownerUid en el doc businesses/{id}. */
       match /calendar/{eventId} {
-        allow read, write: if request.auth != null
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+        allow read, write: if isBusinessOwner(businessId);
       }
 
       /* Historial del Chat IA del panel (Maya): un doc por usuario dueño. */
       match /internalChatHistory/{userId} {
         allow read, write: if request.auth != null
           && request.auth.uid == userId
-          && get(/databases/$(database)/documents/businesses/$(businessId)).data.ownerUid == request.auth.uid;
+          && isBusinessOwner(businessId);
       }
     }
   }
