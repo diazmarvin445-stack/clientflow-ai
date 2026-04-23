@@ -6943,6 +6943,40 @@ body.cf-modal-open {
   flex-shrink: 0;
 }
 
+.eq-time-panel {
+  margin: 0 1.35rem 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2, #f8fafc);
+}
+
+.eq-time-panel__head {
+  margin-bottom: 0.75rem;
+}
+
+.eq-time-panel__body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.eq-time-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.eq-time-summary {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.65rem;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.eq-time-summary p {
+  margin: 0.15rem 0;
+}
+
 .eq-members {
   padding: 0 1.35rem 1.35rem;
 }

@@ -32,6 +32,7 @@ const INCOME_OPTIONS = [
 const EXPENSE_OPTIONS = [
   { value: "materiales", label: "Materiales" },
   { value: "transporte", label: "Transporte" },
+  { value: "mano_obra", label: "Mano de obra" },
   { value: "personal", label: "Personal" },
   { value: "servicios", label: "Servicios" },
   { value: "alquiler", label: "Alquiler" },

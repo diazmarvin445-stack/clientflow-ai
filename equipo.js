@@ -5,6 +5,11 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  Timestamp,
   serverTimestamp,
   updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -20,6 +25,18 @@ import { initDashShell } from "./dash-shell.js";
 let businessId = null;
 /** @type {Record<string, unknown>[]} */
 let members = [];
+/** @type {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").User | null} */
+let currentUser = null;
+/** @type {Record<string, unknown>[]} */
+let teamSessions = [];
+/** @type {Record<string, unknown> | null} */
+let activeSession = null;
+/** @type {ReturnType<typeof setInterval> | null} */
+let timerTicker = null;
+/** @type {(() => void) | null} */
+let unsubSessions = null;
+
+const DEFAULT_HOURLY_RATE_USD = 15;
 
 const DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const DAY_SHORT_ES = {
@@ -31,6 +48,75 @@ const DAY_SHORT_ES = {
   sat: "Sáb",
   sun: "Dom",
 };
+
+function defaultHourlyRateStorageKey(bid) {
+  return `cf_team_default_hourly_rate_v1_${bid}`;
+}
+
+function getDefaultHourlyRate() {
+  if (!businessId) return DEFAULT_HOURLY_RATE_USD;
+  const input = document.getElementById("eq-default-hourly-rate");
+  if (input && "value" in input) {
+    const uiVal = Number(input.value);
+    if (Number.isFinite(uiVal) && uiVal >= 0) return uiVal;
+  }
+  const stored = Number(localStorage.getItem(defaultHourlyRateStorageKey(businessId)));
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+  return DEFAULT_HOURLY_RATE_USD;
+}
+
+function setDefaultHourlyRateInput(rate) {
+  const input = document.getElementById("eq-default-hourly-rate");
+  if (input && "value" in input) input.value = String(rate);
+}
+
+function saveDefaultHourlyRateFromInput() {
+  if (!businessId) return;
+  const rate = getDefaultHourlyRate();
+  localStorage.setItem(defaultHourlyRateStorageKey(businessId), String(rate));
+  setDefaultHourlyRateInput(rate);
+}
+
+function memberHourlyRate(m) {
+  const raw = Number(m.hourlyRate);
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  return getDefaultHourlyRate();
+}
+
+function formatMoney(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "$0.00";
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatDurationMs(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
+  const hh = String(Math.floor(totalSec / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
+  const ss = String(totalSec % 60).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+function sameDay(d, ref = new Date()) {
+  return (
+    d.getFullYear() === ref.getFullYear() &&
+    d.getMonth() === ref.getMonth() &&
+    d.getDate() === ref.getDate()
+  );
+}
+
+function tsToDate(ts) {
+  if (!ts || typeof ts !== "object") return null;
+  if (typeof /** @type {{ toDate?: () => Date }} */ (ts).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (ts).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 function todayCode() {
   const map = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
@@ -161,6 +247,7 @@ function renderMemberCard(m) {
   const daysStr = formatDaysLabel(m.workDays);
   const hoursStr = formatTimeRange(m.hoursFrom, m.hoursTo);
   const href = telHref(phone);
+  const rate = memberHourlyRate(m);
 
   const card = document.createElement("article");
   card.className = "eq-member-card";
@@ -233,6 +320,7 @@ function renderMemberCard(m) {
   grid.append(
     row("Teléfono", phoneContent),
     row("Correo", emailContent),
+    row("Tarifa por hora", document.createTextNode(formatMoney(rate))),
     row("Días asignados", document.createTextNode(daysStr)),
     row("Horario de trabajo", document.createTextNode(hoursStr)),
   );
@@ -280,6 +368,73 @@ function updateStats(list) {
   setText("eq-stat-operativo", String(s.operativo));
   setText("eq-stat-admin", String(s.admin));
   setPanelMeta(list.length);
+}
+
+function currentSessionElapsedMs() {
+  if (!activeSession) return 0;
+  const startedAt = tsToDate(activeSession.startTime);
+  if (!startedAt) return 0;
+  const pausedAccumulatedMs = Number(activeSession.pausedDurationMs) || 0;
+  const pausedAt = tsToDate(activeSession.pausedAt);
+  const isPaused = activeSession.status === "paused";
+  const now = isPaused && pausedAt ? pausedAt.getTime() : Date.now();
+  return Math.max(0, now - startedAt.getTime() - pausedAccumulatedMs);
+}
+
+function refreshTimeSummary() {
+  const timerEl = document.getElementById("eq-active-timer");
+  if (timerEl) timerEl.textContent = formatDurationMs(currentSessionElapsedMs());
+
+  if (!currentUser) return;
+  const now = new Date();
+  let totalHoursToday = 0;
+  let totalEarningsToday = 0;
+  for (const s of teamSessions) {
+    if (String(s.userId || "") !== currentUser.uid) continue;
+    const startedAt = tsToDate(s.startTime);
+    if (!startedAt || !sameDay(startedAt, now)) continue;
+    const h = Number(s.totalHours);
+    const pay = Number(s.totalPay);
+    if (Number.isFinite(h) && h > 0) totalHoursToday += h;
+    if (Number.isFinite(pay) && pay > 0) totalEarningsToday += pay;
+  }
+  const hoursEl = document.getElementById("eq-today-hours");
+  const earnEl = document.getElementById("eq-today-earnings");
+  if (hoursEl) hoursEl.textContent = totalHoursToday.toFixed(2);
+  if (earnEl) earnEl.textContent = formatMoney(totalEarningsToday);
+}
+
+function renderSessionControlsState() {
+  const startBtn = document.getElementById("eq-btn-start");
+  const pauseBtn = document.getElementById("eq-btn-pause");
+  const finishBtn = document.getElementById("eq-btn-finish");
+
+  const hasActive = Boolean(activeSession);
+  const paused = hasActive && activeSession.status === "paused";
+
+  if (startBtn instanceof HTMLButtonElement) {
+    startBtn.disabled = hasActive;
+  }
+  if (pauseBtn instanceof HTMLButtonElement) {
+    pauseBtn.disabled = !hasActive;
+    pauseBtn.textContent = paused ? "Reanudar" : "Pausar";
+  }
+  if (finishBtn instanceof HTMLButtonElement) {
+    finishBtn.disabled = !hasActive;
+  }
+}
+
+function ensureTimerTicker() {
+  if (timerTicker) return;
+  timerTicker = setInterval(() => {
+    refreshTimeSummary();
+  }, 1000);
+}
+
+function stopTimerTicker() {
+  if (!timerTicker) return;
+  clearInterval(timerTicker);
+  timerTicker = null;
 }
 
 function getVal(id) {
@@ -335,6 +490,7 @@ function openModal(memberId) {
     setVal("eq-staff-category", normalizeCategory(m.staffCategory));
     setVal("eq-phone", typeof m.phone === "string" ? m.phone : "");
     setVal("eq-email", typeof m.email === "string" ? m.email : "");
+    setVal("eq-hourly-rate", Number.isFinite(Number(m.hourlyRate)) ? String(Number(m.hourlyRate)) : "");
     const activeEl = document.getElementById("eq-active");
     if (activeEl instanceof HTMLInputElement) activeEl.checked = m.active !== false;
     setCheckedDays(m.workDays);
@@ -347,6 +503,7 @@ function openModal(memberId) {
     setVal("eq-staff-category", "operativo");
     setVal("eq-phone", "");
     setVal("eq-email", "");
+    setVal("eq-hourly-rate", "");
     const activeEl = document.getElementById("eq-active");
     if (activeEl instanceof HTMLInputElement) activeEl.checked = true;
     setCheckedDays([]);
@@ -404,6 +561,7 @@ async function submitForm(ev) {
   showFormError("");
 
   const workDays = getCheckedDays();
+  const hourlyRateRaw = Number(getVal("eq-hourly-rate").trim());
   const payload = {
     fullName,
     roleTitle,
@@ -417,6 +575,8 @@ async function submitForm(ev) {
     workDays,
     hoursFrom: getVal("eq-hours-from").trim(),
     hoursTo: getVal("eq-hours-to").trim(),
+    hourlyRate:
+      Number.isFinite(hourlyRateRaw) && hourlyRateRaw >= 0 ? hourlyRateRaw : getDefaultHourlyRate(),
     updatedAt: serverTimestamp(),
   };
 
@@ -441,6 +601,187 @@ async function submitForm(ev) {
   }
 }
 
+function memberForCurrentUser() {
+  if (!currentUser) return null;
+  const byUid = members.find((m) => typeof m.userId === "string" && m.userId === currentUser.uid);
+  if (byUid) return byUid;
+  const email = String(currentUser.email || "").toLowerCase();
+  if (email) {
+    const byEmail = members.find(
+      (m) => typeof m.email === "string" && m.email.trim().toLowerCase() === email,
+    );
+    if (byEmail) return byEmail;
+  }
+  return null;
+}
+
+function currentUserDisplayName() {
+  const fromTeam = memberForCurrentUser();
+  if (fromTeam && typeof fromTeam.fullName === "string" && fromTeam.fullName.trim()) return fromTeam.fullName.trim();
+  if (currentUser?.displayName && currentUser.displayName.trim()) return currentUser.displayName.trim();
+  if (currentUser?.email && currentUser.email.trim()) return currentUser.email.trim();
+  return "Owner";
+}
+
+function updateTimePanelHeader() {
+  const label = document.getElementById("eq-time-user-label");
+  if (!label) return;
+  label.textContent = `Operador: ${currentUserDisplayName()}`;
+}
+
+async function startWorkSession() {
+  if (!businessId || !currentUser) return;
+  if (activeSession) return;
+  const linkedOrderInput = document.getElementById("eq-linked-order-id");
+  const linkedOrderId =
+    linkedOrderInput && "value" in linkedOrderInput ? String(linkedOrderInput.value).trim() : "";
+  const member = memberForCurrentUser();
+  const rate = memberHourlyRate(member || {});
+  const userName = currentUserDisplayName();
+
+  await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
+    userId: currentUser.uid,
+    userName,
+    memberId: member?.id || null,
+    status: "active",
+    startTime: serverTimestamp(),
+    endTime: null,
+    totalHours: 0,
+    totalPay: 0,
+    hourlyRate: rate,
+    linkedOrderId: linkedOrderId || null,
+    pausedAt: null,
+    pausedDurationMs: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+async function togglePauseSession() {
+  if (!businessId || !activeSession) return;
+  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
+  const status = String(activeSession.status || "");
+  if (status === "paused") {
+    const pausedAt = tsToDate(activeSession.pausedAt);
+    const pausedMs = pausedAt ? Math.max(0, Date.now() - pausedAt.getTime()) : 0;
+    const prevPaused = Number(activeSession.pausedDurationMs) || 0;
+    await updateDoc(sessionRef, {
+      status: "active",
+      pausedAt: null,
+      pausedDurationMs: prevPaused + pausedMs,
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+  await updateDoc(sessionRef, {
+    status: "paused",
+    pausedAt: Timestamp.now(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+async function finalizeSession() {
+  if (!businessId || !currentUser || !activeSession) return;
+  const end = new Date();
+  const startedAt = tsToDate(activeSession.startTime);
+  if (!startedAt) return;
+  let pausedDurationMs = Number(activeSession.pausedDurationMs) || 0;
+  if (activeSession.status === "paused") {
+    const pausedAt = tsToDate(activeSession.pausedAt);
+    if (pausedAt) pausedDurationMs += Math.max(0, end.getTime() - pausedAt.getTime());
+  }
+  const elapsedMs = Math.max(0, end.getTime() - startedAt.getTime() - pausedDurationMs);
+  const totalHours = elapsedMs / (1000 * 60 * 60);
+  const sessionRate =
+    Number.isFinite(Number(activeSession.hourlyRate)) && Number(activeSession.hourlyRate) >= 0
+      ? Number(activeSession.hourlyRate)
+      : memberHourlyRate(memberForCurrentUser() || {});
+  const totalPay = Number((totalHours * sessionRate).toFixed(2));
+
+  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
+  await updateDoc(sessionRef, {
+    status: "completed",
+    endTime: Timestamp.fromDate(end),
+    pausedAt: null,
+    pausedDurationMs,
+    totalHours,
+    totalPay,
+    updatedAt: serverTimestamp(),
+  });
+
+  await addDoc(collection(db, "businesses", businessId, "finance"), {
+    type: "expense",
+    category: "mano_obra",
+    description: `Pago por horas - ${currentUserDisplayName()}`,
+    amount: totalPay,
+    date: Timestamp.fromDate(end),
+    linkedOrderId: activeSession.linkedOrderId || null,
+    orderId: activeSession.linkedOrderId || null,
+    clientId: null,
+    status: "cobrado",
+    createdBy: "system",
+    createdAt: serverTimestamp(),
+  });
+}
+
+function subscribeTeamSessions() {
+  if (!businessId || !currentUser) return;
+  if (unsubSessions) {
+    unsubSessions();
+    unsubSessions = null;
+  }
+  const qy = query(
+    collection(db, "businesses", businessId, "teamSessions"),
+    orderBy("createdAt", "desc"),
+    limit(500),
+  );
+  unsubSessions = onSnapshot(
+    qy,
+    (snap) => {
+      teamSessions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      activeSession =
+        teamSessions.find(
+          (s) =>
+            String(s.userId || "") === currentUser?.uid &&
+            (String(s.status || "") === "active" || String(s.status || "") === "paused"),
+        ) ||
+        null;
+      renderSessionControlsState();
+      refreshTimeSummary();
+      if (activeSession) ensureTimerTicker();
+      else stopTimerTicker();
+    },
+    (err) => {
+      console.error(err);
+      showLoadError("No se pudo cargar el control de jornada.");
+    },
+  );
+}
+
+function wireTimeTracking() {
+  document.getElementById("eq-btn-start")?.addEventListener("click", () => {
+    startWorkSession().catch((e) => {
+      console.error(e);
+      showLoadError("No se pudo iniciar la jornada.");
+    });
+  });
+  document.getElementById("eq-btn-pause")?.addEventListener("click", () => {
+    togglePauseSession().catch((e) => {
+      console.error(e);
+      showLoadError("No se pudo actualizar la pausa.");
+    });
+  });
+  document.getElementById("eq-btn-finish")?.addEventListener("click", () => {
+    finalizeSession().catch((e) => {
+      console.error(e);
+      showLoadError("No se pudo finalizar la jornada.");
+    });
+  });
+  document.getElementById("eq-default-hourly-rate")?.addEventListener("change", () => {
+    saveDefaultHourlyRateFromInput();
+  });
+}
+
 function wireModal() {
   document.getElementById("eq-open-add")?.addEventListener("click", () => openModal(null));
   document.getElementById("eq-modal-backdrop")?.addEventListener("click", closeModal);
@@ -459,6 +800,7 @@ onAuthStateChanged(auth, async (user) => {
     window.location.href = "index.html";
     return;
   }
+  currentUser = user;
 
   initDashShell({ auth, db });
 
@@ -474,10 +816,13 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     businessId = business.id;
+    setDefaultHourlyRateInput(getDefaultHourlyRate());
     renderHeader(business);
     members = await fetchTeamMembersForBusiness(db, businessId);
     renderList(members);
     updateStats(members);
+    updateTimePanelHeader();
+    subscribeTeamSessions();
     showLoadError("");
   } catch (e) {
     console.error(e);
@@ -486,3 +831,4 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 wireModal();
+wireTimeTracking();

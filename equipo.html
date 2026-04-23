@@ -144,6 +144,42 @@
               </button>
             </div>
 
+            <div class="eq-time-panel" id="eq-time-panel" aria-label="Control de jornada">
+              <div class="eq-time-panel__head">
+                <h3 class="dash-panel-title">Control de jornada</h3>
+                <p class="eq-panel-sub" id="eq-time-user-label">Operador actual</p>
+              </div>
+              <div class="eq-time-panel__body">
+                <label class="cfg-field">
+                  <span class="cfg-label">Pedido vinculado (opcional)</span>
+                  <input type="text" id="eq-linked-order-id" class="cfg-input" placeholder="orderId o jobsId" />
+                </label>
+                <label class="cfg-field">
+                  <span class="cfg-label">Tarifa por hora por defecto (USD)</span>
+                  <input
+                    type="number"
+                    id="eq-default-hourly-rate"
+                    class="cfg-input"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ej. 15.00"
+                  />
+                </label>
+                <div class="eq-time-actions">
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="eq-btn-start">
+                    Iniciar trabajo
+                  </button>
+                  <button type="button" class="dash-quick-btn" id="eq-btn-pause">Pausar</button>
+                  <button type="button" class="dash-quick-btn" id="eq-btn-finish">Finalizar jornada</button>
+                </div>
+                <div class="eq-time-summary">
+                  <p><strong>Sesión actual:</strong> <span id="eq-active-timer">00:00:00</span></p>
+                  <p><strong>Hoy (horas):</strong> <span id="eq-today-hours">0.00</span></p>
+                  <p><strong>Hoy (ganancias):</strong> <span id="eq-today-earnings">$0.00</span></p>
+                </div>
+              </div>
+            </div>
+
             <div id="eq-members-root" class="eq-members"></div>
           </section>
         </div>
@@ -196,6 +232,17 @@
             <label class="cfg-field">
               <span class="cfg-label">Correo electrónico</span>
               <input type="email" id="eq-email" class="cfg-input" autocomplete="email" />
+            </label>
+            <label class="cfg-field">
+              <span class="cfg-label">Tarifa por hora (USD)</span>
+              <input
+                type="number"
+                id="eq-hourly-rate"
+                class="cfg-input"
+                min="0"
+                step="0.01"
+                placeholder="Usa tarifa por defecto si lo dejas vacío"
+              />
             </label>
             <label class="cfg-field cfg-field--full eq-toggle-field">
               <span class="cfg-label">Estado</span>
