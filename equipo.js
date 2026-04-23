@@ -486,7 +486,7 @@ function refreshTimeSummary() {
     payEl.textContent = formatMoney(estimated);
   }
   if (activeSession && normalizeSessionStatus(activeSession.status) === "activa") {
-    console.log("[Team] live timer running", formatDurationMs(currentSessionElapsedMs()));
+    console.log("[Team] timer tick", formatDurationMs(currentSessionElapsedMs()));
   }
 
   if (!currentUser) return;
@@ -497,10 +497,21 @@ function refreshTimeSummary() {
     if (String(s.userId || "") !== currentUser.uid) continue;
     const startedAt = tsToDate(s.startedAt) || tsToDate(s.startTime);
     if (!startedAt || !sameDay(startedAt, now)) continue;
-    const h = Number(s.totalHours);
-    const pay = Number(s.totalPay);
+    const st = normalizeSessionStatus(s.status);
+    if (st === "finalizada") {
+      const h = Number(s.totalHours);
+      const pay = Number(s.totalPay);
+      if (Number.isFinite(h) && h > 0) totalHoursToday += h;
+      if (Number.isFinite(pay) && pay > 0) totalEarningsToday += pay;
+      continue;
+    }
+    const ms = sessionElapsedMs(s);
+    const h = ms / (1000 * 60 * 60);
+    const rate = Number(s.hourlyRate) || 0;
     if (Number.isFinite(h) && h > 0) totalHoursToday += h;
-    if (Number.isFinite(pay) && pay > 0) totalEarningsToday += pay;
+    if (Number.isFinite(rate) && rate > 0 && Number.isFinite(h) && h > 0) {
+      totalEarningsToday += h * rate;
+    }
   }
   const hoursEl = document.getElementById("eq-today-hours");
   const earnEl = document.getElementById("eq-today-earnings");
@@ -1013,7 +1024,7 @@ async function startWorkSession() {
     renderSessionControlsState();
     refreshTimeSummary();
     ensureTimerTicker();
-    console.log("[Team] live timer restarted", formatDurationMs(currentSessionElapsedMs()));
+    console.log("[Team] timer resumed", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
   }
@@ -1033,7 +1044,7 @@ async function startWorkSession() {
   }
   const nowTs = Timestamp.now();
 
-  await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
+  const sessionRef = await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
     operatorId: currentUser.uid,
     operatorName: userName,
     userId: currentUser.uid,
@@ -1061,7 +1072,7 @@ async function startWorkSession() {
     updatedAt: serverTimestamp(),
   });
   activeSession = {
-    id: `local-${nowTs.toMillis()}`,
+    id: sessionRef.id,
     userId: currentUser.uid,
     status: "activa",
     startedAt: nowTs,
@@ -1077,6 +1088,7 @@ async function startWorkSession() {
   console.log("[Team] work session started", linkedOrderId || "sin_vincular");
   refreshTimeSummary();
   ensureTimerTicker();
+  console.log("[Team] timer started", formatDurationMs(currentSessionElapsedMs()));
   renderUnfinishedOrders();
 }
 
@@ -1097,7 +1109,7 @@ async function togglePauseSession() {
     renderSessionControlsState();
     refreshTimeSummary();
     ensureTimerTicker();
-    console.log("[Team] live timer restarted", formatDurationMs(currentSessionElapsedMs()));
+    console.log("[Team] timer resumed", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
   }
@@ -1105,6 +1117,7 @@ async function togglePauseSession() {
   activeSession = { ...activeSession, status: "pausada", resumedAt: null };
   renderSessionControlsState();
   refreshTimeSummary();
+  console.log("[Team] timer paused", formatDurationMs(currentSessionElapsedMs()));
   renderUnfinishedOrders();
 }
 
@@ -1161,7 +1174,7 @@ async function finalizeSession() {
     }
   }
 
-  await addDoc(collection(db, "businesses", businessId, "finance"), {
+  const financeRef = await addDoc(collection(db, "businesses", businessId, "finance"), {
     type: "expense",
     category: "mano_obra",
     description: `Pago por horas - ${currentUserDisplayName()}`,
@@ -1177,6 +1190,17 @@ async function finalizeSession() {
     createdBy: "system",
     createdAt: serverTimestamp(),
   });
+  console.log("[Team] session finalized", String(activeSession.id), {
+    trackedMs: finalTrackedMs,
+    totalHours,
+    totalPay,
+  });
+  console.log("[Team] finance expense created", financeRef.id);
+  activeSession = null;
+  renderSessionControlsState();
+  refreshTimeSummary();
+  stopTimerTicker();
+  renderUnfinishedOrders();
 }
 
 function subscribePendingOrders() {
