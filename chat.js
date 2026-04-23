@@ -41,17 +41,9 @@ const MAYA_WELCOME_STATIC = "Hola Marvin 👋";
 const MAX_API_MESSAGES = 20;
 /** Máximo de turnos guardados en memoria local y en Firestore (historial del panel). */
 const MAX_CHAT_MEMORY = 80;
-/** Tras este tiempo sin actividad se guarda el historial y se limpia la vista (sesión de chat). */
-const PANEL_CHAT_IDLE_MS = 60000;
 const DELIVERY_DAYS_OFFSET = 12;
 
-/** @type {ReturnType<typeof setTimeout> | null} */
-let panelChatIdleTimer = null;
 let panelChatUserIdCache = "";
-/** Marca de tiempo de la última actividad en el chat (mensaje, scroll, etc.) para la ventana de 1 minuto al cambiar de página. */
-let lastPanelChatActivityAt = 0;
-let inactivityTimer = null;
-const INACTIVITY_MS = 60 * 1000; // 1 minuto
 
 /** @type {{ role: 'user' | 'assistant', content: string }[]} */
 let apiConversation = [];
@@ -798,13 +790,8 @@ function panelChatSessionStorageKey(userId, businessId) {
   return `cf_maya_panel_chat_v1_${userId}_${businessId}`;
 }
 
-function touchPanelChatActivityTime() {
-  lastPanelChatActivityAt = Date.now();
-}
-
 /**
  * Guarda la conversación en sessionStorage al salir de la página (otra pestaña del panel).
- * Al volver antes de 1 min desde la última actividad, se restaura el hilo.
  */
 function persistChatToSessionStorage() {
   const uid = auth.currentUser?.uid;
@@ -816,7 +803,6 @@ function persistChatToSessionStorage() {
       sessionStorage.removeItem(key);
       return;
     }
-    const lastAt = lastPanelChatActivityAt || Date.now();
     sessionStorage.setItem(
       key,
       JSON.stringify({
@@ -824,7 +810,6 @@ function persistChatToSessionStorage() {
           role: m.role,
           content: String(m.content || "").slice(0, 12000),
         })),
-        lastActivityAt: lastAt,
       }),
     );
   } catch (e) {
@@ -841,9 +826,6 @@ function clearChatSessionStorage(uid, businessId) {
   }
 }
 
-/**
- * @returns {boolean} true si se restauró una sesión reciente (< 1 min desde última actividad)
- */
 function tryRestoreChatFromSessionStorage(businessId, userId) {
   const key = panelChatSessionStorageKey(userId, businessId);
   let raw;
@@ -861,13 +843,7 @@ function tryRestoreChatFromSessionStorage(businessId, userId) {
     return false;
   }
   const messages = parsed.messages;
-  const lastAt = Number(parsed.lastActivityAt) || 0;
   if (!Array.isArray(messages) || !messages.length) {
-    sessionStorage.removeItem(key);
-    return false;
-  }
-  const elapsed = Date.now() - lastAt;
-  if (elapsed >= PANEL_CHAT_IDLE_MS) {
     sessionStorage.removeItem(key);
     return false;
   }
@@ -875,7 +851,6 @@ function tryRestoreChatFromSessionStorage(businessId, userId) {
     .filter((x) => x && (x.role === "user" || x.role === "assistant") && typeof x.content === "string")
     .map((x) => ({ role: /** @type {'user'|'assistant'} */ (x.role), content: x.content }))
     .slice(-MAX_CHAT_MEMORY);
-  lastPanelChatActivityAt = lastAt;
   return apiConversation.length > 0;
 }
 
@@ -919,59 +894,6 @@ function renderChatHistoryFromMemory() {
     else appendAssistantBubble(m.content);
   }
   stream.scrollTop = stream.scrollHeight;
-}
-
-async function executePanelChatSessionIdleCleanup() {
-  const bid = activeBusiness?.id;
-  const uid = auth.currentUser?.uid;
-  if (bid && uid) {
-    clearChatSessionStorage(uid, bid);
-    try {
-      if (apiConversation.length) {
-        await persistPanelChatHistory(bid, uid);
-      }
-    } catch (e) {
-      console.warn("[YourColor Chat] idle save", e);
-    }
-  }
-  apiConversation = [];
-  lastPanelChatActivityAt = 0;
-  const stream = document.getElementById("yc-chat-stream");
-  if (stream) {
-    stream.innerHTML = "";
-    showWelcomeAssistant();
-  }
-}
-
-/**
- * Programa el cierre por inactividad (1 min desde `lastPanelChatActivityAt`).
- * @param {number} [delayMs] por defecto ventana completa; al volver de otra página se usa el tiempo restante.
- */
-function schedulePanelChatIdleTimer(delayMs = PANEL_CHAT_IDLE_MS) {
-  if (!activeBusiness || apiConversation.length === 0) return;
-  if (panelChatIdleTimer) window.clearTimeout(panelChatIdleTimer);
-  panelChatIdleTimer = window.setTimeout(() => {
-    panelChatIdleTimer = null;
-    void executePanelChatSessionIdleCleanup();
-  }, delayMs);
-}
-
-function bumpPanelChatActivity() {
-  if (!activeBusiness || apiConversation.length === 0) return;
-  touchPanelChatActivityTime();
-  schedulePanelChatIdleTimer();
-}
-
-function wirePanelChatIdleAndActivity() {
-  const stream = document.getElementById("yc-chat-stream");
-  const input = document.getElementById("yc-chat-input");
-  const shell = document.querySelector(".yc-chat-page") || document.querySelector(".dash-shell");
-  const bump = () => bumpPanelChatActivity();
-  stream?.addEventListener("scroll", bump, { passive: true });
-  input?.addEventListener("keydown", bump);
-  input?.addEventListener("input", bump);
-  input?.addEventListener("focus", bump);
-  shell?.addEventListener("pointerdown", bump);
 }
 
 function conversationSnippet(maxLen = 4000) {
@@ -1383,7 +1305,6 @@ async function sendToClaude() {
 
   apiConversation.push({ role: "user", content: text });
   trimApiMessages();
-  bumpPanelChatActivity();
 
   if (btn) {
     btn.disabled = true;
@@ -1445,7 +1366,6 @@ async function sendToClaude() {
     const { visible: assistantVisible, actionPayload } = appendAssistantBubble(reply);
     apiConversation.push({ role: "assistant", content: assistantVisible });
     trimApiMessages();
-    bumpPanelChatActivity();
 
     if (activeBusiness) {
       void loadFirebaseContext(activeBusiness).catch((e) => {
@@ -1528,16 +1448,12 @@ async function clearChatHistory() {
 
   // Limpiar memoria en runtime del chat interno
   apiConversation = [];
-  lastPanelChatActivityAt = 0;
-  if (panelChatIdleTimer) {
-    window.clearTimeout(panelChatIdleTimer);
-    panelChatIdleTimer = null;
-  }
 
   // Limpiar historial persistido en Firestore para evitar restaurar conversaciones viejas
   const businessId = activeBusiness?.id;
   const userId = auth.currentUser?.uid;
   if (businessId && userId) {
+    clearChatSessionStorage(userId, businessId);
     try {
       await deleteDoc(doc(db, "businesses", businessId, "internalChatHistory", userId));
     } catch (e) {
@@ -1564,12 +1480,15 @@ async function clearChatHistory() {
   }
 }
 
-function resetInactivityTimer() {
-  if (inactivityTimer) clearTimeout(inactivityTimer);
-  inactivityTimer = setTimeout(() => {
-    void clearChatHistory();
-    console.log("[CHAT_CLEARED] Por inactividad de 1 minuto");
-  }, INACTIVITY_MS);
+function clearChatPageSession() {
+  const businessId = activeBusiness?.id;
+  const userId = auth.currentUser?.uid || panelChatUserIdCache;
+  apiConversation = [];
+  localStorage.removeItem("mayaConversationHistory");
+  localStorage.removeItem("lastMayaMessage");
+  if (businessId && userId) {
+    clearChatSessionStorage(userId, businessId);
+  }
 }
 
 /**
@@ -2294,38 +2213,35 @@ async function bootWithUser(user) {
 
     mayaInitControlCenter(business);
 
-    const restoredFromTab = tryRestoreChatFromSessionStorage(business.id, user.uid);
-    let hadHistory = restoredFromTab;
-    if (!restoredFromTab) {
-      hadHistory = await loadPanelChatHistory(business.id, user.uid);
-    }
+    clearChatSessionStorage(user.uid, business.id);
 
     if (loading) loading.hidden = true;
     if (stream) {
       stream.hidden = false;
       stream.innerHTML = "";
-      if (hadHistory) {
-        renderChatHistoryFromMemory();
-        if (restoredFromTab) {
-          const elapsed = Date.now() - lastPanelChatActivityAt;
-          const remaining = Math.max(0, PANEL_CHAT_IDLE_MS - elapsed);
-          schedulePanelChatIdleTimer(remaining);
-        } else {
-          touchPanelChatActivityTime();
-          schedulePanelChatIdleTimer();
-        }
-      } else {
-        showWelcomeAssistant();
-      }
+      showWelcomeAssistant();
     }
 
     setComposerEnabled(true);
     wireComposer();
-    wirePanelChatIdleAndActivity();
+    const clearBtn = document.getElementById("yc-chat-clear-btn");
+    if (clearBtn && clearBtn.dataset.wired !== "1") {
+      clearBtn.dataset.wired = "1";
+      clearBtn.addEventListener("click", () => {
+        void clearChatHistory();
+      });
+    }
     if (!window.__cfMayaPagehideWired) {
       window.__cfMayaPagehideWired = true;
       window.addEventListener("pagehide", () => {
+        clearChatPageSession();
         persistChatToSessionStorage();
+      });
+    }
+    if (!window.__cfMayaBeforeUnloadWired) {
+      window.__cfMayaBeforeUnloadWired = true;
+      window.addEventListener("beforeunload", () => {
+        clearChatPageSession();
       });
     }
     document.getElementById("yc-chat-input")?.focus();
@@ -2382,12 +2298,5 @@ function boot() {
     window.location.replace("login.html");
   });
 }
-
-// Reiniciar timer con cada actividad
-document.addEventListener("click", resetInactivityTimer);
-document.addEventListener("keypress", resetInactivityTimer);
-window.addEventListener("DOMContentLoaded", () => {
-  resetInactivityTimer();
-});
 
 boot();
