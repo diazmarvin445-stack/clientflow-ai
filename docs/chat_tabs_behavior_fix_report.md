@@ -23,6 +23,8 @@
 - Previous version could still appear stacked/partially visible because layout styles could still render extra zones.
 - Fix now uses both JS and CSS guardrails to enforce one-visible-panel-only behavior.
 - Stats zone is intentionally hidden in tab mode so the screen behaves like a real two-tab switcher.
+- Added explicit `.maya-cc-zone[hidden] { display: none !important; }` so the component’s `display:flex` style can never keep hidden panels visible.
+- Default hidden panels (`WhatsApp`, `Estadísticas`) now also include `is-tab-hidden` class in markup as an extra fallback.
 
 ## Safety / functionality
 - Maya chat flow remains unchanged.
