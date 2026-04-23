@@ -72,6 +72,7 @@ let chatPageTab = "maya";
 
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
+  const root = document.querySelector(".maya-cc");
   const mayaBtn = document.getElementById("maya-cc-tab-maya");
   const waBtn = document.getElementById("maya-cc-tab-wa");
   const mayaZone = document.getElementById("maya-cc-zone-chat");
@@ -89,9 +90,13 @@ function setChatPageTab(tab) {
     waBtn.classList.toggle("is-active", waActive);
     waBtn.setAttribute("aria-selected", waActive ? "true" : "false");
   }
+  if (root) {
+    root.setAttribute("data-active-tab", chatPageTab);
+  }
   const setPanelVisible = (panel, visible) => {
     if (!panel) return;
     panel.hidden = !visible;
+    panel.setAttribute("aria-hidden", visible ? "false" : "true");
     panel.classList.toggle("is-tab-hidden", !visible);
     if (visible) panel.open = true;
   };

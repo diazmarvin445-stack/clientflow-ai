@@ -5,9 +5,13 @@
   - `Maya` tab shows only Maya internal chat panel.
   - `WhatsApp` tab shows only WhatsApp conversations panel.
 - Switching is handled in `setChatPageTab()` with explicit visibility control:
-  - `hidden` attribute toggle
-  - `is-tab-hidden` CSS class toggle (`display: none !important`)
-  - active tab styling and `aria-selected` updates
+  - sets root state attribute: `data-active-tab="maya|whatsapp"`
+  - toggles `hidden` + `aria-hidden` on each panel
+  - toggles `is-tab-hidden` CSS class
+  - updates active tab style + `aria-selected`
+- CSS now enforces panel exclusivity even if layout rules are aggressive:
+  - `.maya-cc[data-active-tab="maya"]` hides WhatsApp/stats panels
+  - `.maya-cc[data-active-tab="whatsapp"]` hides Maya/stats panels
 
 ## Default panel shown
 - Default tab remains `Maya`.
@@ -16,9 +20,9 @@
   - WhatsApp panel is hidden.
 
 ## What was fixed from the previous broken version
-- Previous version could still appear stacked/partially visible because layout zones were not fully enforced as mutually exclusive.
-- Fix now enforces one-visible-panel-only behavior through explicit show/hide logic.
-- Stats zone is also hidden in this tabbed mode so the screen behaves like a real two-tab switcher.
+- Previous version could still appear stacked/partially visible because layout styles could still render extra zones.
+- Fix now uses both JS and CSS guardrails to enforce one-visible-panel-only behavior.
+- Stats zone is intentionally hidden in tab mode so the screen behaves like a real two-tab switcher.
 
 ## Safety / functionality
 - Maya chat flow remains unchanged.
