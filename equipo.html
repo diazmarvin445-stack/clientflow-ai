@@ -94,41 +94,26 @@
         <div class="eq-workspace">
           <p class="eq-load-error" id="eq-load-error" hidden role="alert"></p>
 
-          <section class="dash-stats eq-stats" aria-label="Resumen del equipo">
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Total miembros</span>
-                <span class="dash-stat-ico dash-stat-ico--users" aria-hidden="true"></span>
-              </div>
-              <p class="dash-stat-value" id="eq-stat-total">0</p>
-              <div class="dash-stat-foot"></div>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Trabajando hoy</span>
-                <span class="dash-stat-ico dash-stat-ico--pulse" aria-hidden="true"></span>
-              </div>
-              <p class="dash-stat-value" id="eq-stat-active-today">0</p>
-              <div class="dash-stat-foot">
-                <span class="dash-stat-trend-note">Según horario y días asignados</span>
-              </div>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Equipo de campo</span>
-                <span class="dash-stat-ico dash-stat-ico--wrench" aria-hidden="true"></span>
-              </div>
-              <p class="dash-stat-value" id="eq-stat-operativo">0</p>
-              <div class="dash-stat-foot"></div>
-            </article>
-            <article class="dash-stat-card">
-              <div class="dash-stat-head">
-                <span class="dash-stat-label">Administración</span>
-                <span class="dash-stat-ico dash-stat-ico--brief" aria-hidden="true"></span>
-              </div>
-              <p class="dash-stat-value" id="eq-stat-admin">0</p>
-              <div class="dash-stat-foot"></div>
-            </article>
+          <section class="eq-compact-stats" aria-label="Resumen del equipo">
+            <p class="eq-compact-stats__title">Resumen rápido</p>
+            <ul class="eq-compact-stats__list">
+              <li class="eq-compact-stats__row">
+                <span>Total miembros</span>
+                <strong id="eq-stat-total">0</strong>
+              </li>
+              <li class="eq-compact-stats__row">
+                <span>Trabajando hoy</span>
+                <strong id="eq-stat-active-today">0</strong>
+              </li>
+              <li class="eq-compact-stats__row">
+                <span>Equipo de campo</span>
+                <strong id="eq-stat-operativo">0</strong>
+              </li>
+              <li class="eq-compact-stats__row">
+                <span>Administración</span>
+                <strong id="eq-stat-admin">0</strong>
+              </li>
+            </ul>
           </section>
 
           <section class="dash-panel eq-panel" aria-labelledby="eq-panel-title">
