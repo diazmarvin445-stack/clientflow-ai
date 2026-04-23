@@ -80,6 +80,26 @@ let mayaSpeechStarting = false;
 let mayaSpeechBaseText = "";
 let mayaSpeechFinalTranscript = "";
 
+/** @param {HTMLElement | null} el */
+function isNearBottom(el, thresholdPx = 120) {
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < thresholdPx;
+}
+
+/** @param {HTMLElement | null} stream */
+function scrollChatStreamToBottomIfNear(stream) {
+  if (!stream) return;
+  if (isNearBottom(stream)) {
+    stream.scrollTop = stream.scrollHeight;
+  }
+}
+
+/** @param {HTMLElement | null} stream */
+function scrollChatStreamToBottom(stream) {
+  if (!stream) return;
+  stream.scrollTop = stream.scrollHeight;
+}
+
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
   const root = document.querySelector(".maya-cc");
@@ -682,7 +702,7 @@ function appendUserBubble(content) {
   inner.appendChild(time);
   wrap.appendChild(inner);
   stream.appendChild(wrap);
-  stream.scrollTop = stream.scrollHeight;
+  scrollChatStreamToBottom(stream);
 }
 
 /**
@@ -781,9 +801,12 @@ function appendAssistantBubble(content, opts = {}) {
 
   col.appendChild(time);
 
+  const stickToBottom = isNearBottom(stream);
   wrap.appendChild(col);
   stream.appendChild(wrap);
-  stream.scrollTop = stream.scrollHeight;
+  if (stickToBottom) {
+    scrollChatStreamToBottom(stream);
+  }
 
   if (!opts.isWelcome && actionPayload?.action === "save_client") {
     if (activeBusiness?.id) {
@@ -1112,7 +1135,7 @@ function renderChatHistoryFromMemory() {
     if (m.role === "user") appendUserBubble(m.content);
     else appendAssistantBubble(m.content);
   }
-  stream.scrollTop = stream.scrollHeight;
+  scrollChatStreamToBottom(stream);
 }
 
 function conversationSnippet(maxLen = 4000) {
@@ -1567,7 +1590,7 @@ async function sendToClaude() {
         reply = await readMayaNdjsonStream(res, (chunk) => {
           shell.bubble.textContent += chunk;
           const st = document.getElementById("yc-chat-stream");
-          if (st) st.scrollTop = st.scrollHeight;
+          scrollChatStreamToBottomIfNear(st);
         });
       } finally {
         shell.bubble.removeAttribute("aria-busy");
@@ -1658,6 +1681,7 @@ function showWelcomeAssistant() {
   col.appendChild(time);
   wrap.appendChild(col);
   stream.appendChild(wrap);
+  scrollChatStreamToBottom(stream);
 }
 
 async function clearChatHistory() {
@@ -1736,7 +1760,7 @@ function createStreamingAssistantShell() {
   col.appendChild(time);
   wrap.appendChild(col);
   stream.appendChild(wrap);
-  stream.scrollTop = stream.scrollHeight;
+  scrollChatStreamToBottomIfNear(stream);
   return { wrap, bubble };
 }
 

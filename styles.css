@@ -7793,6 +7793,21 @@ body.cf-modal-open {
   overflow: hidden;
 }
 
+/* Chat IA: el scroll vive en #yc-chat-stream, no en body ni en .dash-shell */
+body.dash-body.maya-cc-page .dash-shell {
+  overflow: hidden;
+}
+
+.maya-cc-page .maya-cc {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 /* —— Centro de Control Maya (chat.html) —— */
 .maya-cc {
   flex: 1;
@@ -7840,10 +7855,11 @@ body.cf-modal-open {
   .maya-cc {
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
     gap: 0.65rem;
-    min-height: min-content;
+    min-height: 0;
+    flex: 1;
+    max-height: 100%;
   }
 
   .maya-cc-top-tabs {
@@ -8015,12 +8031,22 @@ body.cf-modal-open {
 }
 
 .maya-cc-zone[open] > .maya-cc-zone__scroll {
-  min-height: 12rem;
+  min-height: 0;
 }
 
+/* Zona chat: sin scroll propio — el historial corre dentro de .yc-chat-stream */
 .maya-cc-zone--chat > .maya-cc-zone__scroll {
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
 }
 
 .maya-cc-zone--wa > .maya-cc-zone__scroll--wa {
@@ -8125,6 +8151,9 @@ body.cf-modal-open {
 .maya-cc-zone--chat .yc-chat-wrap {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Zona 2: Meta pending + split */
@@ -8461,7 +8490,12 @@ body.cf-modal-open {
 }
 
 .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
-  min-height: min(42vh, 420px);
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .yc-chat-wrap {
@@ -8506,6 +8540,13 @@ body.cf-modal-open {
   background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 12%, #f1f5f9 100%);
   box-shadow: var(--shadow-md);
   overflow: hidden;
+}
+
+.maya-cc-zone--chat .yc-chat-toolbar,
+.maya-cc-zone--chat .yc-chat-loading,
+.maya-cc-zone--chat .yc-chat-error,
+.maya-cc-zone--chat .yc-chat-toast {
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
@@ -8559,7 +8600,11 @@ body.cf-modal-open {
 
 .yc-chat-stream {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem 1rem 0.75rem;
   display: flex;
   flex-direction: column;
@@ -8672,6 +8717,7 @@ body.cf-modal-open {
   padding: 0.75rem 1rem;
   background: rgba(255, 255, 255, 0.96);
   border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .yc-chat-input {
