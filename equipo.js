@@ -32,8 +32,30 @@ let currentUser = null;
 let teamSessions = [];
 /** @type {Record<string, unknown> | null} */
 let activeSession = null;
+
+/**
+ * Client-side timer engine (session clock). Kept in sync with Firestore `activeSession`.
+ * Mirrors: idle | active | paused | finished (display only for finished before reset).
+ * @type {{
+ *   orderId: string | null,
+ *   status: 'idle' | 'active' | 'paused' | 'finished',
+ *   startTime: number | null,
+ *   accumulatedMs: number,
+ *   hourlyRate: number,
+ *   firestoreSessionId: string | null,
+ * }}
+ */
+let workTimerState = {
+  orderId: null,
+  status: "idle",
+  startTime: null,
+  accumulatedMs: 0,
+  hourlyRate: 0,
+  firestoreSessionId: null,
+};
+
 /** @type {ReturnType<typeof setInterval> | null} */
-let timerTicker = null;
+let timerInterval = null;
 /** @type {(() => void) | null} */
 let unsubSessions = null;
 /** @type {(() => void) | null} */
@@ -452,7 +474,176 @@ function updateStats(list) {
   setPanelMeta(list.length);
 }
 
+function hydrateWorkTimerFromSession(session) {
+  if (!session || typeof session !== "object") {
+    workTimerState = {
+      orderId: null,
+      status: "idle",
+      startTime: null,
+      accumulatedMs: 0,
+      hourlyRate: 0,
+      firestoreSessionId: null,
+    };
+    return;
+  }
+  const st = normalizeSessionStatus(session.status);
+  const orderId = String(session.linkedOrderId || "").trim() || null;
+  const hourlyRate =
+    Number.isFinite(Number(session.hourlyRate)) && Number(session.hourlyRate) >= 0
+      ? Number(session.hourlyRate)
+      : memberHourlyRate(memberForCurrentUser() || {});
+  const tracked = Math.max(0, Number(session.totalTrackedMs) || 0);
+  const fsId = String(session.id || "") || null;
+
+  if (st === "activa") {
+    const resumedAt = tsToDate(session.resumedAt) || tsToDate(session.startedAt) || tsToDate(session.startTime);
+    const segmentStart = resumedAt ? resumedAt.getTime() : Date.now();
+    if (!resumedAt) {
+      console.warn("[Team] active Firestore session missing resumedAt; using segment start = now");
+    }
+    workTimerState = {
+      orderId,
+      status: "active",
+      startTime: segmentStart,
+      accumulatedMs: tracked,
+      hourlyRate,
+      firestoreSessionId: fsId,
+    };
+    return;
+  }
+  if (st === "pausada") {
+    workTimerState = {
+      orderId,
+      status: "paused",
+      startTime: null,
+      accumulatedMs: tracked,
+      hourlyRate,
+      firestoreSessionId: fsId,
+    };
+    return;
+  }
+  workTimerState = {
+    orderId: null,
+    status: "idle",
+    startTime: null,
+    accumulatedMs: 0,
+    hourlyRate: 0,
+    firestoreSessionId: null,
+  };
+}
+
+function workTimerElapsedMs() {
+  if (workTimerState.status === "active" && workTimerState.startTime != null) {
+    return Math.max(0, workTimerState.accumulatedMs + (Date.now() - workTimerState.startTime));
+  }
+  if (workTimerState.status === "paused") {
+    return Math.max(0, workTimerState.accumulatedMs);
+  }
+  return 0;
+}
+
+function updateTimerUI(ms) {
+  const timerEl = document.getElementById("eq-active-timer");
+  const payEl = document.getElementById("eq-session-pay-estimate");
+  const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const formatted =
+    String(hours).padStart(2, "0") +
+    ":" +
+    String(minutes).padStart(2, "0") +
+    ":" +
+    String(seconds).padStart(2, "0");
+  if (timerEl) timerEl.textContent = formatted;
+  if (payEl) {
+    const rate = Number(workTimerState.hourlyRate) || 0;
+    const hoursDecimal = ms / (1000 * 60 * 60);
+    const pay = hoursDecimal * rate;
+    payEl.textContent = `$${pay.toFixed(2)}`;
+  }
+}
+
+function startTimerLoop() {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (workTimerState.status === "active" && workTimerState.startTime != null) {
+      const now = Date.now();
+      const elapsed = workTimerState.accumulatedMs + (now - workTimerState.startTime);
+      updateTimerUI(elapsed);
+      console.log("timer tick");
+    } else if (workTimerState.status === "paused") {
+      updateTimerUI(workTimerState.accumulatedMs);
+    } else {
+      updateTimerUI(0);
+    }
+    refreshTimeSummary({ fromTimerLoop: true });
+    renderUnfinishedOrders();
+  }, 1000);
+}
+
+function stopTimerLoop() {
+  if (!timerInterval) return;
+  clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+/**
+ * @param {string | null} orderId
+ * @param {number} hourlyRate
+ * @param {string | null} [firestoreSessionId]
+ */
+function startWork(orderId, hourlyRate, firestoreSessionId = null) {
+  console.log("timer started");
+  workTimerState = {
+    orderId: orderId && String(orderId).trim() ? String(orderId).trim() : null,
+    status: "active",
+    startTime: Date.now(),
+    accumulatedMs: 0,
+    hourlyRate: Number.isFinite(hourlyRate) && hourlyRate >= 0 ? hourlyRate : 0,
+    firestoreSessionId: firestoreSessionId && String(firestoreSessionId).trim()
+      ? String(firestoreSessionId).trim()
+      : null,
+  };
+  startTimerLoop();
+  renderSessionControlsState();
+  refreshTimeSummary();
+}
+
+function pauseWork() {
+  if (workTimerState.status !== "active" || workTimerState.startTime == null) return;
+  const now = Date.now();
+  workTimerState.accumulatedMs += now - workTimerState.startTime;
+  workTimerState.startTime = null;
+  workTimerState.status = "paused";
+  console.log("timer paused");
+  updateTimerUI(workTimerState.accumulatedMs);
+}
+
+function resumeWork() {
+  if (workTimerState.status !== "paused") return;
+  workTimerState.startTime = Date.now();
+  workTimerState.status = "active";
+}
+
+function resetSession() {
+  workTimerState = {
+    orderId: null,
+    status: "idle",
+    startTime: null,
+    accumulatedMs: 0,
+    hourlyRate: 0,
+    firestoreSessionId: null,
+  };
+  stopTimerLoop();
+  renderSessionControlsState();
+  refreshTimeSummary();
+}
+
 function currentSessionElapsedMs() {
+  if (workTimerState.status === "active" || workTimerState.status === "paused") {
+    return workTimerElapsedMs();
+  }
   if (!activeSession) return 0;
   return sessionElapsedMs(activeSession);
 }
@@ -467,26 +658,21 @@ function sessionElapsedMs(session) {
   return Math.max(0, trackedMs + (Date.now() - resumedAt.getTime()));
 }
 
-function refreshTimeSummary() {
-  const timerEl = document.getElementById("eq-active-timer");
-  if (timerEl) timerEl.textContent = formatDurationMs(currentSessionElapsedMs());
+/** @param {{ fromTimerLoop?: boolean }} [opts] */
+function refreshTimeSummary(opts = {}) {
+  const fromTimerLoop = Boolean(opts.fromTimerLoop);
+  const ms = currentSessionElapsedMs();
+  if (!fromTimerLoop) {
+    updateTimerUI(ms);
+  }
   const stateEl = document.getElementById("eq-session-state");
   const orderStateEl = document.getElementById("eq-order-work-state");
-  const payEl = document.getElementById("eq-session-pay-estimate");
   const status = activeSession ? normalizeSessionStatus(activeSession.status) : "sin_sesion";
   if (stateEl) stateEl.textContent = status;
   if (orderStateEl) {
     orderStateEl.textContent = activeSession
       ? String(activeSession.linkedOrderWorkStatus || activeSession.linkedOrderStatus || "sin_iniciar")
       : "sin_iniciar";
-  }
-  if (payEl) {
-    const rate = activeSession ? Number(activeSession.hourlyRate) || 0 : 0;
-    const estimated = (currentSessionElapsedMs() / (1000 * 60 * 60)) * rate;
-    payEl.textContent = formatMoney(estimated);
-  }
-  if (activeSession && normalizeSessionStatus(activeSession.status) === "activa") {
-    console.log("[Team] timer tick", formatDurationMs(currentSessionElapsedMs()));
   }
 
   if (!currentUser) return;
@@ -505,7 +691,10 @@ function refreshTimeSummary() {
       if (Number.isFinite(pay) && pay > 0) totalEarningsToday += pay;
       continue;
     }
-    const ms = sessionElapsedMs(s);
+    const ms =
+      activeSession && String(s.id || "") === String(activeSession.id || "")
+        ? currentSessionElapsedMs()
+        : sessionElapsedMs(s);
     const h = ms / (1000 * 60 * 60);
     const rate = Number(s.hourlyRate) || 0;
     if (Number.isFinite(h) && h > 0) totalHoursToday += h;
@@ -517,13 +706,15 @@ function refreshTimeSummary() {
   const earnEl = document.getElementById("eq-today-earnings");
   if (hoursEl) hoursEl.textContent = totalHoursToday.toFixed(2);
   if (earnEl) earnEl.textContent = formatMoney(totalEarningsToday);
-  console.log("[Team] top summary refreshed", {
-    sessionStatus: status,
-    orderStatus: activeSession
-      ? String(activeSession.linkedOrderWorkStatus || activeSession.linkedOrderStatus || "sin_iniciar")
-      : "sin_iniciar",
-    timer: formatDurationMs(currentSessionElapsedMs()),
-  });
+  if (!fromTimerLoop) {
+    console.log("[Team] top summary refreshed", {
+      sessionStatus: status,
+      orderStatus: activeSession
+        ? String(activeSession.linkedOrderWorkStatus || activeSession.linkedOrderStatus || "sin_iniciar")
+        : "sin_iniciar",
+      timer: formatDurationMs(currentSessionElapsedMs()),
+    });
+  }
 }
 
 function isUnfinishedOrder(order) {
@@ -656,20 +847,6 @@ function renderSessionControlsState() {
   }
 }
 
-function ensureTimerTicker() {
-  if (timerTicker) return;
-  timerTicker = setInterval(() => {
-    refreshTimeSummary();
-    renderUnfinishedOrders();
-  }, 1000);
-}
-
-function stopTimerTicker() {
-  if (!timerTicker) return;
-  clearInterval(timerTicker);
-  timerTicker = null;
-}
-
 async function pauseSessionById(session, reason = "manual") {
   if (!businessId || !session?.id) return;
   const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(session.id));
@@ -753,7 +930,7 @@ async function removePreparationOrder(orderId) {
   if (running && String(running.linkedOrderId || "") === String(orderId)) {
     await pauseSessionById(running, "remove_preparation");
     activeSession = null;
-    stopTimerTicker();
+    resetSession();
   }
   console.log("[Team] preparation order removed", String(orderId));
   refreshTimeSummary();
@@ -1022,8 +1199,9 @@ async function startWorkSession() {
     };
     console.log("[Team] accumulated time restored", activeSession.totalTrackedMs);
     renderSessionControlsState();
-    refreshTimeSummary();
-    ensureTimerTicker();
+    hydrateWorkTimerFromSession(activeSession);
+    startTimerLoop();
+    console.log("timer resumed");
     console.log("[Team] timer resumed", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
@@ -1086,8 +1264,7 @@ async function startWorkSession() {
   };
   renderSessionControlsState();
   console.log("[Team] work session started", linkedOrderId || "sin_vincular");
-  refreshTimeSummary();
-  ensureTimerTicker();
+  startWork(linkedOrderId || null, rate, sessionRef.id);
   console.log("[Team] timer started", formatDurationMs(currentSessionElapsedMs()));
   renderUnfinishedOrders();
 }
@@ -1107,18 +1284,61 @@ async function togglePauseSession() {
     };
     console.log("[Team] accumulated time restored", activeSession.totalTrackedMs);
     renderSessionControlsState();
-    refreshTimeSummary();
-    ensureTimerTicker();
+    if (workTimerState.status === "paused") {
+      resumeWork();
+    }
+    if (workTimerState.status !== "active") {
+      hydrateWorkTimerFromSession(activeSession);
+    }
+    startTimerLoop();
+    console.log("timer resumed");
     console.log("[Team] timer resumed", formatDurationMs(currentSessionElapsedMs()));
     renderUnfinishedOrders();
     return;
   }
+  if (workTimerState.status === "active") {
+    pauseWork();
+  }
   await pauseSessionById(activeSession);
-  activeSession = { ...activeSession, status: "pausada", resumedAt: null };
+  const resumedAtBefore =
+    tsToDate(activeSession.resumedAt) ||
+    tsToDate(activeSession.startedAt) ||
+    tsToDate(activeSession.startTime);
+  const trackedBefore = Number(activeSession.totalTrackedMs) || 0;
+  const extraMs = resumedAtBefore ? Math.max(0, Date.now() - resumedAtBefore.getTime()) : 0;
+  const nextTracked = trackedBefore + extraMs;
+  activeSession = { ...activeSession, status: "pausada", resumedAt: null, totalTrackedMs: nextTracked };
+  hydrateWorkTimerFromSession(activeSession);
   renderSessionControlsState();
   refreshTimeSummary();
+  console.log("timer paused");
   console.log("[Team] timer paused", formatDurationMs(currentSessionElapsedMs()));
   renderUnfinishedOrders();
+}
+
+async function createFinanceExpense({ amount, description, endDate, sessionSnapshot }) {
+  if (!businessId) return null;
+  const snap = sessionSnapshot || {};
+  return addDoc(collection(db, "businesses", businessId, "finance"), {
+    type: "expense",
+    category: "mano_obra",
+    description,
+    amount,
+    date: Timestamp.fromDate(endDate),
+    linkedOrderId: snap.linkedOrderId || null,
+    linkedOrderClientName: snap.linkedOrderClientName || null,
+    linkedOrderProduct: snap.linkedOrderProduct || null,
+    linkedOrderStatus: snap.linkedOrderStatus || null,
+    orderId: snap.linkedOrderId || null,
+    clientId: null,
+    status: "cobrado",
+    createdBy: "system",
+    createdAt: serverTimestamp(),
+  });
+}
+
+async function finalizeWork() {
+  return finalizeSession();
 }
 
 async function finalizeSession() {
@@ -1127,7 +1347,14 @@ async function finalizeSession() {
   const status = normalizeSessionStatus(activeSession.status);
   const tracked = Number(activeSession.totalTrackedMs) || 0;
   const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
-  const finalTrackedMs = status === "activa" && resumedAt ? tracked + Math.max(0, end.getTime() - resumedAt.getTime()) : tracked;
+  const fallbackTrackedMs = status === "activa" && resumedAt ? tracked + Math.max(0, end.getTime() - resumedAt.getTime()) : tracked;
+  const liveTrackedMs =
+    workTimerState.firestoreSessionId &&
+    String(workTimerState.firestoreSessionId) === String(activeSession.id) &&
+    (workTimerState.status === "active" || workTimerState.status === "paused")
+      ? workTimerElapsedMs()
+      : null;
+  const finalTrackedMs = liveTrackedMs != null ? Math.round(liveTrackedMs) : fallbackTrackedMs;
   const totalHours = finalTrackedMs / (1000 * 60 * 60);
   const sessionRate =
     Number.isFinite(Number(activeSession.hourlyRate)) && Number(activeSession.hourlyRate) >= 0
@@ -1174,32 +1401,23 @@ async function finalizeSession() {
     }
   }
 
-  const financeRef = await addDoc(collection(db, "businesses", businessId, "finance"), {
-    type: "expense",
-    category: "mano_obra",
-    description: `Pago por horas - ${currentUserDisplayName()}`,
+  const sessionSnap = { ...activeSession };
+  const orderIdForDesc = String(activeSession.linkedOrderId || "").trim() || "sin_id";
+  const financeRef = await createFinanceExpense({
     amount: totalPay,
-    date: Timestamp.fromDate(end),
-    linkedOrderId: activeSession.linkedOrderId || null,
-    linkedOrderClientName: activeSession.linkedOrderClientName || null,
-    linkedOrderProduct: activeSession.linkedOrderProduct || null,
-    linkedOrderStatus: activeSession.linkedOrderStatus || null,
-    orderId: activeSession.linkedOrderId || null,
-    clientId: null,
-    status: "cobrado",
-    createdBy: "system",
-    createdAt: serverTimestamp(),
+    description: `Pago por trabajo - orden ${orderIdForDesc}`,
+    endDate: end,
+    sessionSnapshot: sessionSnap,
   });
-  console.log("[Team] session finalized", String(activeSession.id), {
+  console.log("session finalized", totalPay);
+  console.log("[Team] session finalized", String(sessionSnap.id), {
     trackedMs: finalTrackedMs,
     totalHours,
     totalPay,
   });
-  console.log("[Team] finance expense created", financeRef.id);
+  console.log("[Team] finance expense created", financeRef?.id);
   activeSession = null;
-  renderSessionControlsState();
-  refreshTimeSummary();
-  stopTimerTicker();
+  resetSession();
   renderUnfinishedOrders();
 }
 
@@ -1254,11 +1472,19 @@ function subscribeTeamSessions() {
             normalizeSessionStatus(s.status) === "pausada",
         ) ||
         null;
+      hydrateWorkTimerFromSession(activeSession);
       renderSessionControlsState();
       refreshTimeSummary();
       renderUnfinishedOrders();
-      if (activeSession) ensureTimerTicker();
-      else stopTimerTicker();
+      if (
+        activeSession &&
+        (normalizeSessionStatus(activeSession.status) === "activa" ||
+          normalizeSessionStatus(activeSession.status) === "pausada")
+      ) {
+        startTimerLoop();
+      } else {
+        stopTimerLoop();
+      }
     },
     (err) => {
       console.error(err);
@@ -1281,7 +1507,7 @@ function wireTimeTracking() {
     });
   });
   document.getElementById("eq-btn-finish")?.addEventListener("click", () => {
-    finalizeSession().catch((e) => {
+    finalizeWork().catch((e) => {
       console.error(e);
       showLoadError("No se pudo finalizar la jornada.");
     });
