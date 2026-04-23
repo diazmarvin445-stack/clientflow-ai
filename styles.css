@@ -7344,6 +7344,67 @@ body.cf-modal-open {
   margin: 0.15rem 0;
 }
 
+.eq-unfinished {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.65rem;
+}
+
+.eq-unfinished__title {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.eq-unfinished__list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.eq-unfinished__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.eq-unfinished__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.55rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  padding: 0.5rem 0.55rem;
+}
+
+.eq-unfinished__meta {
+  min-width: 0;
+}
+
+.eq-unfinished__name {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eq-unfinished__detail {
+  margin: 0.14rem 0 0;
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.eq-unfinished__btn {
+  padding: 0.34rem 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
 .eq-members {
   padding: 0 1.35rem 1.35rem;
 }

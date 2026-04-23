@@ -449,10 +449,15 @@ function updateStats(list) {
 
 function currentSessionElapsedMs() {
   if (!activeSession) return 0;
-  const status = normalizeSessionStatus(activeSession.status);
-  const trackedMs = Number(activeSession.totalTrackedMs) || 0;
+  return sessionElapsedMs(activeSession);
+}
+
+function sessionElapsedMs(session) {
+  if (!session || typeof session !== "object") return 0;
+  const status = normalizeSessionStatus(session.status);
+  const trackedMs = Number(session.totalTrackedMs) || 0;
   if (status !== "activa") return Math.max(0, trackedMs);
-  const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
+  const resumedAt = tsToDate(session.resumedAt) || tsToDate(session.startedAt) || tsToDate(session.startTime);
   if (!resumedAt) return Math.max(0, trackedMs);
   return Math.max(0, trackedMs + (Date.now() - resumedAt.getTime()));
 }
@@ -475,6 +480,9 @@ function refreshTimeSummary() {
     const estimated = (currentSessionElapsedMs() / (1000 * 60 * 60)) * rate;
     payEl.textContent = formatMoney(estimated);
   }
+  if (activeSession && normalizeSessionStatus(activeSession.status) === "activa") {
+    console.log("[Team] live timer running", formatDurationMs(currentSessionElapsedMs()));
+  }
 
   if (!currentUser) return;
   const now = new Date();
@@ -493,6 +501,89 @@ function refreshTimeSummary() {
   const earnEl = document.getElementById("eq-today-earnings");
   if (hoursEl) hoursEl.textContent = totalHoursToday.toFixed(2);
   if (earnEl) earnEl.textContent = formatMoney(totalEarningsToday);
+}
+
+function isUnfinishedOrder(order) {
+  const status = String(order?.status || "").toLowerCase();
+  const work = String(order?.workStatus || "").toLowerCase();
+  if (status === "entregado" || status === "cancelado" || status === "listo") return false;
+  return status === "en_preparacion" || work === "en_preparacion" || work === "pausado";
+}
+
+function renderUnfinishedOrders() {
+  const root = document.getElementById("eq-unfinished-list");
+  if (!root || !currentUser) return;
+  const unfinishedSessions = teamSessions.filter((s) => {
+    if (String(s.userId || "") !== currentUser.uid) return false;
+    const st = normalizeSessionStatus(s.status);
+    return st === "activa" || st === "pausada";
+  });
+  /** @type {Record<string, { orderId: string, clientName: string, product: string, workStatus: string, elapsedMs: number, isActive: boolean }>} */
+  const items = {};
+  for (const s of unfinishedSessions) {
+    const orderId = String(s.linkedOrderId || "");
+    if (!orderId) continue;
+    const st = normalizeSessionStatus(s.status);
+    items[orderId] = {
+      orderId,
+      clientName: String(s.linkedOrderClientName || "Cliente"),
+      product: String(s.linkedOrderProduct || "Pedido"),
+      workStatus: st === "activa" ? "en_preparacion" : "pausado",
+      elapsedMs: sessionElapsedMs(s),
+      isActive: activeSession ? String(activeSession.id) === String(s.id) : false,
+    };
+  }
+  for (const o of pendingOrders.filter(isUnfinishedOrder)) {
+    const orderId = String(o.id || "");
+    if (!orderId || items[orderId]) continue;
+    items[orderId] = {
+      orderId,
+      clientName: String(o.clientName || "Cliente"),
+      product: String(o.product || "Pedido"),
+      workStatus: String(o.workStatus || o.status || "en_preparacion"),
+      elapsedMs: Number(o.totalLaborHours) > 0 ? Number(o.totalLaborHours) * 60 * 60 * 1000 : 0,
+      isActive: false,
+    };
+  }
+  const rows = Object.values(items);
+  console.log("[Team] unfinished orders loaded", rows.length);
+  root.replaceChildren();
+  if (!rows.length) {
+    const p = document.createElement("p");
+    p.className = "eq-unfinished__empty";
+    p.textContent = "No hay pedidos en preparación.";
+    root.appendChild(p);
+    return;
+  }
+  for (const row of rows) {
+    const item = document.createElement("div");
+    item.className = "eq-unfinished__item";
+    const meta = document.createElement("div");
+    meta.className = "eq-unfinished__meta";
+    const name = document.createElement("p");
+    name.className = "eq-unfinished__name";
+    name.textContent = `${row.clientName} · ${row.product}`;
+    const detail = document.createElement("p");
+    detail.className = "eq-unfinished__detail";
+    detail.textContent = `${row.workStatus} · ${formatDurationMs(row.elapsedMs)}`;
+    meta.append(name, detail);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dash-quick-btn eq-unfinished__btn";
+    btn.textContent = row.isActive ? "Activa" : "Retomar";
+    btn.disabled = row.isActive;
+    btn.addEventListener("click", () => {
+      const picker = document.getElementById("eq-linked-order-picker");
+      if (picker && "value" in picker) picker.value = row.orderId;
+      renderLinkedOrderSummary();
+      startWorkSession().catch((e) => {
+        console.error(e);
+        showLoadError("No se pudo retomar el pedido.");
+      });
+    });
+    item.append(meta, btn);
+    root.append(item);
+  }
 }
 
 function renderSessionControlsState() {
@@ -520,6 +611,7 @@ function ensureTimerTicker() {
   if (timerTicker) return;
   timerTicker = setInterval(() => {
     refreshTimeSummary();
+    renderUnfinishedOrders();
   }, 1000);
 }
 
@@ -527,6 +619,73 @@ function stopTimerTicker() {
   if (!timerTicker) return;
   clearInterval(timerTicker);
   timerTicker = null;
+}
+
+async function pauseSessionById(session, reason = "manual") {
+  if (!businessId || !session?.id) return;
+  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(session.id));
+  const resumedAt = tsToDate(session.resumedAt) || tsToDate(session.startedAt) || tsToDate(session.startTime);
+  const tracked = Number(session.totalTrackedMs) || 0;
+  const extra = resumedAt ? Math.max(0, Date.now() - resumedAt.getTime()) : 0;
+  const nextTracked = tracked + extra;
+  await updateDoc(sessionRef, {
+    status: "pausada",
+    pausedAt: Timestamp.now(),
+    resumedAt: null,
+    totalTrackedMs: nextTracked,
+    linkedOrderWorkStatus: "pausado",
+    updatedAt: serverTimestamp(),
+  });
+  if (session.linkedOrderId) {
+    await updateDoc(doc(db, "businesses", businessId, "orders", String(session.linkedOrderId)), {
+      workStatus: "en_preparacion",
+      currentOperatorId: currentUser?.uid || null,
+      lastWorkedAt: serverTimestamp(),
+    });
+  }
+  console.log("[Team] work session paused", String(session.id), reason);
+}
+
+async function resumePausedSession(session) {
+  if (!businessId || !session?.id) return;
+  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(session.id));
+  await updateDoc(sessionRef, {
+    status: "activa",
+    resumedAt: Timestamp.now(),
+    pausedAt: null,
+    linkedOrderWorkStatus: "en_preparacion",
+    updatedAt: serverTimestamp(),
+  });
+  if (session.linkedOrderId) {
+    await updateDoc(doc(db, "businesses", businessId, "orders", String(session.linkedOrderId)), {
+      workStatus: "en_preparacion",
+      status: "en_preparacion",
+      currentOperatorId: currentUser?.uid || null,
+      lastWorkedAt: serverTimestamp(),
+    });
+  }
+  console.log("[Team] work session resumed", String(session.id));
+}
+
+function findPausedSessionByOrder(orderId) {
+  if (!currentUser) return null;
+  return (
+    teamSessions.find(
+      (s) =>
+        String(s.userId || "") === currentUser.uid &&
+        normalizeSessionStatus(s.status) === "pausada" &&
+        String(s.linkedOrderId || "") === String(orderId || ""),
+    ) || null
+  );
+}
+
+function findRunningSession() {
+  if (!currentUser) return null;
+  return (
+    teamSessions.find(
+      (s) => String(s.userId || "") === currentUser.uid && normalizeSessionStatus(s.status) === "activa",
+    ) || null
+  );
 }
 
 function getVal(id) {
@@ -723,7 +882,7 @@ function updateTimePanelHeader() {
 
 async function startWorkSession() {
   if (!businessId || !currentUser) return;
-  const sessionStatus = activeSession ? normalizeSessionStatus(activeSession.status) : "sin_sesion";
+  const runningSession = findRunningSession();
   const linkedOrder = selectedLinkedOrder();
   const linkedOrderId = linkedOrder ? String(linkedOrder.id || "") : "";
   const linkedOrderStatus = linkedOrder ? String(linkedOrder.status || "") : "";
@@ -731,32 +890,26 @@ async function startWorkSession() {
     ? String(linkedOrder.workStatus || (linkedOrderStatus === "en_preparacion" ? "en_preparacion" : "sin_iniciar"))
     : "sin_iniciar";
 
-  if (activeSession && sessionStatus === "activa") {
-    const activeOrderId = String(activeSession.linkedOrderId || "");
+  if (runningSession) {
+    const activeOrderId = String(runningSession.linkedOrderId || "");
     if (activeOrderId && linkedOrderId && activeOrderId === linkedOrderId) {
       showLoadError("Ya existe una sesión activa para este pedido.");
       return;
     }
-    const activeRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
-    const now = Timestamp.now();
-    const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
-    const tracked = Number(activeSession.totalTrackedMs) || 0;
-    const extra = resumedAt ? Math.max(0, now.toMillis() - resumedAt.getTime()) : 0;
-    const nextTracked = tracked + extra;
-    await updateDoc(activeRef, {
-      status: "pausada",
-      pausedAt: now,
-      resumedAt: null,
-      totalTrackedMs: nextTracked,
-      updatedAt: serverTimestamp(),
-    });
-    if (activeSession.linkedOrderId) {
-      await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
-        workStatus: "pausado",
-        currentOperatorId: currentUser.uid,
-        lastWorkedAt: serverTimestamp(),
-      });
-    }
+    await pauseSessionById(runningSession, "switch_order");
+    console.log("[Team] active session switched", String(runningSession.id), "->", linkedOrderId || "sin_vincular");
+  }
+
+  const resumable = linkedOrderId ? findPausedSessionByOrder(linkedOrderId) : null;
+  if (resumable) {
+    const resumeAt = Timestamp.now();
+    await resumePausedSession(resumable);
+    activeSession = { ...resumable, status: "activa", resumedAt: resumeAt, pausedAt: null };
+    renderSessionControlsState();
+    refreshTimeSummary();
+    ensureTimerTicker();
+    renderUnfinishedOrders();
+    return;
   }
   const member = memberForCurrentUser();
   const rate = memberHourlyRate(member || {});
@@ -772,6 +925,7 @@ async function startWorkSession() {
       lastWorkedAt: serverTimestamp(),
     });
   }
+  const nowTs = Timestamp.now();
 
   await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
     operatorId: currentUser.uid,
@@ -780,12 +934,12 @@ async function startWorkSession() {
     userName,
     memberId: member?.id || null,
     status: "activa",
-    startedAt: serverTimestamp(),
-    resumedAt: serverTimestamp(),
+    startedAt: nowTs,
+    resumedAt: nowTs,
     endedAt: null,
     totalTrackedMs: 0,
     calculatedPay: 0,
-    startTime: serverTimestamp(),
+    startTime: nowTs,
     endTime: null,
     totalHours: 0,
     totalPay: 0,
@@ -797,51 +951,45 @@ async function startWorkSession() {
     linkedOrderWorkStatus,
     pausedAt: null,
     pausedDurationMs: 0,
-    createdAt: serverTimestamp(),
+    createdAt: nowTs,
     updatedAt: serverTimestamp(),
   });
+  activeSession = {
+    id: `local-${nowTs.toMillis()}`,
+    userId: currentUser.uid,
+    status: "activa",
+    startedAt: nowTs,
+    resumedAt: nowTs,
+    totalTrackedMs: 0,
+    hourlyRate: rate,
+    linkedOrderId: linkedOrderId || null,
+    linkedOrderClientName: linkedOrder ? String(linkedOrder.clientName || "") : null,
+    linkedOrderProduct: linkedOrder ? String(linkedOrder.product || "") : null,
+    linkedOrderWorkStatus: "en_preparacion",
+  };
+  renderSessionControlsState();
+  console.log("[Team] work session started", linkedOrderId || "sin_vincular");
+  refreshTimeSummary();
+  ensureTimerTicker();
+  renderUnfinishedOrders();
 }
 
 async function togglePauseSession() {
   if (!businessId || !activeSession) return;
-  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
   const status = normalizeSessionStatus(activeSession.status);
   if (status === "pausada") {
-    await updateDoc(sessionRef, {
-      status: "activa",
-      resumedAt: Timestamp.now(),
-      pausedAt: null,
-      linkedOrderWorkStatus: "en_preparacion",
-      updatedAt: serverTimestamp(),
-    });
-    if (activeSession.linkedOrderId) {
-      await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
-        workStatus: "en_preparacion",
-        currentOperatorId: currentUser?.uid || null,
-        lastWorkedAt: serverTimestamp(),
-      });
-    }
+    await resumePausedSession(activeSession);
+    activeSession = { ...activeSession, status: "activa", resumedAt: Timestamp.now(), pausedAt: null };
+    renderSessionControlsState();
+    refreshTimeSummary();
+    renderUnfinishedOrders();
     return;
   }
-  const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
-  const tracked = Number(activeSession.totalTrackedMs) || 0;
-  const extra = resumedAt ? Math.max(0, Date.now() - resumedAt.getTime()) : 0;
-  const nextTracked = tracked + extra;
-  await updateDoc(sessionRef, {
-    status: "pausada",
-    pausedAt: Timestamp.now(),
-    resumedAt: null,
-    totalTrackedMs: nextTracked,
-    linkedOrderWorkStatus: "pausado",
-    updatedAt: serverTimestamp(),
-  });
-  if (activeSession.linkedOrderId) {
-    await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
-      workStatus: "pausado",
-      currentOperatorId: currentUser?.uid || null,
-      lastWorkedAt: serverTimestamp(),
-    });
-  }
+  await pauseSessionById(activeSession);
+  activeSession = { ...activeSession, status: "pausada", resumedAt: null };
+  renderSessionControlsState();
+  refreshTimeSummary();
+  renderUnfinishedOrders();
 }
 
 async function finalizeSession() {
@@ -929,6 +1077,7 @@ function subscribePendingOrders() {
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((o) => isPendingOrderStatus(o.status));
       renderPendingOrdersPicker();
+      renderUnfinishedOrders();
     },
     (err) => {
       console.error(err);
@@ -961,6 +1110,7 @@ function subscribeTeamSessions() {
         null;
       renderSessionControlsState();
       refreshTimeSummary();
+      renderUnfinishedOrders();
       if (activeSession) ensureTimerTicker();
       else stopTimerTicker();
     },
