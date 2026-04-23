@@ -7607,6 +7607,10 @@ body.cf-modal-open {
   overflow: hidden;
 }
 
+.maya-cc-zone.is-tab-hidden {
+  display: none !important;
+}
+
 .maya-cc-zone > summary.maya-cc-zone__cap {
   list-style: none;
   cursor: pointer;

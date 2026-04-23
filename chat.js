@@ -76,6 +76,7 @@ function setChatPageTab(tab) {
   const waBtn = document.getElementById("maya-cc-tab-wa");
   const mayaZone = document.getElementById("maya-cc-zone-chat");
   const waZone = document.getElementById("maya-cc-zone-wa");
+  const statsZone = document.getElementById("maya-cc-zone-stats");
 
   const mayaActive = chatPageTab === "maya";
   const waActive = !mayaActive;
@@ -88,13 +89,20 @@ function setChatPageTab(tab) {
     waBtn.classList.toggle("is-active", waActive);
     waBtn.setAttribute("aria-selected", waActive ? "true" : "false");
   }
+  const setPanelVisible = (panel, visible) => {
+    if (!panel) return;
+    panel.hidden = !visible;
+    panel.classList.toggle("is-tab-hidden", !visible);
+    if (visible) panel.open = true;
+  };
   if (mayaZone) {
-    mayaZone.hidden = !mayaActive;
-    if (mayaActive) mayaZone.open = true;
+    setPanelVisible(mayaZone, mayaActive);
   }
   if (waZone) {
-    waZone.hidden = !waActive;
-    if (waActive) waZone.open = true;
+    setPanelVisible(waZone, waActive);
+  }
+  if (statsZone) {
+    setPanelVisible(statsZone, false);
   }
 }
 
