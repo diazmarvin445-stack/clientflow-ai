@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -124,7 +125,7 @@ function tsToDate(ts) {
 
 function isPendingOrderStatus(raw) {
   const s = String(raw || "").toLowerCase();
-  return s === "nuevo" || s === "produccion" || s === "listo";
+  return s === "nuevo" || s === "produccion" || s === "en_preparacion" || s === "listo";
 }
 
 function formatOrderPickerOptionLabel(order) {
@@ -142,6 +143,14 @@ function selectedLinkedOrder() {
   const selectedId = picker && "value" in picker ? String(picker.value || "").trim() : "";
   if (!selectedId) return null;
   return pendingOrders.find((o) => String(o.id || "") === selectedId) || null;
+}
+
+function normalizeSessionStatus(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (s === "active" || s === "activa") return "activa";
+  if (s === "paused" || s === "pausada") return "pausada";
+  if (s === "completed" || s === "finalizada") return "finalizada";
+  return "sin_sesion";
 }
 
 function renderLinkedOrderSummary() {
@@ -440,18 +449,32 @@ function updateStats(list) {
 
 function currentSessionElapsedMs() {
   if (!activeSession) return 0;
-  const startedAt = tsToDate(activeSession.startTime);
-  if (!startedAt) return 0;
-  const pausedAccumulatedMs = Number(activeSession.pausedDurationMs) || 0;
-  const pausedAt = tsToDate(activeSession.pausedAt);
-  const isPaused = activeSession.status === "paused";
-  const now = isPaused && pausedAt ? pausedAt.getTime() : Date.now();
-  return Math.max(0, now - startedAt.getTime() - pausedAccumulatedMs);
+  const status = normalizeSessionStatus(activeSession.status);
+  const trackedMs = Number(activeSession.totalTrackedMs) || 0;
+  if (status !== "activa") return Math.max(0, trackedMs);
+  const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
+  if (!resumedAt) return Math.max(0, trackedMs);
+  return Math.max(0, trackedMs + (Date.now() - resumedAt.getTime()));
 }
 
 function refreshTimeSummary() {
   const timerEl = document.getElementById("eq-active-timer");
   if (timerEl) timerEl.textContent = formatDurationMs(currentSessionElapsedMs());
+  const stateEl = document.getElementById("eq-session-state");
+  const orderStateEl = document.getElementById("eq-order-work-state");
+  const payEl = document.getElementById("eq-session-pay-estimate");
+  const status = activeSession ? normalizeSessionStatus(activeSession.status) : "sin_sesion";
+  if (stateEl) stateEl.textContent = status;
+  if (orderStateEl) {
+    orderStateEl.textContent = activeSession
+      ? String(activeSession.linkedOrderWorkStatus || activeSession.linkedOrderStatus || "sin_iniciar")
+      : "sin_iniciar";
+  }
+  if (payEl) {
+    const rate = activeSession ? Number(activeSession.hourlyRate) || 0 : 0;
+    const estimated = (currentSessionElapsedMs() / (1000 * 60 * 60)) * rate;
+    payEl.textContent = formatMoney(estimated);
+  }
 
   if (!currentUser) return;
   const now = new Date();
@@ -459,7 +482,7 @@ function refreshTimeSummary() {
   let totalEarningsToday = 0;
   for (const s of teamSessions) {
     if (String(s.userId || "") !== currentUser.uid) continue;
-    const startedAt = tsToDate(s.startTime);
+    const startedAt = tsToDate(s.startedAt) || tsToDate(s.startTime);
     if (!startedAt || !sameDay(startedAt, now)) continue;
     const h = Number(s.totalHours);
     const pay = Number(s.totalPay);
@@ -478,14 +501,15 @@ function renderSessionControlsState() {
   const finishBtn = document.getElementById("eq-btn-finish");
 
   const hasActive = Boolean(activeSession);
-  const paused = hasActive && activeSession.status === "paused";
+  const status = hasActive ? normalizeSessionStatus(activeSession.status) : "sin_sesion";
+  const paused = hasActive && status === "pausada";
 
   if (startBtn instanceof HTMLButtonElement) {
-    startBtn.disabled = hasActive;
+    startBtn.disabled = hasActive && status === "activa";
   }
   if (pauseBtn instanceof HTMLButtonElement) {
     pauseBtn.disabled = !hasActive;
-    pauseBtn.textContent = paused ? "Reanudar" : "Pausar";
+    pauseBtn.textContent = paused ? "Continuar" : "Pausar";
   }
   if (finishBtn instanceof HTMLButtonElement) {
     finishBtn.disabled = !hasActive;
@@ -699,18 +723,68 @@ function updateTimePanelHeader() {
 
 async function startWorkSession() {
   if (!businessId || !currentUser) return;
-  if (activeSession) return;
+  const sessionStatus = activeSession ? normalizeSessionStatus(activeSession.status) : "sin_sesion";
   const linkedOrder = selectedLinkedOrder();
   const linkedOrderId = linkedOrder ? String(linkedOrder.id || "") : "";
+  const linkedOrderStatus = linkedOrder ? String(linkedOrder.status || "") : "";
+  const linkedOrderWorkStatus = linkedOrder
+    ? String(linkedOrder.workStatus || (linkedOrderStatus === "en_preparacion" ? "en_preparacion" : "sin_iniciar"))
+    : "sin_iniciar";
+
+  if (activeSession && sessionStatus === "activa") {
+    const activeOrderId = String(activeSession.linkedOrderId || "");
+    if (activeOrderId && linkedOrderId && activeOrderId === linkedOrderId) {
+      showLoadError("Ya existe una sesión activa para este pedido.");
+      return;
+    }
+    const activeRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
+    const now = Timestamp.now();
+    const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
+    const tracked = Number(activeSession.totalTrackedMs) || 0;
+    const extra = resumedAt ? Math.max(0, now.toMillis() - resumedAt.getTime()) : 0;
+    const nextTracked = tracked + extra;
+    await updateDoc(activeRef, {
+      status: "pausada",
+      pausedAt: now,
+      resumedAt: null,
+      totalTrackedMs: nextTracked,
+      updatedAt: serverTimestamp(),
+    });
+    if (activeSession.linkedOrderId) {
+      await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
+        workStatus: "pausado",
+        currentOperatorId: currentUser.uid,
+        lastWorkedAt: serverTimestamp(),
+      });
+    }
+  }
   const member = memberForCurrentUser();
   const rate = memberHourlyRate(member || {});
   const userName = currentUserDisplayName();
 
+  if (linkedOrderId) {
+    const orderRef = doc(db, "businesses", businessId, "orders", linkedOrderId);
+    const statusToWrite = linkedOrderStatus === "nuevo" ? "en_preparacion" : linkedOrderStatus;
+    await updateDoc(orderRef, {
+      status: statusToWrite || "en_preparacion",
+      workStatus: "en_preparacion",
+      currentOperatorId: currentUser.uid,
+      lastWorkedAt: serverTimestamp(),
+    });
+  }
+
   await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
+    operatorId: currentUser.uid,
+    operatorName: userName,
     userId: currentUser.uid,
     userName,
     memberId: member?.id || null,
-    status: "active",
+    status: "activa",
+    startedAt: serverTimestamp(),
+    resumedAt: serverTimestamp(),
+    endedAt: null,
+    totalTrackedMs: 0,
+    calculatedPay: 0,
     startTime: serverTimestamp(),
     endTime: null,
     totalHours: 0,
@@ -720,6 +794,7 @@ async function startWorkSession() {
     linkedOrderClientName: linkedOrder ? String(linkedOrder.clientName || "") : null,
     linkedOrderProduct: linkedOrder ? String(linkedOrder.product || "") : null,
     linkedOrderStatus: linkedOrder ? String(linkedOrder.status || "") : null,
+    linkedOrderWorkStatus,
     pausedAt: null,
     pausedDurationMs: 0,
     createdAt: serverTimestamp(),
@@ -730,38 +805,53 @@ async function startWorkSession() {
 async function togglePauseSession() {
   if (!businessId || !activeSession) return;
   const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
-  const status = String(activeSession.status || "");
-  if (status === "paused") {
-    const pausedAt = tsToDate(activeSession.pausedAt);
-    const pausedMs = pausedAt ? Math.max(0, Date.now() - pausedAt.getTime()) : 0;
-    const prevPaused = Number(activeSession.pausedDurationMs) || 0;
+  const status = normalizeSessionStatus(activeSession.status);
+  if (status === "pausada") {
     await updateDoc(sessionRef, {
-      status: "active",
+      status: "activa",
+      resumedAt: Timestamp.now(),
       pausedAt: null,
-      pausedDurationMs: prevPaused + pausedMs,
+      linkedOrderWorkStatus: "en_preparacion",
       updatedAt: serverTimestamp(),
     });
+    if (activeSession.linkedOrderId) {
+      await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
+        workStatus: "en_preparacion",
+        currentOperatorId: currentUser?.uid || null,
+        lastWorkedAt: serverTimestamp(),
+      });
+    }
     return;
   }
+  const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
+  const tracked = Number(activeSession.totalTrackedMs) || 0;
+  const extra = resumedAt ? Math.max(0, Date.now() - resumedAt.getTime()) : 0;
+  const nextTracked = tracked + extra;
   await updateDoc(sessionRef, {
-    status: "paused",
+    status: "pausada",
     pausedAt: Timestamp.now(),
+    resumedAt: null,
+    totalTrackedMs: nextTracked,
+    linkedOrderWorkStatus: "pausado",
     updatedAt: serverTimestamp(),
   });
+  if (activeSession.linkedOrderId) {
+    await updateDoc(doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId)), {
+      workStatus: "pausado",
+      currentOperatorId: currentUser?.uid || null,
+      lastWorkedAt: serverTimestamp(),
+    });
+  }
 }
 
 async function finalizeSession() {
   if (!businessId || !currentUser || !activeSession) return;
   const end = new Date();
-  const startedAt = tsToDate(activeSession.startTime);
-  if (!startedAt) return;
-  let pausedDurationMs = Number(activeSession.pausedDurationMs) || 0;
-  if (activeSession.status === "paused") {
-    const pausedAt = tsToDate(activeSession.pausedAt);
-    if (pausedAt) pausedDurationMs += Math.max(0, end.getTime() - pausedAt.getTime());
-  }
-  const elapsedMs = Math.max(0, end.getTime() - startedAt.getTime() - pausedDurationMs);
-  const totalHours = elapsedMs / (1000 * 60 * 60);
+  const status = normalizeSessionStatus(activeSession.status);
+  const tracked = Number(activeSession.totalTrackedMs) || 0;
+  const resumedAt = tsToDate(activeSession.resumedAt) || tsToDate(activeSession.startedAt) || tsToDate(activeSession.startTime);
+  const finalTrackedMs = status === "activa" && resumedAt ? tracked + Math.max(0, end.getTime() - resumedAt.getTime()) : tracked;
+  const totalHours = finalTrackedMs / (1000 * 60 * 60);
   const sessionRate =
     Number.isFinite(Number(activeSession.hourlyRate)) && Number(activeSession.hourlyRate) >= 0
       ? Number(activeSession.hourlyRate)
@@ -770,14 +860,42 @@ async function finalizeSession() {
 
   const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(activeSession.id));
   await updateDoc(sessionRef, {
-    status: "completed",
+    status: "finalizada",
+    endedAt: Timestamp.fromDate(end),
     endTime: Timestamp.fromDate(end),
     pausedAt: null,
-    pausedDurationMs,
+    resumedAt: null,
+    totalTrackedMs: finalTrackedMs,
     totalHours,
     totalPay,
+    calculatedPay: totalPay,
+    linkedOrderWorkStatus: "listo",
     updatedAt: serverTimestamp(),
   });
+
+  if (activeSession.linkedOrderId) {
+    const orderRef = doc(db, "businesses", businessId, "orders", String(activeSession.linkedOrderId));
+    try {
+      const snap = await getDoc(orderRef);
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        const prevHours = Number(data.totalLaborHours) || 0;
+        const prevCost = Number(data.totalLaborCost) || 0;
+        const rawStatus = String(data.status || "");
+        const keepDelivered = rawStatus === "entregado" || rawStatus === "cancelado";
+        await updateDoc(orderRef, {
+          totalLaborHours: prevHours + totalHours,
+          totalLaborCost: Number((prevCost + totalPay).toFixed(2)),
+          lastWorkedAt: serverTimestamp(),
+          workStatus: "listo",
+          currentOperatorId: null,
+          status: keepDelivered ? rawStatus : "listo",
+        });
+      }
+    } catch (e) {
+      console.warn("[Team] update order labor fields", e);
+    }
+  }
 
   await addDoc(collection(db, "businesses", businessId, "finance"), {
     type: "expense",
@@ -838,7 +956,7 @@ function subscribeTeamSessions() {
         teamSessions.find(
           (s) =>
             String(s.userId || "") === currentUser?.uid &&
-            (String(s.status || "") === "active" || String(s.status || "") === "paused"),
+            (normalizeSessionStatus(s.status) === "activa" || normalizeSessionStatus(s.status) === "pausada"),
         ) ||
         null;
       renderSessionControlsState();

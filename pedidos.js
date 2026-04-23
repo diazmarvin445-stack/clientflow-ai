@@ -81,7 +81,7 @@ function renderHeader(business) {
 function statusBadgeClass(status) {
   const s = String(status || "").toLowerCase();
   if (s === "entregado") return "dash-badge--done";
-  if (s === "produccion") return "dash-badge--sched";
+  if (s === "produccion" || s === "en_preparacion") return "dash-badge--sched";
   if (s === "cancelado") return "dash-badge--cancelled";
   return "dash-badge--prog";
 }
@@ -341,6 +341,7 @@ function fillDetail(row) {
     entregado: "Entregado",
     cancelado: "Cancelado",
     nuevo: "Nuevo",
+    en_preparacion: "En preparación",
     produccion: "Producción",
     listo: "Listo",
   };
