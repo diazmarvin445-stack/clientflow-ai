@@ -1092,11 +1092,7 @@ function subscribeTeamSessions() {
     unsubSessions();
     unsubSessions = null;
   }
-  const qy = query(
-    collection(db, "businesses", businessId, "teamSessions"),
-    orderBy("createdAt", "desc"),
-    limit(500),
-  );
+  const qy = query(collection(db, "businesses", businessId, "teamSessions"), limit(500));
   unsubSessions = onSnapshot(
     qy,
     (snap) => {

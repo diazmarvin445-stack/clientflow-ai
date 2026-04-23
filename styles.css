@@ -7800,9 +7800,17 @@ body.cf-modal-open {
   display: none !important;
 }
 
+.maya-cc[data-active-tab="maya"] #maya-cc-zone-chat {
+  grid-column: 1 / -1;
+}
+
 .maya-cc[data-active-tab="whatsapp"] #maya-cc-zone-chat,
 .maya-cc[data-active-tab="whatsapp"] #maya-cc-zone-stats {
   display: none !important;
+}
+
+.maya-cc[data-active-tab="whatsapp"] #maya-cc-zone-wa {
+  grid-column: 1 / -1;
 }
 
 .maya-cc-zone > summary.maya-cc-zone__cap {
