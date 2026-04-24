@@ -1446,6 +1446,12 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
     await d.ref.delete();
   }
 
+  try {
+    await db.collection("receiptPublic").doc(`${businessId}__${orderId}`).delete();
+  } catch {
+    /* doc puede no existir */
+  }
+
   await orderRef.delete();
   await recomputeClientAfterOrderDelete(db, businessId, linkedClientId);
 }
@@ -3444,6 +3450,12 @@ export const deleteOrderCascade = onRequest(
           .get();
         for (const d of finSnap.docs) {
           await d.ref.delete();
+        }
+
+        try {
+          await db.collection("receiptPublic").doc(`${businessId}__${orderId}`).delete();
+        } catch {
+          /* doc puede no existir */
         }
 
         await orderRef.delete();

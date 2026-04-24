@@ -18,7 +18,8 @@ import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./
 import { initDashShell } from "./dash-shell.js";
 import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
-import { receiptStatusLabel, CLIENT_PUBLIC_WEBSITE_URL } from "./receipt-config.js";
+import { receiptStatusLabel } from "./receipt-config.js";
+import { syncReceiptPublicSnapshot } from "./receipt-public-sync.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -117,6 +118,9 @@ async function openDigitalReceipt(row) {
   try {
     const biz = await getReceiptPdfBusiness(db, activeBusinessId);
     renderDigitalReceiptSheet(row, biz);
+    await syncReceiptPublicSnapshot(db, activeBusinessId, row, biz).catch((err) => {
+      console.warn("[receiptPublic]", err);
+    });
     modal.showModal();
   } catch (e) {
     console.error(e);
@@ -129,7 +133,7 @@ function fallbackShareClipboard(text) {
   if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
     navigator.clipboard
       .writeText(text)
-      .then(() => window.alert("Texto copiado al portapapeles."))
+      .then(() => window.alert("Enlace del recibo copiado al portapapeles."))
       .catch(() => window.alert("Compartir no disponible en este dispositivo."));
   } else {
     window.alert("Compartir no disponible en este dispositivo.");
@@ -137,18 +141,31 @@ function fallbackShareClipboard(text) {
 }
 
 async function shareDigitalReceipt() {
+  const row = receiptModalOrder;
+  if (!row || !activeBusinessId) return;
+  try {
+    const biz = await getReceiptPdfBusiness(db, activeBusinessId);
+    await syncReceiptPublicSnapshot(db, activeBusinessId, row, biz);
+  } catch (e) {
+    console.error(e);
+    window.alert("No se pudo preparar el enlace del recibo. Inténtalo de nuevo.");
+    return;
+  }
+  const receiptUrl = new URL("recibo.html", window.location.href);
+  receiptUrl.searchParams.set("id", String(row.id));
+  receiptUrl.searchParams.set("b", activeBusinessId);
+  const url = receiptUrl.toString();
   const title = "Recibo YourColor";
-  const text = "Aquí está tu recibo de YourColor Corporation.";
-  const url = CLIENT_PUBLIC_WEBSITE_URL;
+  const text = "Aquí está tu recibo digital de YourColor Corporation.";
   if (navigator.share) {
     try {
       await navigator.share({ title, text, url });
     } catch (e) {
       if (e && e.name === "AbortError") return;
-      fallbackShareClipboard(`${text}\n${url}`);
+      fallbackShareClipboard(url);
     }
   } else {
-    fallbackShareClipboard(`${text}\n${url}`);
+    fallbackShareClipboard(url);
   }
 }
 
@@ -720,7 +737,7 @@ function wireUi() {
   const receiptShareBtn = document.getElementById("orders-receipt-share");
   if (receiptShareBtn) {
     receiptShareBtn.addEventListener("click", () => {
-      shareDigitalReceipt().catch((e) => console.error(e));
+      shareDigitalReceipt().catch((err) => console.error(err));
     });
   }
   document.getElementById("od-mark-delivered").addEventListener("click", async () => {
