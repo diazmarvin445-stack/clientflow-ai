@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Seguimiento de pedido — ClientFlow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="pub-order-body">
+    <main class="pub-order-main">
+      <header class="pub-order-header">
+        <p class="pub-order-kicker">Seguimiento</p>
+        <h1 class="pub-order-title">Tu pedido</h1>
+        <p id="pub-order-error" class="pub-order-error" hidden role="alert"></p>
+      </header>
+
+      <div id="pub-order-loading" class="pub-order-loading">Cargando…</div>
+
+      <article id="pub-order-card" class="pub-order-card" hidden>
+        <div class="pub-order-status-row">
+          <span class="pub-order-label">Estado</span>
+          <span id="pub-order-status" class="pub-order-badge">—</span>
+        </div>
+        <dl class="pub-order-dl">
+          <div><dt>Cliente</dt><dd id="pub-order-client">—</dd></div>
+          <div><dt>Producto</dt><dd id="pub-order-product">—</dd></div>
+          <div><dt>Cantidad</dt><dd id="pub-order-qty">—</dd></div>
+          <div><dt>Total</dt><dd id="pub-order-total">—</dd></div>
+          <div><dt>Pagos</dt><dd id="pub-order-payment">—</dd></div>
+          <div><dt>Entrega prevista</dt><dd id="pub-order-delivery">—</dd></div>
+        </dl>
+
+        <section class="pub-order-preview" aria-labelledby="pub-preview-title">
+          <h2 id="pub-preview-title" class="pub-order-preview-title">Resumen (vista previa)</h2>
+          <p class="pub-order-preview-note">
+            Este enlace es solo para consultar el estado de tu pedido. Para el PDF con membrete del comercio, pide tu
+            recibo por WhatsApp o al negocio.
+          </p>
+        </section>
+
+        <p class="pub-order-foot">¿Algún error? Contacta directamente al negocio con tu nombre y este enlace.</p>
+      </article>
+    </main>
+    <script type="module" src="pedido.js"></script>
+  </body>
+</html>

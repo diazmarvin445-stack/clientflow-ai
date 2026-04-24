@@ -214,6 +214,32 @@ export async function generateOrderReceiptPdf(row, biz) {
 
   y = boxTop + boxH + 12;
 
+  const trackLink = typeof row?.publicLink === "string" ? row.publicLink.trim() : "";
+  if (trackLink) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(33, 37, 41);
+    doc.text("Ver tu pedido en línea", margin, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(37, 99, 235);
+    const urlLines = doc.splitTextToSize(trackLink, contentW);
+    urlLines.forEach((line) => {
+      if (y > 275) {
+        doc.addPage();
+        y = margin;
+      }
+      const lineY = y;
+      doc.text(line, margin, lineY);
+      const tw = doc.getTextWidth(line);
+      doc.link(margin, lineY - 3.5, tw, 5, { url: trackLink });
+      y += 4.2;
+    });
+    y += 6;
+    doc.setTextColor(33, 37, 41);
+  }
+
   doc.setDrawColor(220, 222, 230);
   doc.line(margin, y, pageW - margin, y);
   y += 7;

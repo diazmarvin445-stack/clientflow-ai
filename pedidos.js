@@ -18,6 +18,7 @@ import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./
 import { initDashShell } from "./dash-shell.js";
 import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
+import { ensurePublicOrderTrackingClient } from "./order-public-client.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -29,9 +30,35 @@ let allOrders = [];
 let ordersUnsub = null;
 let selectedOrderId = null;
 
+async function mergePublicTrackingIntoRow(row) {
+  let r = row;
+  if (!row.publicLink || !row.publicOrderId) {
+    const pub = await ensurePublicOrderTrackingClient(db, activeBusinessId, row);
+    r = { ...row, ...pub };
+    const idx = allOrders.findIndex((x) => x.id === row.id);
+    if (idx >= 0) allOrders[idx] = { ...allOrders[idx], ...pub };
+    if (selectedOrderId === row.id) fillDetail(allOrders[idx] ?? r);
+  }
+  return r;
+}
+
 async function downloadOrderReceiptPdf(row) {
+  const r = await mergePublicTrackingIntoRow(row);
   const biz = await getReceiptPdfBusiness(db, activeBusinessId);
-  await generateOrderReceiptPdf(row, biz);
+  await generateOrderReceiptPdf(r, biz);
+}
+
+async function copyOrderPublicLinkById(orderId) {
+  const row = allOrders.find((x) => x.id === orderId);
+  if (!row) return;
+  try {
+    const r = await mergePublicTrackingIntoRow(row);
+    await navigator.clipboard.writeText(r.publicLink || "");
+    window.alert("Enlace copiado al portapapeles.");
+  } catch (e) {
+    console.error(e);
+    window.alert("No se pudo copiar el enlace. Revisa permisos o conexión.");
+  }
 }
 
 function money(v) {
@@ -358,6 +385,11 @@ function fillDetail(row) {
   }
   document.getElementById("od-status").textContent = statusLabels[stRaw] || "Pendiente";
   document.getElementById("od-delivery").textContent = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
+  const pubEl = document.getElementById("od-public-link");
+  if (pubEl) {
+    const pl = typeof row.publicLink === "string" ? row.publicLink.trim() : "";
+    pubEl.textContent = pl || "— (generar con 📄 Recibo o 🔗 Copiar link)";
+  }
   document.getElementById("od-source").textContent = sourceLabel(row.source);
   document.getElementById("od-notes").textContent = row.notes || "—";
   const btnDel = document.getElementById("od-mark-delivered");
@@ -421,6 +453,7 @@ function renderRows() {
       <td>
         <button class="dash-icon-btn" data-edit="${row.id}" title="Editar pedido">✏️</button>
         <button class="dash-icon-btn" data-receipt="${row.id}" type="button" title="📄 Recibo PDF">📄</button>
+        <button class="dash-icon-btn" data-copy-link="${row.id}" type="button" title="🔗 Copiar link del pedido">🔗</button>
         <button
           class="dash-icon-btn"
           data-quick-deliver="${row.id}"
@@ -465,6 +498,7 @@ function renderRows() {
         <div class="orders-mobile-card__actions">
           <button type="button" class="dash-quick-btn" data-edit="${row.id}">Editar</button>
           <button type="button" class="dash-quick-btn" data-receipt="${row.id}">📄 Recibo</button>
+          <button type="button" class="dash-quick-btn" data-copy-link="${row.id}">🔗 Copiar link</button>
           <button type="button" class="dash-quick-btn" data-quick-deliver="${row.id}" ${delivered ? "disabled aria-disabled='true'" : ""}>
             Entregar
           </button>
@@ -516,6 +550,13 @@ function renderRows() {
       }
     });
   });
+  tbody.querySelectorAll("[data-copy-link]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const orderId = btn.getAttribute("data-copy-link");
+      if (orderId) copyOrderPublicLinkById(orderId);
+    });
+  });
 
   if (mobileRoot) {
     mobileRoot.hidden = false;
@@ -554,6 +595,13 @@ function renderRows() {
         }
       });
     });
+    mobileRoot.querySelectorAll("[data-copy-link]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const orderId = btn.getAttribute("data-copy-link");
+        if (orderId) copyOrderPublicLinkById(orderId);
+      });
+    });
   }
 }
 
@@ -585,6 +633,13 @@ function wireUi() {
         console.error(e);
         window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
       }
+    });
+  }
+  const odCopyLink = document.getElementById("od-copy-link");
+  if (odCopyLink) {
+    odCopyLink.addEventListener("click", () => {
+      if (!selectedOrderId) return;
+      copyOrderPublicLinkById(selectedOrderId);
     });
   }
   document.getElementById("od-mark-delivered").addEventListener("click", async () => {
