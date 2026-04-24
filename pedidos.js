@@ -630,6 +630,7 @@ function subscribeOrders() {
 }
 
 function boot() {
+  console.log("Pedidos fixed and loading correctly");
   initDashShell({ auth, db });
   wireUi();
   onAuthStateChanged(auth, async (user) => {

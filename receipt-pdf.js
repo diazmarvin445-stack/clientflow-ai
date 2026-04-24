@@ -1,5 +1,13 @@
-import { jsPDF } from "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.es.min.js";
 import { receiptStatusLabel } from "./receipt-config.js";
+
+/** Loaded via UMD script in pedidos.html (GitHub Pages: no npm/babel). */
+function getJsPDF() {
+  const ns = globalThis.jspdf;
+  if (!ns || typeof ns.jsPDF !== "function") {
+    throw new Error("jsPDF no está disponible. Cargue jspdf.umd.min.js antes del módulo pedidos.js.");
+  }
+  return ns.jsPDF;
+}
 
 function moneyPdf(v) {
   const n = Number(v) || 0;
@@ -50,7 +58,8 @@ async function tryLoadImageDataUrl(url) {
  * @param {typeof import("./receipt-config.js").RECEIPT_BUSINESS} biz
  */
 export async function generateOrderReceiptPdf(row, biz) {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const JsPDF = getJsPDF();
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 18;
   let y = margin;

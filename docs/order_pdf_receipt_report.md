@@ -39,7 +39,7 @@ Data is read from the Firestore order document already loaded in **`pedidos.js`*
 ## PDF generation
 
 - **Module:** `receipt-pdf.js` exports `generateOrderReceiptPdf(row, RECEIPT_BUSINESS)`  
-- **Library:** [jsPDF](https://github.com/parallax/jsPDF) **2.5.2** loaded as an ES module from jsDelivr (`dist/jspdf.es.min.js`). The browser needs network access the first time the module is loaded.  
+- **Library:** [jsPDF](https://github.com/parallax/jsPDF) **2.5.1** UMD from CDN (`jspdf.umd.min.js` in `pedidos.html`, before `pedidos.js`). `receipt-pdf.js` uses `globalThis.jspdf.jsPDF` so GitHub Pages does not need a bundler. See `docs/pedidos_module_fix_report.md`.  
 - **Output:** download `recibo-<orderId>.pdf` via `save()`.
 
 ## UI: where to generate the receipt
