@@ -16,7 +16,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
-import { RECEIPT_BUSINESS } from "./receipt-config.js";
+import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
@@ -28,6 +28,11 @@ let activeBusinessId = "";
 let allOrders = [];
 let ordersUnsub = null;
 let selectedOrderId = null;
+
+async function downloadOrderReceiptPdf(row) {
+  const biz = await getReceiptPdfBusiness(db, activeBusinessId);
+  await generateOrderReceiptPdf(row, biz);
+}
 
 function money(v) {
   const n = Number(v) || 0;
@@ -504,7 +509,7 @@ function renderRows() {
       const row = allOrders.find((x) => x.id === orderId);
       if (!row) return;
       try {
-        await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+        await downloadOrderReceiptPdf(row);
       } catch (e) {
         console.error(e);
         window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
@@ -542,7 +547,7 @@ function renderRows() {
         const row = allOrders.find((x) => x.id === orderId);
         if (!row) return;
         try {
-          await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+          await downloadOrderReceiptPdf(row);
         } catch (e) {
           console.error(e);
           window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
@@ -575,7 +580,7 @@ function wireUi() {
       const row = allOrders.find((x) => x.id === selectedOrderId);
       if (!row) return;
       try {
-        await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+        await downloadOrderReceiptPdf(row);
       } catch (e) {
         console.error(e);
         window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");

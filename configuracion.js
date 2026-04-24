@@ -4,7 +4,13 @@ import {
   doc,
   serverTimestamp,
   updateDoc,
+  setDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import {
+  receiptSettingsDocRef,
+  RECEIPT_SETTINGS_DEFAULTS,
+  loadReceiptSettingsForForm,
+} from "./receipt-settings.js";
 import {
   resolveBusinessForUser,
   formatBusinessMeta,
@@ -19,6 +25,10 @@ let businessId = null;
 let businessData = null;
 /** @type {string | null} */
 let pendingLogoDataUrl = null;
+/** @type {string | null} */
+let pendingReceiptLogoDataUrl = null;
+/** @type {string} */
+let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
 
 function renderHeader(business) {
@@ -178,6 +188,34 @@ function applyFormFromBusiness(data) {
   syncIndustryCustomFields();
 }
 
+async function refreshReceiptSettingsForm() {
+  if (!businessId) return;
+  pendingReceiptLogoDataUrl = null;
+  const data = await loadReceiptSettingsForForm(db, businessId);
+  cachedReceiptLogoUrl = data.logoUrl || "";
+  setVal("cfg-receipt-business-name", data.businessName);
+  setVal("cfg-receipt-logo-url", cachedReceiptLogoUrl.startsWith("data:") ? "" : cachedReceiptLogoUrl);
+  setVal("cfg-receipt-phone", data.phone);
+  setVal("cfg-receipt-email", data.email);
+  setVal("cfg-receipt-address", data.address);
+  setVal("cfg-receipt-footer", data.footerMessage);
+  setVal("cfg-receipt-primary-color", data.primaryColor);
+  setVal("cfg-receipt-notes", data.notesTerms);
+  const preview = document.getElementById("cfg-receipt-logo-preview");
+  if (preview) {
+    preview.innerHTML = "";
+    if (cachedReceiptLogoUrl) {
+      const img = document.createElement("img");
+      img.src = cachedReceiptLogoUrl;
+      img.alt = "Logo del recibo";
+      img.className = "cfg-logo-preview-img";
+      preview.appendChild(img);
+    }
+  }
+  const fileInput = document.getElementById("cfg-receipt-logo-file");
+  if (fileInput && "value" in fileInput) fileInput.value = "";
+}
+
 async function saveSection(section) {
   if (!businessId || !businessData) return;
 
@@ -242,6 +280,26 @@ async function saveSection(section) {
         notificationPreference: val("cfg-notify").trim() || "both",
       });
       feedback("cfg-feedback-platform", "Cambios guardados", true);
+    } else if (section === "receipt") {
+      const urlTyped = val("cfg-receipt-logo-url").trim();
+      const logoUrl = pendingReceiptLogoDataUrl || (urlTyped ? urlTyped : cachedReceiptLogoUrl);
+      await setDoc(
+        receiptSettingsDocRef(db, businessId),
+        {
+          businessName: val("cfg-receipt-business-name").trim(),
+          logoUrl,
+          phone: val("cfg-receipt-phone").trim(),
+          email: val("cfg-receipt-email").trim().toLowerCase(),
+          address: val("cfg-receipt-address").trim(),
+          footerMessage: val("cfg-receipt-footer").trim(),
+          primaryColor: val("cfg-receipt-primary-color").trim() || RECEIPT_SETTINGS_DEFAULTS.primaryColor,
+          notesTerms: val("cfg-receipt-notes").trim(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      await refreshReceiptSettingsForm();
+      feedback("cfg-feedback-receipt", "Cambios guardados", true);
     }
 
     const business = await resolveBusinessForUser(db, auth.currentUser);
@@ -259,7 +317,9 @@ async function saveSection(section) {
           ? "cfg-feedback-brand"
           : section === "marketing"
             ? "cfg-feedback-marketing"
-            : "cfg-feedback-platform";
+            : section === "receipt"
+              ? "cfg-feedback-receipt"
+              : "cfg-feedback-platform";
     feedback(fb, "No se pudo guardar. Revisa tu conexión e inténtalo otra vez.", false);
   }
 }
@@ -290,6 +350,43 @@ async function toggleIntegration(key) {
     console.error(err);
     if (foot) foot.textContent = "No se pudo guardar el cambio. Inténtalo otra vez.";
   }
+}
+
+function wireReceiptLogo() {
+  const input = document.getElementById("cfg-receipt-logo-file");
+  const preview = document.getElementById("cfg-receipt-logo-preview");
+  const clearBtn = document.getElementById("cfg-receipt-logo-clear");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      pendingReceiptLogoDataUrl = null;
+      cachedReceiptLogoUrl = "";
+      if (input && "value" in input) input.value = "";
+      setVal("cfg-receipt-logo-url", "");
+      if (preview) preview.innerHTML = "";
+    });
+  }
+  if (!input || !preview) return;
+  input.addEventListener("change", () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    if (file.size > 400 * 1024) {
+      alert("La imagen pesa más de 400 KB. Prueba con un archivo más liviano.");
+      input.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      pendingReceiptLogoDataUrl = result;
+      preview.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = result;
+      img.alt = "Vista previa del logo del recibo";
+      img.className = "cfg-logo-preview-img";
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function wireLogoFile() {
@@ -364,6 +461,7 @@ async function loadPage(user) {
 
     businessId = business.id;
     applyFormFromBusiness(business.data);
+    await refreshReceiptSettingsForm();
 
     if (noBiz) noBiz.hidden = true;
     if (main) main.hidden = false;
@@ -378,6 +476,7 @@ async function loadPage(user) {
 function boot() {
   initDashShell({ auth, db });
   wireLogoFile();
+  wireReceiptLogo();
   wireSaveButtons();
   wireIntegrations();
   wireIndustrySelector();

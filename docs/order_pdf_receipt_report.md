@@ -6,16 +6,9 @@ Client receipts must be generated **automatically** from the selected order in *
 
 ## Business branding (config)
 
-Predefined values live in **`receipt-config.js`** (`RECEIPT_BUSINESS`):
+**Primary:** editable in **Configuración → Personalizar recibo**, stored in Firestore at `businesses/{businessId}/settings/receipt`. See **`docs/receipt_settings_customization_report.md`**.
 
-- **Legal name:** YourColor Corporation  
-- **Phone:** 772-212-3882  
-- **Email:** optional (`email`); if left empty, no email line is printed on the header band  
-- **Address lines:** Fort Pierce, FL; delivery area note (editable list)  
-- **Logo:** optional `logoUrl` (PNG/JPEG, CORS-friendly or same-origin). If unset or load fails, a **“YC”** monogram is drawn in the PDF header  
-- **Accent color:** RGB aligned with the app indigo (`brandRgb`)
-
-To change branding globally, edit **`receipt-config.js`** only.
+**Fallback defaults** (when no doc or field missing) are in **`receipt-settings.js`** (`RECEIPT_SETTINGS_DEFAULTS`), seeded from **`receipt-config.js`**.
 
 ## Order fields on the PDF
 
@@ -31,14 +24,15 @@ Data is read from the Firestore order document already loaded in **`pedidos.js`*
 | Depósito             | `deposit`                                      |
 | Saldo                | `balance`, or `total − deposit` if missing   |
 | Fecha de entrega     | `deliveryDate` (Firestore `Timestamp` or date) |
-| Estado del pedido    | `status` (Spanish labels via `receiptStatusLabel`) |
 | No. de recibo        | Firestore document id (`row.id`)              |
+
+Order **status** is intentionally **not** shown on the client receipt.
 
 **Not included:** `expenses`, net profit, projected profit, or any finance line meant for internal use.
 
 ## PDF generation
 
-- **Module:** `receipt-pdf.js` exports `generateOrderReceiptPdf(row, RECEIPT_BUSINESS)`  
+- **Module:** `receipt-pdf.js` exports `generateOrderReceiptPdf(row, biz)` where `biz` comes from **`getReceiptPdfBusiness(db, businessId)`** (`receipt-settings.js`).  
 - **Library:** [jsPDF](https://github.com/parallax/jsPDF) **2.5.1** UMD from CDN (`jspdf.umd.min.js` in `pedidos.html`, before `pedidos.js`). `receipt-pdf.js` uses `globalThis.jspdf.jsPDF` so GitHub Pages does not need a bundler. See `docs/pedidos_module_fix_report.md`.  
 - **Output:** download `recibo-<orderId>.pdf` via `save()`.
 
@@ -54,10 +48,12 @@ Clicks call `generateOrderReceiptPdf` with **no** prompts and **no** manual invo
 
 | File                 | Role                                                |
 |----------------------|-----------------------------------------------------|
-| `receipt-config.js`  | Reusable business constants + status labels         |
+| `receipt-config.js`  | Defaults seed + `receiptStatusLabel` (orders UI)   |
+| `receipt-settings.js`| Firestore `settings/receipt` + merge for PDF        |
 | `receipt-pdf.js`     | Build and download the client PDF                   |
-| `pedidos.js`         | Buttons + handlers; imports receipt modules         |
-| `pedidos.html`       | Detail panel “📄 Recibo” button                     |
+| `pedidos.js`         | Loads settings + generates PDF                      |
+| `pedidos.html`       | jsPDF UMD + module                                  |
+| `configuracion.*`    | “Personalizar recibo” UI                            |
 
 ## Operational notes
 

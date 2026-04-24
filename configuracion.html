@@ -247,6 +247,80 @@
               </div>
             </section>
 
+            <!-- Personalizar recibo -->
+            <section class="dash-panel cfg-section" aria-labelledby="cfg-s-receipt-title">
+              <div class="cfg-section-head">
+                <div>
+                  <p class="cfg-kicker">Pedidos</p>
+                  <h3 class="cfg-section-title" id="cfg-s-receipt-title">Personalizar recibo</h3>
+                  <p class="cfg-section-desc">
+                    Estos datos se usan automáticamente al generar el PDF en Pedidos (📄 Recibo). Solo información para el
+                    cliente: sin gastos ni ganancias internas.
+                  </p>
+                </div>
+                <div class="cfg-section-actions">
+                  <span class="cfg-save-feedback" id="cfg-feedback-receipt" aria-live="polite"></span>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary cfg-save" data-cfg="receipt">
+                    Guardar
+                  </button>
+                </div>
+              </div>
+              <div class="cfg-section-body">
+                <div class="cfg-brand-row">
+                  <div class="cfg-logo-box">
+                    <div id="cfg-receipt-logo-preview" class="cfg-logo-preview" aria-hidden="true"></div>
+                    <label class="cfg-logo-upload">
+                      <span class="cfg-label">Logo en el recibo</span>
+                      <input type="file" id="cfg-receipt-logo-file" accept="image/png,image/jpeg" class="cfg-file" />
+                      <span class="cfg-logo-hint">PNG o JPG · hasta 400 KB (se guarda en Firestore)</span>
+                    </label>
+                    <button type="button" class="dash-quick-btn cfg-receipt-logo-clear" id="cfg-receipt-logo-clear">
+                      Quitar logo
+                    </button>
+                  </div>
+                  <div class="cfg-grid cfg-grid--2 cfg-brand-fields">
+                    <label class="cfg-field cfg-field--full">
+                      <span class="cfg-label">Nombre en el recibo</span>
+                      <input type="text" id="cfg-receipt-business-name" class="cfg-input" autocomplete="organization" />
+                    </label>
+                    <label class="cfg-field cfg-field--full">
+                      <span class="cfg-label">URL del logo (opcional)</span>
+                      <input
+                        type="url"
+                        id="cfg-receipt-logo-url"
+                        class="cfg-input"
+                        placeholder="https://… (si no subes archivo)"
+                      />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Teléfono</span>
+                      <input type="tel" id="cfg-receipt-phone" class="cfg-input" autocomplete="tel" />
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Correo</span>
+                      <input type="email" id="cfg-receipt-email" class="cfg-input" autocomplete="email" />
+                    </label>
+                    <label class="cfg-field cfg-field--full">
+                      <span class="cfg-label">Dirección / ciudad</span>
+                      <textarea id="cfg-receipt-address" class="cfg-input cfg-textarea" rows="2"></textarea>
+                    </label>
+                    <label class="cfg-field">
+                      <span class="cfg-label">Color principal</span>
+                      <input type="color" id="cfg-receipt-primary-color" class="cfg-input cfg-color" value="#6366f1" />
+                    </label>
+                    <label class="cfg-field cfg-field--full">
+                      <span class="cfg-label">Mensaje al pie</span>
+                      <textarea id="cfg-receipt-footer" class="cfg-input cfg-textarea" rows="2"></textarea>
+                    </label>
+                    <label class="cfg-field cfg-field--full">
+                      <span class="cfg-label">Notas / términos (opcional)</span>
+                      <textarea id="cfg-receipt-notes" class="cfg-input cfg-textarea" rows="3"></textarea>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             <!-- 3 Integraciones -->
             <section class="dash-panel cfg-section" aria-labelledby="cfg-s-int-title">
               <div class="cfg-section-head">

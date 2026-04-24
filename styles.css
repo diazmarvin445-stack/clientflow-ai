@@ -7040,6 +7040,11 @@ body.cf-modal-open {
   color: var(--text-muted);
 }
 
+.cfg-receipt-logo-clear {
+  margin-top: 0.65rem;
+  width: 100%;
+}
+
 .cfg-brand-fields {
   flex: 1;
   min-width: min(100%, 320px);

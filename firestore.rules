@@ -107,6 +107,11 @@ service cloud.firestore {
         allow read, write: if isBusinessOwner(businessId);
       }
 
+      /* Ajustes por negocio (p. ej. recibo PDF en Pedidos). */
+      match /settings/{settingId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
       /* Calendario global (header, pedidos, Maya): eventos por negocio. Dueño = ownerUid en el doc businesses/{id}. */
       match /calendar/{eventId} {
         allow read, write: if isBusinessOwner(businessId);
