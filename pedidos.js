@@ -16,6 +16,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { RECEIPT_BUSINESS } from "./receipt-config.js";
+import { generateOrderReceiptPdf } from "./receipt-pdf.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -413,6 +415,7 @@ function renderRows() {
       <td>${row.notes || "—"}</td>
       <td>
         <button class="dash-icon-btn" data-edit="${row.id}" title="Editar pedido">✏️</button>
+        <button class="dash-icon-btn" data-receipt="${row.id}" type="button" title="📄 Recibo PDF">📄</button>
         <button
           class="dash-icon-btn"
           data-quick-deliver="${row.id}"
@@ -455,11 +458,12 @@ function renderRows() {
           <span>${sourceLabel(row.source)}</span>
         </div>
         <div class="orders-mobile-card__actions">
-          <button class="dash-quick-btn" data-edit="${row.id}">Editar</button>
-          <button class="dash-quick-btn" data-quick-deliver="${row.id}" ${delivered ? "disabled aria-disabled='true'" : ""}>
+          <button type="button" class="dash-quick-btn" data-edit="${row.id}">Editar</button>
+          <button type="button" class="dash-quick-btn" data-receipt="${row.id}">📄 Recibo</button>
+          <button type="button" class="dash-quick-btn" data-quick-deliver="${row.id}" ${delivered ? "disabled aria-disabled='true'" : ""}>
             Entregar
           </button>
-          <button class="dash-quick-btn" data-del="${row.id}">Eliminar</button>
+          <button type="button" class="dash-quick-btn" data-del="${row.id}">Eliminar</button>
         </div>
       `;
       card.addEventListener("click", (e) => {
@@ -492,6 +496,21 @@ function renderRows() {
       await markOrderDelivered(orderId);
     });
   });
+  tbody.querySelectorAll("[data-receipt]").forEach((btn) => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const orderId = btn.getAttribute("data-receipt");
+      if (!orderId) return;
+      const row = allOrders.find((x) => x.id === orderId);
+      if (!row) return;
+      try {
+        await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+      } catch (e) {
+        console.error(e);
+        window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
+      }
+    });
+  });
 
   if (mobileRoot) {
     mobileRoot.hidden = false;
@@ -515,6 +534,21 @@ function renderRows() {
         await markOrderDelivered(orderId);
       });
     });
+    mobileRoot.querySelectorAll("[data-receipt]").forEach((btn) => {
+      btn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const orderId = btn.getAttribute("data-receipt");
+        if (!orderId) return;
+        const row = allOrders.find((x) => x.id === orderId);
+        if (!row) return;
+        try {
+          await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+        } catch (e) {
+          console.error(e);
+          window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
+        }
+      });
+    });
   }
 }
 
@@ -535,6 +569,19 @@ function wireUi() {
     const row = allOrders.find((x) => x.id === selectedOrderId);
     if (row) openModalFor(row);
   });
+  const odReceipt = document.getElementById("od-receipt");
+  if (odReceipt) {
+    odReceipt.addEventListener("click", async () => {
+      const row = allOrders.find((x) => x.id === selectedOrderId);
+      if (!row) return;
+      try {
+        await generateOrderReceiptPdf(row, RECEIPT_BUSINESS);
+      } catch (e) {
+        console.error(e);
+        window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
+      }
+    });
+  }
   document.getElementById("od-mark-delivered").addEventListener("click", async () => {
     if (!selectedOrderId) return;
     await markOrderDelivered(selectedOrderId);
