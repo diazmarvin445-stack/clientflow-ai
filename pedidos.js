@@ -18,7 +18,7 @@ import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./
 import { initDashShell } from "./dash-shell.js";
 import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
-import { ensurePublicOrderTrackingClient } from "./order-public-client.js";
+import { receiptStatusLabel, CLIENT_PUBLIC_WEBSITE_URL } from "./receipt-config.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -29,35 +29,126 @@ let activeBusinessId = "";
 let allOrders = [];
 let ordersUnsub = null;
 let selectedOrderId = null;
-
-async function mergePublicTrackingIntoRow(row) {
-  let r = row;
-  if (!row.publicLink || !row.publicOrderId) {
-    const pub = await ensurePublicOrderTrackingClient(db, activeBusinessId, row);
-    r = { ...row, ...pub };
-    const idx = allOrders.findIndex((x) => x.id === row.id);
-    if (idx >= 0) allOrders[idx] = { ...allOrders[idx], ...pub };
-    if (selectedOrderId === row.id) fillDetail(allOrders[idx] ?? r);
-  }
-  return r;
-}
+/** @type {Record<string, unknown> & { id?: string } | null} */
+let receiptModalOrder = null;
 
 async function downloadOrderReceiptPdf(row) {
-  const r = await mergePublicTrackingIntoRow(row);
+  if (!row || !activeBusinessId) return;
   const biz = await getReceiptPdfBusiness(db, activeBusinessId);
-  await generateOrderReceiptPdf(r, biz);
+  await generateOrderReceiptPdf(row, biz);
 }
 
-async function copyOrderPublicLinkById(orderId) {
-  const row = allOrders.find((x) => x.id === orderId);
-  if (!row) return;
+function renderDigitalReceiptSheet(row, biz) {
+  const nameEl = document.getElementById("orders-receipt-business-name");
+  const contactEl = document.getElementById("orders-receipt-contact");
+  const addrEl = document.getElementById("orders-receipt-address");
+  const logoWrap = document.getElementById("orders-receipt-logo-wrap");
+  const dl = document.getElementById("orders-receipt-lines");
+
+  if (nameEl) nameEl.textContent = biz.legalName || "YourColor Corporation";
+  if (contactEl) {
+    const bits = [biz.phone ? `Tel: ${biz.phone}` : "", biz.email ? biz.email : ""].filter(Boolean);
+    contactEl.textContent = bits.length ? bits.join(" · ") : "—";
+  }
+  if (addrEl) {
+    const lines = Array.isArray(biz.addressLines) ? biz.addressLines.filter(Boolean) : [];
+    addrEl.textContent = lines.length ? lines.join("\n") : "—";
+  }
+
+  if (logoWrap) {
+    logoWrap.innerHTML = "";
+    const url = typeof biz.logoUrl === "string" ? biz.logoUrl.trim() : "";
+    if (url) {
+      logoWrap.hidden = false;
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      img.className = "orders-receipt-logo";
+      img.referrerPolicy = "no-referrer";
+      img.onload = () => {
+        logoWrap.hidden = false;
+      };
+      img.onerror = () => {
+        logoWrap.hidden = true;
+      };
+      logoWrap.appendChild(img);
+    } else {
+      logoWrap.hidden = true;
+    }
+  }
+
+  if (dl) {
+    dl.innerHTML = "";
+    const total = getOrderTotal(row);
+    const deposit = Math.max(0, Number(row.deposit) || 0);
+    const balRaw = Number(row.balance);
+    const balance = Number.isFinite(balRaw) ? Math.max(0, balRaw) : Math.max(0, total - deposit);
+    const pairs = [
+      ["No. de recibo", row.id ? String(row.id) : "—"],
+      ["Cliente", row.clientName ? String(row.clientName) : "—"],
+      ["Teléfono", row.clientPhone ? String(row.clientPhone) : "—"],
+      ["Producto", row.product ? String(row.product) : "—"],
+      ["Cantidad", row.quantity != null && row.quantity !== "" ? String(row.quantity) : "—"],
+      ["Total", money(total)],
+      ["Depósito", money(deposit)],
+      ["Saldo", money(balance)],
+      ["Entrega", toDate(row.deliveryDate)?.toLocaleDateString("es") || "—"],
+      ["Estado", receiptStatusLabel(row.status)],
+    ];
+    pairs.forEach(([dt, dd]) => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "orders-receipt-dl__row";
+      const dtt = document.createElement("dt");
+      dtt.textContent = dt;
+      const ddd = document.createElement("dd");
+      ddd.textContent = dd;
+      rowEl.appendChild(dtt);
+      rowEl.appendChild(ddd);
+      dl.appendChild(rowEl);
+    });
+  }
+}
+
+async function openDigitalReceipt(row) {
+  if (!row || !activeBusinessId) return;
+  receiptModalOrder = row;
+  const modal = document.getElementById("orders-receipt-modal");
+  if (!modal) return;
   try {
-    const r = await mergePublicTrackingIntoRow(row);
-    await navigator.clipboard.writeText(r.publicLink || "");
-    window.alert("Enlace copiado al portapapeles.");
+    const biz = await getReceiptPdfBusiness(db, activeBusinessId);
+    renderDigitalReceiptSheet(row, biz);
+    modal.showModal();
   } catch (e) {
     console.error(e);
-    window.alert("No se pudo copiar el enlace. Revisa permisos o conexión.");
+    receiptModalOrder = null;
+    window.alert("No se pudo abrir el recibo. Inténtalo de nuevo.");
+  }
+}
+
+function fallbackShareClipboard(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => window.alert("Texto copiado al portapapeles."))
+      .catch(() => window.alert("Compartir no disponible en este dispositivo."));
+  } else {
+    window.alert("Compartir no disponible en este dispositivo.");
+  }
+}
+
+async function shareDigitalReceipt() {
+  const title = "Recibo YourColor";
+  const text = "Aquí está tu recibo de YourColor Corporation.";
+  const url = CLIENT_PUBLIC_WEBSITE_URL;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      fallbackShareClipboard(`${text}\n${url}`);
+    }
+  } else {
+    fallbackShareClipboard(`${text}\n${url}`);
   }
 }
 
@@ -385,11 +476,6 @@ function fillDetail(row) {
   }
   document.getElementById("od-status").textContent = statusLabels[stRaw] || "Pendiente";
   document.getElementById("od-delivery").textContent = toDate(row.deliveryDate)?.toLocaleDateString("es") || "—";
-  const pubEl = document.getElementById("od-public-link");
-  if (pubEl) {
-    const pl = typeof row.publicLink === "string" ? row.publicLink.trim() : "";
-    pubEl.textContent = pl || "— (generar con 📄 Recibo o 🔗 Copiar link)";
-  }
   document.getElementById("od-source").textContent = sourceLabel(row.source);
   document.getElementById("od-notes").textContent = row.notes || "—";
   const btnDel = document.getElementById("od-mark-delivered");
@@ -452,8 +538,7 @@ function renderRows() {
       <td>${row.notes || "—"}</td>
       <td>
         <button class="dash-icon-btn" data-edit="${row.id}" title="Editar pedido">✏️</button>
-        <button class="dash-icon-btn" data-receipt="${row.id}" type="button" title="📄 Recibo PDF">📄</button>
-        <button class="dash-icon-btn" data-copy-link="${row.id}" type="button" title="🔗 Copiar link del pedido">🔗</button>
+        <button class="dash-icon-btn" data-receipt="${row.id}" type="button" title="Recibo digital">📄</button>
         <button
           class="dash-icon-btn"
           data-quick-deliver="${row.id}"
@@ -498,7 +583,6 @@ function renderRows() {
         <div class="orders-mobile-card__actions">
           <button type="button" class="dash-quick-btn" data-edit="${row.id}">Editar</button>
           <button type="button" class="dash-quick-btn" data-receipt="${row.id}">📄 Recibo</button>
-          <button type="button" class="dash-quick-btn" data-copy-link="${row.id}">🔗 Copiar link</button>
           <button type="button" class="dash-quick-btn" data-quick-deliver="${row.id}" ${delivered ? "disabled aria-disabled='true'" : ""}>
             Entregar
           </button>
@@ -542,19 +626,7 @@ function renderRows() {
       if (!orderId) return;
       const row = allOrders.find((x) => x.id === orderId);
       if (!row) return;
-      try {
-        await downloadOrderReceiptPdf(row);
-      } catch (e) {
-        console.error(e);
-        window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
-      }
-    });
-  });
-  tbody.querySelectorAll("[data-copy-link]").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const orderId = btn.getAttribute("data-copy-link");
-      if (orderId) copyOrderPublicLinkById(orderId);
+      await openDigitalReceipt(row);
     });
   });
 
@@ -587,19 +659,7 @@ function renderRows() {
         if (!orderId) return;
         const row = allOrders.find((x) => x.id === orderId);
         if (!row) return;
-        try {
-          await downloadOrderReceiptPdf(row);
-        } catch (e) {
-          console.error(e);
-          window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
-        }
-      });
-    });
-    mobileRoot.querySelectorAll("[data-copy-link]").forEach((btn) => {
-      btn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        const orderId = btn.getAttribute("data-copy-link");
-        if (orderId) copyOrderPublicLinkById(orderId);
+        await openDigitalReceipt(row);
       });
     });
   }
@@ -627,19 +687,40 @@ function wireUi() {
     odReceipt.addEventListener("click", async () => {
       const row = allOrders.find((x) => x.id === selectedOrderId);
       if (!row) return;
+      await openDigitalReceipt(row);
+    });
+  }
+
+  const receiptModal = document.getElementById("orders-receipt-modal");
+  const receiptClose = document.getElementById("orders-receipt-close");
+  if (receiptClose && receiptModal) {
+    receiptClose.addEventListener("click", () => {
+      receiptModal.close();
+      receiptModalOrder = null;
+    });
+  }
+  if (receiptModal) {
+    receiptModal.addEventListener("close", () => {
+      receiptModalOrder = null;
+    });
+  }
+  const receiptPdfBtn = document.getElementById("orders-receipt-download-pdf");
+  if (receiptPdfBtn) {
+    receiptPdfBtn.addEventListener("click", async () => {
+      const row = receiptModalOrder;
+      if (!row) return;
       try {
         await downloadOrderReceiptPdf(row);
       } catch (e) {
         console.error(e);
-        window.alert("No se pudo generar el recibo. Comprueba tu conexión e inténtalo de nuevo.");
+        window.alert("No se pudo generar el PDF. Comprueba tu conexión e inténtalo de nuevo.");
       }
     });
   }
-  const odCopyLink = document.getElementById("od-copy-link");
-  if (odCopyLink) {
-    odCopyLink.addEventListener("click", () => {
-      if (!selectedOrderId) return;
-      copyOrderPublicLinkById(selectedOrderId);
+  const receiptShareBtn = document.getElementById("orders-receipt-share");
+  if (receiptShareBtn) {
+    receiptShareBtn.addEventListener("click", () => {
+      shareDigitalReceipt().catch((e) => console.error(e));
     });
   }
   document.getElementById("od-mark-delivered").addEventListener("click", async () => {

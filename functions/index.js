@@ -19,7 +19,6 @@ import { resolveMayaActionEntities } from "./maya-entity-resolver.js";
 import { executeMayaAction } from "./maya-action-executor.js";
 import { buildMayaActionSuccessMessage } from "./maya-response-builder.js";
 import { buildMayaContextSnapshot } from "./maya-context-snapshot.js";
-import { syncOrderPublicView, deleteOrderPublicView } from "./order-public-tracking.js";
 
 /** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
@@ -534,21 +533,11 @@ async function processNewOrder(db, businessId, rawOrder) {
     markContact: true,
   });
 
-  const finalSnap = await orderRef.get();
-  let publicLink = "";
-  try {
-    const pub = await syncOrderPublicView(db, businessId, orderRef.id, finalSnap.data() || {});
-    publicLink = pub.publicLink;
-  } catch (e) {
-    console.warn("[processNewOrder] syncOrderPublicView", e);
-  }
-
   return {
     orderId: orderRef.id,
     linkedClientId: client.id,
     linkedFinanceId: "",
     linkedCalendarId,
-    publicLink,
   };
 }
 
@@ -1455,15 +1444,6 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
     .get();
   for (const d of financeSnap.docs) {
     await d.ref.delete();
-  }
-
-  const pubId = typeof order.publicOrderId === "string" ? order.publicOrderId.trim() : "";
-  if (pubId) {
-    try {
-      await deleteOrderPublicView(db, pubId);
-    } catch (e) {
-      console.warn("[mayaDeleteOrderCascade] deleteOrderPublicView", e);
-    }
   }
 
   await orderRef.delete();
@@ -2411,12 +2391,6 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
       { status: "entregado", updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     );
-    try {
-      const fresh = await orderRef.get();
-      await syncOrderPublicView(db, businessId, orderRef.id, fresh.data() || {});
-    } catch (e) {
-      console.warn("[finalizeOrderDeliveryAndProfit] syncOrderPublicView", e);
-    }
     return { already: true };
   }
 
@@ -2542,12 +2516,6 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
     expenses,
     netProfit,
   });
-  try {
-    const fresh = await orderRef.get();
-    await syncOrderPublicView(db, businessId, orderRef.id, fresh.data() || {});
-  } catch (e) {
-    console.warn("[finalizeOrderDeliveryAndProfit] syncOrderPublicView", e);
-  }
   return { already: false, netProfit, expenses, totalPaid: amount };
 }
 
@@ -3299,12 +3267,6 @@ export const updateOrderStatus = onRequest(
         } else {
           await orderRef.set({ status: nextStatus, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         }
-        try {
-          const freshSnap = await orderRef.get();
-          await syncOrderPublicView(db, businessId, orderId, freshSnap.data() || {});
-        } catch (e) {
-          console.warn("[updateOrderStatus] syncOrderPublicView", e);
-        }
         res.status(200).json({ ok: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Error desconocido";
@@ -3431,13 +3393,6 @@ export const updateOrderAndSync = onRequest(
           });
         }
 
-        try {
-          const freshSnap = await orderRef.get();
-          await syncOrderPublicView(db, businessId, orderId, freshSnap.data() || {});
-        } catch (e) {
-          console.warn("[updateOrderAndSync] syncOrderPublicView", e);
-        }
-
         res.status(200).json({ ok: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : "Error desconocido";
@@ -3489,15 +3444,6 @@ export const deleteOrderCascade = onRequest(
           .get();
         for (const d of finSnap.docs) {
           await d.ref.delete();
-        }
-
-        const pubId = typeof row.publicOrderId === "string" ? row.publicOrderId.trim() : "";
-        if (pubId) {
-          try {
-            await deleteOrderPublicView(db, pubId);
-          } catch (e) {
-            console.warn("[deleteOrderCascade] deleteOrderPublicView", e);
-          }
         }
 
         await orderRef.delete();
@@ -4010,11 +3956,7 @@ export const whatsappWebhook = onRequest(
           });
           confirmedOrderSaved = true;
 
-          const digitalLine =
-            typeof createdOrder.publicLink === "string" && createdOrder.publicLink.trim()
-              ? `\n\n🔗 Tu recibo digital: ${createdOrder.publicLink.trim()}`
-              : "";
-          outbound = `${outbound}\n\n✅ Pedido registrado. Total ${formatUsd(calc.total)}. Depósito del ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)} (${YOURCOLOR_BUSINESS.rules.paymentMethods.join(" o ")}).${digitalLine}`;
+          outbound = `${outbound}\n\n✅ Pedido registrado. Total ${formatUsd(calc.total)}. Depósito del ${YOURCOLOR_BUSINESS.rules.depositPercent}%: ${formatUsd(calc.deposit)} (${YOURCOLOR_BUSINESS.rules.paymentMethods.join(" o ")}).`;
           assistantForSession = outbound;
         } catch (e) {
           console.error("[whatsappWebhook] Firestore lead", e);

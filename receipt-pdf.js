@@ -1,3 +1,5 @@
+import { receiptStatusLabel, CLIENT_PUBLIC_WEBSITE_URL } from "./receipt-config.js";
+
 /** @typedef {{ legalName: string, phone: string, email: string, logoUrl: string, addressLines: string[], brandRgb: number[], footerMessage: string, notesTerms: string, textLogo: string }} ReceiptPdfBiz */
 
 /** Loaded via UMD script in pedidos.html (GitHub Pages: no npm/babel). */
@@ -76,7 +78,7 @@ function imageDrawSizeMm(doc, dataUrl, format, maxW, maxH) {
 }
 
 /**
- * Client receipt: customer-facing fields only (no expenses, profit, or order status).
+ * Client receipt: customer-facing fields only (no expenses, profit, or labor).
  * @param {Record<string, unknown> & { id?: string }} row
  * @param {ReceiptPdfBiz} biz
  */
@@ -143,6 +145,16 @@ export async function generateOrderReceiptPdf(row, biz) {
     });
   }
 
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(37, 99, 235);
+  const siteLabel = "Visitar YourColor";
+  const siteY = Math.min(addrY + 2, headerH - 4);
+  doc.text(siteLabel, headerTextX, siteY);
+  const stw = doc.getTextWidth(siteLabel);
+  doc.link(headerTextX, siteY - 3.5, stw, 5, { url: CLIENT_PUBLIC_WEBSITE_URL });
+  doc.setTextColor(33, 37, 41);
+
   let y = headerH + 12;
   doc.setTextColor(33, 37, 41);
   doc.setFontSize(18);
@@ -178,6 +190,7 @@ export async function generateOrderReceiptPdf(row, biz) {
     ["Depósito", moneyPdf(deposit)],
     ["Saldo", moneyPdf(balance)],
     ["Fecha de entrega", deliveryStr],
+    ["Estado del pedido", receiptStatusLabel(row?.status)],
   ];
 
   const pad = 5;
@@ -213,32 +226,6 @@ export async function generateOrderReceiptPdf(row, biz) {
   });
 
   y = boxTop + boxH + 12;
-
-  const trackLink = typeof row?.publicLink === "string" ? row.publicLink.trim() : "";
-  if (trackLink) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(33, 37, 41);
-    doc.text("Ver tu pedido en línea", margin, y);
-    y += 5;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(37, 99, 235);
-    const urlLines = doc.splitTextToSize(trackLink, contentW);
-    urlLines.forEach((line) => {
-      if (y > 275) {
-        doc.addPage();
-        y = margin;
-      }
-      const lineY = y;
-      doc.text(line, margin, lineY);
-      const tw = doc.getTextWidth(line);
-      doc.link(margin, lineY - 3.5, tw, 5, { url: trackLink });
-      y += 4.2;
-    });
-    y += 6;
-    doc.setTextColor(33, 37, 41);
-  }
 
   doc.setDrawColor(220, 222, 230);
   doc.line(margin, y, pageW - margin, y);

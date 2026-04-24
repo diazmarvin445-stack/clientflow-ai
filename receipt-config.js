@@ -1,3 +1,6 @@
+/** Sitio oficial mostrado en recibos (enlace fijo para clientes). */
+export const CLIENT_PUBLIC_WEBSITE_URL = "https://your-color.com";
+
 /**
  * Branding and contact data for client-facing receipts (recibos).
  * Edit here so all PDF receipts stay consistent.
