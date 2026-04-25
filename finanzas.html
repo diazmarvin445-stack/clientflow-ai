@@ -112,6 +112,7 @@
                 <div class="fin-card fin-card--expense">
                   <p class="fin-card-label">Gastos</p>
                   <p class="fin-card-value" id="fin-sum-expense">$0</p>
+                  <p class="fin-card-note" id="fin-sum-expense-note" hidden></p>
                 </div>
                 <div class="fin-card fin-card--net" id="fin-card-net">
                   <p class="fin-card-label">Balance neto</p>
@@ -129,6 +130,21 @@
                   <button type="button" class="fin-filter-btn" data-fin-period="all">Todo</button>
                 </div>
               </div>
+
+              <section class="fin-fixed-panel" id="fin-fixed-panel" hidden aria-labelledby="fin-fixed-title">
+                <div class="fin-fixed-panel__head">
+                  <div>
+                    <h3 class="fin-fixed-panel__title" id="fin-fixed-title">Gastos fijos mensuales</h3>
+                    <p class="fin-fixed-panel__sub" id="fin-fixed-sub">
+                      Se suman al total de gastos en <strong>Este mes</strong> (ingresos y transferencias sin cambios).
+                    </p>
+                  </div>
+                  <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="fin-fixed-add">
+                    Agregar gasto fijo
+                  </button>
+                </div>
+                <ul class="fin-fixed-list" id="fin-fixed-list" aria-label="Lista de gastos fijos"></ul>
+              </section>
 
               <div id="fin-list-root" class="fin-list"></div>
             </section>
@@ -198,6 +214,58 @@
             <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="fin-modal-save">
               Guardar
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="fin-modal-host" id="fin-fixed-modal-host" hidden aria-hidden="true">
+      <div class="fin-modal-backdrop" id="fin-fixed-modal-backdrop"></div>
+      <div
+        class="fin-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fin-fixed-modal-title"
+        id="fin-fixed-modal"
+      >
+        <h3 class="fin-modal-title" id="fin-fixed-modal-title">Gasto fijo</h3>
+        <form id="fin-fixed-modal-form" class="fin-modal-form">
+          <input type="hidden" id="fin-fixed-edit-id" value="" />
+
+          <label class="fin-field">
+            <span class="fin-field-label">Nombre</span>
+            <input type="text" id="fin-fixed-name" class="fin-input" required maxlength="120" placeholder="Ej. Renta, Shopify" />
+          </label>
+
+          <label class="fin-field">
+            <span class="fin-field-label">Monto mensual (USD)</span>
+            <input
+              type="number"
+              id="fin-fixed-amount"
+              class="fin-input"
+              min="0"
+              step="0.01"
+              required
+              inputmode="decimal"
+              placeholder="0.00"
+            />
+          </label>
+
+          <label class="fin-field">
+            <span class="fin-field-label">Frecuencia</span>
+            <select id="fin-fixed-frequency" class="fin-input" required>
+              <option value="monthly" selected>Mensual</option>
+            </select>
+          </label>
+
+          <label class="fin-radio fin-fixed-active-row">
+            <input type="checkbox" id="fin-fixed-active" checked />
+            Activo (incluir en totales del mes)
+          </label>
+
+          <div class="fin-modal-actions">
+            <button type="button" class="dash-quick-btn" id="fin-fixed-modal-cancel">Cancelar</button>
+            <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="fin-fixed-modal-save">Guardar</button>
           </div>
         </form>
       </div>

@@ -768,6 +768,27 @@ export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRe
 }
 
 /**
+ * Suma de gastos fijos activos con frecuencia mensual (para mes calendario actual en UI).
+ * Estructura doc: { name, amount, frequency: "monthly", active: boolean }.
+ * @param {*} db
+ * @param {string} businessId
+ * @returns {Promise<number>}
+ */
+export async function fetchActiveFixedMonthlyExpenseTotal(db, businessId) {
+  const snap = await getDocs(collection(db, "businesses", businessId, "fixedExpenses"));
+  let sum = 0;
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (data && data.active === false) return;
+    const freq = typeof data.frequency === "string" ? data.frequency.trim().toLowerCase() : "monthly";
+    if (freq !== "monthly") return;
+    const amt = Number(data.amount);
+    if (Number.isFinite(amt) && amt > 0) sum += amt;
+  });
+  return sum;
+}
+
+/**
  * Eventos de calendario desde hoy hasta `daysAhead` días (p. ej. 28 = 4 semanas).
  */
 export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28, maxResults = 120) {

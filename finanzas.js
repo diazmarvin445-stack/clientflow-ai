@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   Timestamp,
   limit,
+  updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
@@ -51,9 +52,45 @@ let currentPeriod = "month";
 let businessId = null;
 /** @type {(() => void) | null} */
 let unsubFinance = null;
+/** @type {(() => void) | null} */
+let unsubFixedExpenses = null;
 
 /** @type {{ id: string, type: string, amount: number, category: string, description: string, date: Date | null, createdBy?: string }[]} */
 let rowsCache = [];
+
+/** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean }[]} */
+let fixedExpensesCache = [];
+
+/** YourColor / custom_apparel: gastos fijos mensuales en Finanzas. */
+let yourColorFinMode = false;
+
+/**
+ * @param {{ data: Record<string, unknown> } | null | undefined} business
+ */
+function isYourColorFinanceBusiness(business) {
+  if (!business?.data) return false;
+  const name = String(business.data.businessName || "")
+    .trim()
+    .toLowerCase();
+  const cat = String(business.data.businessCategory || "")
+    .trim()
+    .toLowerCase();
+  return name === "yourcolor" || cat === "custom_apparel";
+}
+
+/**
+ * @param {typeof fixedExpensesCache} rows
+ */
+function sumActiveFixedMonthlyTotal(rows) {
+  let s = 0;
+  for (const r of rows) {
+    if (!r.active) continue;
+    if (String(r.frequency || "monthly").toLowerCase() !== "monthly") continue;
+    const a = Number(r.amount);
+    if (Number.isFinite(a) && a > 0) s += a;
+  }
+  return s;
+}
 
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
@@ -197,29 +234,43 @@ function filterRows(rows, period) {
 
 /**
  * @param {typeof rowsCache} rows
+ * @param {number} [fixedMonthlyAddon] suma de gastos fijos activos (solo período "month")
  */
-function summarize(rows) {
+function summarize(rows, fixedMonthlyAddon = 0) {
   let income = 0;
-  let expense = 0;
+  let variableExpense = 0;
   for (const r of rows) {
     const a = Number(r.amount);
     if (!Number.isFinite(a) || a <= 0) continue;
     if (r.type === "income") {
       if (!financeIncomeCountsTowardRealized(r)) continue;
       income += a;
-    } else if (r.type === "expense") expense += a;
+    } else if (r.type === "expense") variableExpense += a;
   }
-  return { income, expense, net: income - expense };
+  const addon = currentPeriod === "month" ? Math.max(0, fixedMonthlyAddon) : 0;
+  const expense = variableExpense + addon;
+  return { income, expense, variableExpense, net: income - expense };
 }
 
 function updateSummaryCards(rows) {
-  const { income, expense, net } = summarize(rows);
+  const fixedAddon = yourColorFinMode ? sumActiveFixedMonthlyTotal(fixedExpensesCache) : 0;
+  const { income, expense, net, variableExpense } = summarize(rows, fixedAddon);
   const incEl = document.getElementById("fin-sum-income");
   const expEl = document.getElementById("fin-sum-expense");
   const netEl = document.getElementById("fin-sum-net");
   const cardNet = document.getElementById("fin-card-net");
+  const expNote = document.getElementById("fin-sum-expense-note");
   if (incEl) incEl.textContent = formatUsd(income);
   if (expEl) expEl.textContent = formatUsd(expense);
+  if (expNote) {
+    if (yourColorFinMode && currentPeriod === "month" && fixedAddon > 0) {
+      expNote.hidden = false;
+      expNote.textContent = `Incluye gastos fijos: ${formatUsd(fixedAddon)} · Variables: ${formatUsd(variableExpense)}`;
+    } else {
+      expNote.hidden = true;
+      expNote.textContent = "";
+    }
+  }
   if (netEl) {
     netEl.textContent = formatUsd(net);
     netEl.classList.remove("fin-card-value--pos", "fin-card-value--neg");
@@ -366,6 +417,228 @@ function buildRow(row) {
   return article;
 }
 
+/**
+ * @param {typeof fixedExpensesCache[0]} row
+ */
+function buildFixedRow(row) {
+  const li = document.createElement("li");
+  li.className = "fin-fixed-item";
+  if (!row.active) li.classList.add("fin-fixed-item--off");
+
+  const left = document.createElement("div");
+  const name = document.createElement("p");
+  name.className = "fin-fixed-item__name";
+  name.textContent = row.name;
+  const meta = document.createElement("p");
+  meta.className = "fin-fixed-item__meta";
+  meta.textContent = row.frequency === "monthly" ? "Frecuencia: mensual" : `Frecuencia: ${row.frequency}`;
+  left.append(name, meta);
+
+  const amt = document.createElement("span");
+  amt.className = "fin-fixed-item__amount";
+  amt.textContent = formatUsd(row.amount);
+
+  const toggle = document.createElement("label");
+  toggle.className = "fin-fixed-toggle";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = row.active;
+  cb.addEventListener("change", async () => {
+    if (!businessId) return;
+    try {
+      await updateDoc(doc(db, "businesses", businessId, "fixedExpenses", row.id), {
+        active: cb.checked,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error(e);
+      cb.checked = !cb.checked;
+      alert("No se pudo actualizar el estado.");
+    }
+  });
+  const lab = document.createElement("span");
+  lab.textContent = "Activo";
+  toggle.append(cb, lab);
+
+  const actions = document.createElement("div");
+  actions.className = "fin-fixed-item__actions";
+  const btnEd = document.createElement("button");
+  btnEd.type = "button";
+  btnEd.className = "fin-fixed-btn";
+  btnEd.textContent = "Editar";
+  btnEd.addEventListener("click", () => openFixedModal(row.id));
+  const btnDel = document.createElement("button");
+  btnDel.type = "button";
+  btnDel.className = "fin-fixed-btn";
+  btnDel.textContent = "Eliminar";
+  btnDel.addEventListener("click", async () => {
+    if (!businessId) return;
+    if (!confirm("¿Eliminar este gasto fijo?")) return;
+    btnDel.disabled = true;
+    try {
+      await deleteDoc(doc(db, "businesses", businessId, "fixedExpenses", row.id));
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo eliminar.");
+      btnDel.disabled = false;
+    }
+  });
+  actions.append(btnEd, btnDel);
+
+  li.append(left, amt, toggle, actions);
+  return li;
+}
+
+function renderFixedList() {
+  const root = document.getElementById("fin-fixed-list");
+  if (!root) return;
+  root.replaceChildren();
+  if (!yourColorFinMode) return;
+  if (!fixedExpensesCache.length) {
+    const li = document.createElement("li");
+    li.className = "fin-empty-text";
+    li.style.padding = "0.35rem 0";
+    li.textContent = "No hay gastos fijos. Agrega renta, software u otros costos recurrentes.";
+    root.appendChild(li);
+    return;
+  }
+  for (const row of fixedExpensesCache) {
+    root.appendChild(buildFixedRow(row));
+  }
+}
+
+function closeFixedModal() {
+  const host = document.getElementById("fin-fixed-modal-host");
+  if (!host) return;
+  host.hidden = true;
+  host.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("fin-modal-open");
+}
+
+/**
+ * @param {string | null} [editId]
+ */
+function openFixedModal(editId = null) {
+  closeModal();
+  const host = document.getElementById("fin-fixed-modal-host");
+  if (!host) return;
+  const idInput = document.getElementById("fin-fixed-edit-id");
+  const nameI = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-name"));
+  const amtI = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-amount"));
+  const freq = /** @type {HTMLSelectElement | null} */ (document.getElementById("fin-fixed-frequency"));
+  const act = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-active"));
+  const title = document.getElementById("fin-fixed-modal-title");
+  if (editId) {
+    const row = fixedExpensesCache.find((x) => x.id === editId);
+    if (idInput) idInput.value = editId;
+    if (nameI) nameI.value = row?.name || "";
+    if (amtI) amtI.value = row && Number.isFinite(row.amount) ? String(row.amount) : "";
+    if (freq) freq.value = "monthly";
+    if (act) act.checked = row ? row.active : true;
+    if (title) title.textContent = "Editar gasto fijo";
+  } else {
+    if (idInput) idInput.value = "";
+    if (nameI) nameI.value = "";
+    if (amtI) amtI.value = "";
+    if (freq) freq.value = "monthly";
+    if (act) act.checked = true;
+    if (title) title.textContent = "Nuevo gasto fijo";
+  }
+  host.hidden = false;
+  host.setAttribute("aria-hidden", "false");
+  document.body.classList.add("fin-modal-open");
+  nameI?.focus();
+}
+
+function wireFixedModal() {
+  document.getElementById("fin-fixed-add")?.addEventListener("click", () => openFixedModal(null));
+  document.getElementById("fin-fixed-modal-cancel")?.addEventListener("click", () => closeFixedModal());
+  document.getElementById("fin-fixed-modal-backdrop")?.addEventListener("click", () => closeFixedModal());
+
+  document.getElementById("fin-fixed-modal-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!businessId) return;
+    const editId = String(document.getElementById("fin-fixed-edit-id")?.value || "").trim();
+    const name = String(document.getElementById("fin-fixed-name")?.value || "").trim();
+    const rawAmt = Number(document.getElementById("fin-fixed-amount")?.value);
+    const frequency = String(document.getElementById("fin-fixed-frequency")?.value || "monthly");
+    const active = Boolean(document.getElementById("fin-fixed-active")?.checked);
+    if (!name || !Number.isFinite(rawAmt) || rawAmt <= 0) {
+      alert("Indica nombre y un monto válido mayor a cero.");
+      return;
+    }
+    if (frequency !== "monthly") {
+      alert("Por ahora solo está disponible la frecuencia mensual.");
+      return;
+    }
+    const saveBtn = document.getElementById("fin-fixed-modal-save");
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.setAttribute("aria-busy", "true");
+    }
+    try {
+      const payload = {
+        name,
+        amount: rawAmt,
+        frequency: "monthly",
+        active,
+        updatedAt: serverTimestamp(),
+      };
+      if (editId) {
+        await updateDoc(doc(db, "businesses", businessId, "fixedExpenses", editId), payload);
+      } else {
+        await addDoc(collection(db, "businesses", businessId, "fixedExpenses"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+      }
+      closeFixedModal();
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo guardar el gasto fijo.");
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.removeAttribute("aria-busy");
+      }
+    }
+  });
+}
+
+function subscribeFixedExpenses(bid) {
+  if (unsubFixedExpenses) {
+    unsubFixedExpenses();
+    unsubFixedExpenses = null;
+  }
+  unsubFixedExpenses = onSnapshot(
+    collection(db, "businesses", bid, "fixedExpenses"),
+    (snap) => {
+      fixedExpensesCache = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        const name = typeof data.name === "string" ? data.name.trim() : "";
+        const amount = Number(data.amount);
+        const frequency =
+          typeof data.frequency === "string" ? data.frequency.trim().toLowerCase() : "monthly";
+        const active = data.active !== false;
+        fixedExpensesCache.push({
+          id: d.id,
+          name: name || "Sin nombre",
+          amount: Number.isFinite(amount) ? amount : 0,
+          frequency,
+          active,
+        });
+      });
+      fixedExpensesCache.sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));
+      renderFixedList();
+      renderList();
+    },
+    (err) => {
+      console.error(err);
+    },
+  );
+}
+
 function populateCategorySelect(type) {
   const sel = document.getElementById("fin-select-cat");
   if (!sel) return;
@@ -380,6 +653,7 @@ function populateCategorySelect(type) {
 }
 
 function openModal() {
+  closeFixedModal();
   const host = document.getElementById("fin-modal-host");
   if (!host) return;
   const typeInp = document.querySelector('input[name="fin-type"]:checked');
@@ -481,9 +755,13 @@ function wireModal() {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && document.body.classList.contains("fin-modal-open")) {
-      closeModal();
+    if (e.key !== "Escape" || !document.body.classList.contains("fin-modal-open")) return;
+    const fixedHost = document.getElementById("fin-fixed-modal-host");
+    if (fixedHost && !fixedHost.hidden) {
+      closeFixedModal();
+      return;
     }
+    closeModal();
   });
 }
 
@@ -545,23 +823,43 @@ async function bootUser(user) {
   hideLoadError();
   const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
+  yourColorFinMode = isYourColorFinanceBusiness(business);
+  const fixedPanel = document.getElementById("fin-fixed-panel");
+  if (fixedPanel) fixedPanel.hidden = !yourColorFinMode;
+
   if (!business) {
     businessId = null;
     rowsCache = [];
+    fixedExpensesCache = [];
+    yourColorFinMode = false;
+    if (fixedPanel) fixedPanel.hidden = true;
     if (unsubFinance) unsubFinance();
     unsubFinance = null;
+    if (unsubFixedExpenses) unsubFixedExpenses();
+    unsubFixedExpenses = null;
     const root = document.getElementById("fin-list-root");
     if (root) {
       root.innerHTML = '<p class="fin-empty">No hay negocio asociado a tu cuenta.</p>';
     }
+    renderFixedList();
     return;
   }
   subscribeFinance(business.id);
+  if (yourColorFinMode) {
+    subscribeFixedExpenses(business.id);
+  } else {
+    if (unsubFixedExpenses) unsubFixedExpenses();
+    unsubFixedExpenses = null;
+    fixedExpensesCache = [];
+    renderFixedList();
+    renderList();
+  }
 }
 
 function boot() {
   initDashShell({ auth, db });
   wireFilters();
+  wireFixedModal();
   wireModal();
 
   onAuthStateChanged(auth, (user) => {

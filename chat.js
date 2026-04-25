@@ -24,6 +24,7 @@ import {
   fetchClientsForChatContext,
   fetchCampaignsListAndStats,
   fetchFinanceTransactionsCurrentMonth,
+  fetchActiveFixedMonthlyExpenseTotal,
   fetchCalendarEventsForChat,
   formatBusinessMeta,
   financeIncomeCountsTowardRealized,
@@ -2269,6 +2270,17 @@ async function loadFirebaseContext(business, options = {}) {
     if (!Number.isFinite(amt) || amt <= 0) continue;
     if (row.type === "expense") monthExpense += amt;
     else if (financeIncomeCountsTowardRealized(row)) monthIncome += amt;
+  }
+
+  const bn = typeof business.data.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
+  const bc =
+    typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
+  if (bn === "yourcolor" || bc === "custom_apparel") {
+    try {
+      monthExpense += await fetchActiveFixedMonthlyExpenseTotal(db, business.id);
+    } catch (e) {
+      console.warn("[YourColor Chat] fixed monthly expenses", e);
+    }
   }
 
   const campaignsShort = (campAgg.campaigns || []).slice(0, campaignCap);

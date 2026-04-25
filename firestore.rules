@@ -130,6 +130,11 @@ service cloud.firestore {
         allow read, write: if isBusinessOwner(businessId);
       }
 
+      /* Gastos fijos mensuales (YourColor / configuración por negocio). */
+      match /fixedExpenses/{expenseId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+
       /* Ajustes por negocio (p. ej. recibo PDF en Pedidos). */
       match /settings/{settingId} {
         allow read, write: if isBusinessOwner(businessId);

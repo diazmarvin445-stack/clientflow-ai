@@ -45,7 +45,37 @@ function toDate(v) {
  * @param {Record<string, unknown>[]} calendarRows
  * @param {Record<string, unknown>[]} campaignRows
  */
-function renderDashboardSnapshot(business, orders, clients, financeRows, calendarRows, campaignRows) {
+/**
+ * @param {{ data: Record<string, unknown> }} business
+ */
+function isYourColorFinanceBusiness(business) {
+  const name = String(business.data.businessName || "")
+    .trim()
+    .toLowerCase();
+  const cat = String(business.data.businessCategory || "")
+    .trim()
+    .toLowerCase();
+  return name === "yourcolor" || cat === "custom_apparel";
+}
+
+/**
+ * @param {{ id: string, data: Record<string, unknown> }} business
+ * @param {Record<string, unknown>[]} orders
+ * @param {Record<string, unknown>[]} clients
+ * @param {Record<string, unknown>[]} financeRows
+ * @param {Record<string, unknown>[]} calendarRows
+ * @param {Record<string, unknown>[]} campaignRows
+ * @param {number} [monthlyFixedExpenseTotal]
+ */
+function renderDashboardSnapshot(
+  business,
+  orders,
+  clients,
+  financeRows,
+  calendarRows,
+  campaignRows,
+  monthlyFixedExpenseTotal = 0,
+) {
   renderHeader(business);
   renderGreeting();
 
@@ -82,12 +112,13 @@ function renderDashboardSnapshot(business, orders, clients, financeRows, calenda
   drawSalesChart(document.getElementById("dash-sales-chart"), daily);
 
   const monthIncome = daily.reduce((a, b) => a + b, 0);
-  const monthExpense = financeRows.reduce((sum, r) => {
+  const monthExpenseVariables = financeRows.reduce((sum, r) => {
     if (r.type !== "expense") return sum;
     const d = toDate(r.date || r.createdAt);
     if (!d || d < monthStart || d > monthEnd) return sum;
     return sum + (Number(r.amount) || 0);
   }, 0);
+  const monthExpense = monthExpenseVariables + Math.max(0, monthlyFixedExpenseTotal || 0);
 
   let activeCampaigns = 0;
   for (const row of campaignRows) {
@@ -283,10 +314,19 @@ async function loadDashboardForUser(user) {
     finance: [],
     calendar: [],
     campaigns: [],
+    monthlyFixedExpenseTotal: 0,
   };
 
   const rerender = () => {
-    renderDashboardSnapshot(business, state.orders, state.clients, state.finance, state.calendar, state.campaigns);
+    renderDashboardSnapshot(
+      business,
+      state.orders,
+      state.clients,
+      state.finance,
+      state.calendar,
+      state.campaigns,
+      state.monthlyFixedExpenseTotal,
+    );
   };
 
   const unsubs = [];
@@ -322,6 +362,28 @@ async function loadDashboardForUser(user) {
       (err) => console.error("[dashboard] finance", err),
     ),
   );
+
+  if (isYourColorFinanceBusiness(business)) {
+    unsubs.push(
+      onSnapshot(
+        collection(db, "businesses", bid, "fixedExpenses"),
+        (snap) => {
+          let sum = 0;
+          snap.forEach((d) => {
+            const data = d.data();
+            if (data && data.active === false) return;
+            const freq = typeof data.frequency === "string" ? data.frequency.trim().toLowerCase() : "monthly";
+            if (freq !== "monthly") return;
+            const amt = Number(data.amount);
+            if (Number.isFinite(amt) && amt > 0) sum += amt;
+          });
+          state.monthlyFixedExpenseTotal = sum;
+          rerender();
+        },
+        (err) => console.error("[dashboard] fixedExpenses", err),
+      ),
+    );
+  }
 
   unsubs.push(
     onSnapshot(

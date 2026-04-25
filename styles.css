@@ -9953,6 +9953,145 @@ body.yourcolor-chat-page .maya-message.user {
   color: #dc2626;
 }
 
+.fin-card-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.fin-fixed-panel {
+  margin: 0 1.35rem 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.fin-fixed-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.fin-fixed-panel__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.fin-fixed-panel__sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+.fin-fixed-panel__sub strong {
+  font-weight: 800;
+  color: var(--text);
+}
+
+.fin-fixed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fin-fixed-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.fin-fixed-item--off {
+  opacity: 0.55;
+}
+
+.fin-fixed-item__name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.fin-fixed-item__meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.fin-fixed-item__amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #dc2626;
+}
+
+.fin-fixed-item__actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fin-fixed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.fin-fixed-btn {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.75rem;
+  border-radius: 0.45rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.fin-fixed-btn:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+.fin-fixed-active-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .fin-fixed-item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .fin-fixed-item__amount {
+    justify-self: start;
+  }
+
+  .fin-fixed-item__actions {
+    justify-content: flex-start;
+  }
+}
+
 .fin-card-value--pos {
   color: #059669;
 }
