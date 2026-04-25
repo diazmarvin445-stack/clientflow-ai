@@ -767,25 +767,105 @@ export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRe
   return out;
 }
 
+function fixedExpStartOfDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function fixedExpEndOfDay(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
 /**
- * Suma de gastos fijos activos con frecuencia mensual (para mes calendario actual en UI).
- * Estructura doc: { name, amount, frequency: "monthly", active: boolean }.
+ * @param {number} year
+ * @param {number} month 0-11
+ * @param {number} day
+ */
+function fixedExpClampDom(year, month, day) {
+  const last = new Date(year, month + 1, 0).getDate();
+  return Math.min(Math.max(1, Math.floor(day)), last);
+}
+
+/**
+ * Suma gastos fijos activos cuya fecha de cobro ya ocurrió dentro del rango (fecha local).
+ * - Mensual: `chargeDayOfMonth` (1–31), un cobro por mes calendario que caiga en el rango.
+ * - Semanal: `chargeWeekday` (0=dom … 6=sáb), un cobro por cada día del rango que coincida.
+ * Solo cuenta si la fecha de cobro ≤ fin del día `asOfDate` (no anticipa cobros futuros).
+ *
+ * @param {Array<{ active?: boolean, amount?: unknown, frequency?: unknown, chargeDayOfMonth?: unknown, chargeWeekday?: unknown }>} rows
+ * @param {Date} rangeStart
+ * @param {Date} rangeEnd
+ * @param {Date} asOfDate
+ * @returns {number}
+ */
+export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfDate) {
+  const rs = fixedExpStartOfDay(rangeStart);
+  const re = fixedExpEndOfDay(rangeEnd);
+  const cap = fixedExpEndOfDay(asOfDate);
+  const effectiveEnd = new Date(Math.min(re.getTime(), cap.getTime()));
+  if (effectiveEnd.getTime() < rs.getTime()) return 0;
+
+  let sum = 0;
+
+  for (const raw of rows) {
+    if (raw.active === false) continue;
+    const amt = Number(raw.amount);
+    if (!Number.isFinite(amt) || amt <= 0) continue;
+    const freq = String(raw.frequency || "monthly").toLowerCase();
+
+    if (freq === "monthly") {
+      const domRaw = raw.chargeDayOfMonth;
+      const dClamped = Number.isFinite(Number(domRaw)) ? Math.min(31, Math.max(1, Math.floor(Number(domRaw)))) : 1;
+      let y = rs.getFullYear();
+      let m = rs.getMonth();
+      const endY = effectiveEnd.getFullYear();
+      const endM = effectiveEnd.getMonth();
+      let guard = 0;
+      while ((y < endY || (y === endY && m <= endM)) && guard < 36) {
+        guard += 1;
+        const dayUse = fixedExpClampDom(y, m, dClamped);
+        const due = new Date(y, m, dayUse, 12, 0, 0, 0);
+        if (due.getTime() >= rs.getTime() && due.getTime() <= effectiveEnd.getTime()) {
+          sum += amt;
+        }
+        m += 1;
+        if (m > 11) {
+          m = 0;
+          y += 1;
+        }
+      }
+    } else if (freq === "weekly") {
+      const wdRaw = raw.chargeWeekday;
+      const wd = Number.isFinite(Number(wdRaw)) ? Math.min(6, Math.max(0, Math.floor(Number(wdRaw)))) : 1;
+      const d0 = fixedExpStartOfDay(new Date(rs));
+      let d = new Date(d0);
+      while (d.getTime() <= effectiveEnd.getTime()) {
+        if (d.getTime() <= re.getTime() && d.getDay() === wd) {
+          sum += amt;
+        }
+        d.setDate(d.getDate() + 1);
+      }
+    }
+  }
+  return sum;
+}
+
+/**
+ * Gastos fijos ya devengados en el mes calendario actual (para contexto Maya / resúmenes).
  * @param {*} db
  * @param {string} businessId
  * @returns {Promise<number>}
  */
-export async function fetchActiveFixedMonthlyExpenseTotal(db, businessId) {
+export async function fetchAccruedFixedExpenseTotalForCurrentMonth(db, businessId) {
   const snap = await getDocs(collection(db, "businesses", businessId, "fixedExpenses"));
-  let sum = 0;
-  snap.forEach((docSnap) => {
-    const data = docSnap.data();
-    if (data && data.active === false) return;
-    const freq = typeof data.frequency === "string" ? data.frequency.trim().toLowerCase() : "monthly";
-    if (freq !== "monthly") return;
-    const amt = Number(data.amount);
-    if (Number.isFinite(amt) && amt > 0) sum += amt;
-  });
-  return sum;
+  const rows = snap.docs.map((d) => d.data());
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  return sumAccruedFixedExpensesBetween(rows, start, end, now);
 }
 
 /**

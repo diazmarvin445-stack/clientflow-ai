@@ -18,6 +18,7 @@ import {
   formatBusinessMeta,
   initialsFromName,
   financeIncomeCountsTowardRealized,
+  sumAccruedFixedExpensesBetween,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
@@ -58,11 +59,13 @@ let unsubFixedExpenses = null;
 /** @type {{ id: string, type: string, amount: number, category: string, description: string, date: Date | null, createdBy?: string }[]} */
 let rowsCache = [];
 
-/** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean }[]} */
+/** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean, chargeDayOfMonth?: number, chargeWeekday?: number }[]} */
 let fixedExpensesCache = [];
 
-/** YourColor / custom_apparel: gastos fijos mensuales en Finanzas. */
+/** YourColor / custom_apparel: gastos fijos (mensual / semanal) en Finanzas. */
 let yourColorFinMode = false;
+
+const WEEKDAY_LABELS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 /**
  * @param {{ data: Record<string, unknown> } | null | undefined} business
@@ -79,17 +82,16 @@ function isYourColorFinanceBusiness(business) {
 }
 
 /**
- * @param {typeof fixedExpensesCache} rows
+ * @param {typeof fixedExpensesCache[0]} row
  */
-function sumActiveFixedMonthlyTotal(rows) {
-  let s = 0;
-  for (const r of rows) {
-    if (!r.active) continue;
-    if (String(r.frequency || "monthly").toLowerCase() !== "monthly") continue;
-    const a = Number(r.amount);
-    if (Number.isFinite(a) && a > 0) s += a;
+function describeFixedChargeRow(row) {
+  const f = String(row.frequency || "monthly").toLowerCase();
+  if (f === "weekly") {
+    const w = Number.isFinite(Number(row.chargeWeekday)) ? Math.min(6, Math.max(0, Math.floor(Number(row.chargeWeekday)))) : 1;
+    return `Semanal · cobro: ${WEEKDAY_LABELS[w] ?? "—"}`;
   }
-  return s;
+  const dom = Number.isFinite(Number(row.chargeDayOfMonth)) ? Math.min(31, Math.max(1, Math.floor(Number(row.chargeDayOfMonth)))) : 1;
+  return `Mensual · cobro día ${dom}`;
 }
 
 function renderHeader(business) {
@@ -234,9 +236,9 @@ function filterRows(rows, period) {
 
 /**
  * @param {typeof rowsCache} rows
- * @param {number} [fixedMonthlyAddon] suma de gastos fijos activos (solo período "month")
+ * @param {number} [fixedAccruedAddon] gastos fijos ya devengados en el período (hasta hoy, según día de cobro)
  */
-function summarize(rows, fixedMonthlyAddon = 0) {
+function summarize(rows, fixedAccruedAddon = 0) {
   let income = 0;
   let variableExpense = 0;
   for (const r of rows) {
@@ -247,13 +249,30 @@ function summarize(rows, fixedMonthlyAddon = 0) {
       income += a;
     } else if (r.type === "expense") variableExpense += a;
   }
-  const addon = currentPeriod === "month" ? Math.max(0, fixedMonthlyAddon) : 0;
+  const addon = currentPeriod === "all" ? 0 : Math.max(0, fixedAccruedAddon);
   const expense = variableExpense + addon;
   return { income, expense, variableExpense, net: income - expense };
 }
 
 function updateSummaryCards(rows) {
-  const fixedAddon = yourColorFinMode ? sumActiveFixedMonthlyTotal(fixedExpensesCache) : 0;
+  let fixedAddon = 0;
+  if (yourColorFinMode && currentPeriod !== "all") {
+    const bounds = periodBounds(currentPeriod);
+    if (bounds.start && bounds.end) {
+      fixedAddon = sumAccruedFixedExpensesBetween(
+        fixedExpensesCache.map((r) => ({
+          active: r.active,
+          amount: r.amount,
+          frequency: r.frequency,
+          chargeDayOfMonth: r.chargeDayOfMonth,
+          chargeWeekday: r.chargeWeekday,
+        })),
+        bounds.start,
+        bounds.end,
+        new Date(),
+      );
+    }
+  }
   const { income, expense, net, variableExpense } = summarize(rows, fixedAddon);
   const incEl = document.getElementById("fin-sum-income");
   const expEl = document.getElementById("fin-sum-expense");
@@ -263,9 +282,9 @@ function updateSummaryCards(rows) {
   if (incEl) incEl.textContent = formatUsd(income);
   if (expEl) expEl.textContent = formatUsd(expense);
   if (expNote) {
-    if (yourColorFinMode && currentPeriod === "month" && fixedAddon > 0) {
+    if (yourColorFinMode && currentPeriod !== "all" && fixedAddon > 0) {
       expNote.hidden = false;
-      expNote.textContent = `Incluye gastos fijos: ${formatUsd(fixedAddon)} · Variables: ${formatUsd(variableExpense)}`;
+      expNote.textContent = `Incluye fijos ya cobrados en el período: ${formatUsd(fixedAddon)} · Variables: ${formatUsd(variableExpense)}`;
     } else {
       expNote.hidden = true;
       expNote.textContent = "";
@@ -431,7 +450,7 @@ function buildFixedRow(row) {
   name.textContent = row.name;
   const meta = document.createElement("p");
   meta.className = "fin-fixed-item__meta";
-  meta.textContent = row.frequency === "monthly" ? "Frecuencia: mensual" : `Frecuencia: ${row.frequency}`;
+  meta.textContent = describeFixedChargeRow(row);
   left.append(name, meta);
 
   const amt = document.createElement("span");
@@ -515,6 +534,25 @@ function closeFixedModal() {
   document.body.classList.remove("fin-modal-open");
 }
 
+function syncFixedChargeFieldVisibility() {
+  const freq = String(document.getElementById("fin-fixed-frequency")?.value || "monthly");
+  const m = document.getElementById("fin-fixed-field-month");
+  const w = document.getElementById("fin-fixed-field-week");
+  const dayM = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-charge-day-month"));
+  const dayW = /** @type {HTMLSelectElement | null} */ (document.getElementById("fin-fixed-charge-weekday"));
+  if (freq === "weekly") {
+    if (m) m.hidden = true;
+    if (w) w.hidden = false;
+    if (dayM) dayM.removeAttribute("required");
+    if (dayW) dayW.setAttribute("required", "required");
+  } else {
+    if (m) m.hidden = false;
+    if (w) w.hidden = true;
+    if (dayM) dayM.setAttribute("required", "required");
+    if (dayW) dayW.removeAttribute("required");
+  }
+}
+
 /**
  * @param {string | null} [editId]
  */
@@ -528,12 +566,25 @@ function openFixedModal(editId = null) {
   const freq = /** @type {HTMLSelectElement | null} */ (document.getElementById("fin-fixed-frequency"));
   const act = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-active"));
   const title = document.getElementById("fin-fixed-modal-title");
+  const dayM = /** @type {HTMLInputElement | null} */ (document.getElementById("fin-fixed-charge-day-month"));
+  const dayW = /** @type {HTMLSelectElement | null} */ (document.getElementById("fin-fixed-charge-weekday"));
   if (editId) {
     const row = fixedExpensesCache.find((x) => x.id === editId);
     if (idInput) idInput.value = editId;
     if (nameI) nameI.value = row?.name || "";
     if (amtI) amtI.value = row && Number.isFinite(row.amount) ? String(row.amount) : "";
-    if (freq) freq.value = "monthly";
+    if (freq) {
+      const fv = String(row?.frequency || "monthly").toLowerCase();
+      freq.value = fv === "weekly" ? "weekly" : "monthly";
+    }
+    if (dayM) {
+      const v = Number(row?.chargeDayOfMonth);
+      dayM.value = Number.isFinite(v) && v >= 1 && v <= 31 ? String(v) : "1";
+    }
+    if (dayW) {
+      const w = Number(row?.chargeWeekday);
+      dayW.value = String(Number.isFinite(w) && w >= 0 && w <= 6 ? w : 1);
+    }
     if (act) act.checked = row ? row.active : true;
     if (title) title.textContent = "Editar gasto fijo";
   } else {
@@ -541,9 +592,12 @@ function openFixedModal(editId = null) {
     if (nameI) nameI.value = "";
     if (amtI) amtI.value = "";
     if (freq) freq.value = "monthly";
+    if (dayM) dayM.value = "1";
+    if (dayW) dayW.value = "1";
     if (act) act.checked = true;
     if (title) title.textContent = "Nuevo gasto fijo";
   }
+  syncFixedChargeFieldVisibility();
   host.hidden = false;
   host.setAttribute("aria-hidden", "false");
   document.body.classList.add("fin-modal-open");
@@ -554,6 +608,7 @@ function wireFixedModal() {
   document.getElementById("fin-fixed-add")?.addEventListener("click", () => openFixedModal(null));
   document.getElementById("fin-fixed-modal-cancel")?.addEventListener("click", () => closeFixedModal());
   document.getElementById("fin-fixed-modal-backdrop")?.addEventListener("click", () => closeFixedModal());
+  document.getElementById("fin-fixed-frequency")?.addEventListener("change", () => syncFixedChargeFieldVisibility());
 
   document.getElementById("fin-fixed-modal-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -567,9 +622,38 @@ function wireFixedModal() {
       alert("Indica nombre y un monto válido mayor a cero.");
       return;
     }
-    if (frequency !== "monthly") {
-      alert("Por ahora solo está disponible la frecuencia mensual.");
-      return;
+    /** @type {Record<string, unknown>} */
+    let payload;
+    if (frequency === "weekly") {
+      const wv = Number(document.getElementById("fin-fixed-charge-weekday")?.value);
+      if (!Number.isFinite(wv) || wv < 0 || wv > 6) {
+        alert("Elige un día de la semana de cobro válido.");
+        return;
+      }
+      payload = {
+        name,
+        amount: rawAmt,
+        frequency: "weekly",
+        chargeWeekday: Math.floor(wv),
+        chargeDayOfMonth: null,
+        active,
+        updatedAt: serverTimestamp(),
+      };
+    } else {
+      const dm = Number(document.getElementById("fin-fixed-charge-day-month")?.value);
+      if (!Number.isFinite(dm) || dm < 1 || dm > 31) {
+        alert("Indica el día del mes de cobro (1–31).");
+        return;
+      }
+      payload = {
+        name,
+        amount: rawAmt,
+        frequency: "monthly",
+        chargeDayOfMonth: Math.floor(dm),
+        chargeWeekday: null,
+        active,
+        updatedAt: serverTimestamp(),
+      };
     }
     const saveBtn = document.getElementById("fin-fixed-modal-save");
     if (saveBtn) {
@@ -577,13 +661,6 @@ function wireFixedModal() {
       saveBtn.setAttribute("aria-busy", "true");
     }
     try {
-      const payload = {
-        name,
-        amount: rawAmt,
-        frequency: "monthly",
-        active,
-        updatedAt: serverTimestamp(),
-      };
       if (editId) {
         await updateDoc(doc(db, "businesses", businessId, "fixedExpenses", editId), payload);
       } else {
@@ -621,12 +698,16 @@ function subscribeFixedExpenses(bid) {
         const frequency =
           typeof data.frequency === "string" ? data.frequency.trim().toLowerCase() : "monthly";
         const active = data.active !== false;
+        const chargeDayOfMonth = Number(data.chargeDayOfMonth);
+        const chargeWeekday = Number(data.chargeWeekday);
         fixedExpensesCache.push({
           id: d.id,
           name: name || "Sin nombre",
           amount: Number.isFinite(amount) ? amount : 0,
           frequency,
           active,
+          chargeDayOfMonth: Number.isFinite(chargeDayOfMonth) ? chargeDayOfMonth : undefined,
+          chargeWeekday: Number.isFinite(chargeWeekday) ? chargeWeekday : undefined,
         });
       });
       fixedExpensesCache.sort((a, b) => a.name.localeCompare(b.name, "es", { sensitivity: "base" }));

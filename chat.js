@@ -24,7 +24,7 @@ import {
   fetchClientsForChatContext,
   fetchCampaignsListAndStats,
   fetchFinanceTransactionsCurrentMonth,
-  fetchActiveFixedMonthlyExpenseTotal,
+  fetchAccruedFixedExpenseTotalForCurrentMonth,
   fetchCalendarEventsForChat,
   formatBusinessMeta,
   financeIncomeCountsTowardRealized,
@@ -2277,7 +2277,7 @@ async function loadFirebaseContext(business, options = {}) {
     typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
   if (bn === "yourcolor" || bc === "custom_apparel") {
     try {
-      monthExpense += await fetchActiveFixedMonthlyExpenseTotal(db, business.id);
+      monthExpense += await fetchAccruedFixedExpenseTotalForCurrentMonth(db, business.id);
     } catch (e) {
       console.warn("[YourColor Chat] fixed monthly expenses", e);
     }
