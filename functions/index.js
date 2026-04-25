@@ -1083,6 +1083,10 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
     amount: Number(r.amount) || 0,
     frequency: typeof r.frequency === "string" ? r.frequency : "monthly",
     active: r.active !== false,
+    fechaCobro: (() => {
+      const d = mayaAdminToDate(r.fechaCobro);
+      return d && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
+    })(),
     chargeDayOfMonth: r.chargeDayOfMonth ?? null,
     chargeWeekday: r.chargeWeekday ?? null,
   }));
@@ -1122,7 +1126,7 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
     campaigns: mayaPlainJsonForContext(campaignsShort),
     fixedExpenses: yourColorFin ? mayaPlainJsonForContext(fixedExpensesForContext) : [],
     financePanelNote: yourColorFin
-      ? "YourColor: en Finanzas hay movimientos variables (colección finance) y gastos fijos recurrentes (fixedExpenses: mensual o semanal con día de cobro). Los totales del mes incluyen solo fijos ya devengados (fecha de cobro ≤ hoy), igual que el panel."
+      ? "YourColor: gastos fijos usan fechaCobro (fecha calendario completa) y frecuencia mensual (+1 mes mismo día) o semanal (+7 días). No suman al balance hasta esa fecha. Sin fechaCobro se usan los campos legado chargeDayOfMonth / chargeWeekday."
       : null,
     stats: {
       jobsActiveCount: jobsActive.length,
@@ -2859,6 +2863,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
             finalizeOrderDeliveryAndProfit,
             mayaFinanceAddMovement,
             FieldValue,
+            Timestamp,
           },
         });
         if (!exec.ok) {

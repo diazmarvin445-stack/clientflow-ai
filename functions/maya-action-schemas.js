@@ -33,7 +33,7 @@ export const MAYA_ACTION_SCHEMAS = {
     required: ["amount"],
   },
   add_fixed_expense: {
-    required: ["name", "amount"],
+    required: ["name", "amount", "fechaCobro"],
   },
   update_fixed_expense: {
     required: ["expenseId"],
@@ -51,6 +51,7 @@ export const MAYA_ACTION_FIELD_ALIASES = {
   clientId: ["clientId", "id"],
   expenseId: ["expenseId", "fixedExpenseId"],
   fixedExpenseName: ["name", "nombre", "titulo", "description"],
+  fechaCobro: ["fechaCobro", "date", "fecha", "fecha_cobro"],
   confirmed: ["confirmed", "confirm", "isConfirmed"],
 };
 

@@ -2302,15 +2302,28 @@ async function loadFirebaseContext(business, options = {}) {
   }
   const monthExpense = monthVariableExpense + monthFixedAccrued;
 
-  const fixedExpensesForChat = fixedRowsRaw.map((r) => ({
-    id: r.id,
-    name: typeof r.name === "string" ? r.name : "",
-    amount: Number(r.amount) || 0,
-    frequency: typeof r.frequency === "string" ? r.frequency : "monthly",
-    active: r.active !== false,
-    chargeDayOfMonth: r.chargeDayOfMonth ?? null,
-    chargeWeekday: r.chargeWeekday ?? null,
-  }));
+  const fixedExpensesForChat = fixedRowsRaw.map((r) => {
+    const fc = r.fechaCobro;
+    let fechaIso = null;
+    if (fc != null && typeof /** @type {{ toDate?: () => Date }} */ (fc).toDate === "function") {
+      try {
+        const d = /** @type {{ toDate: () => Date }} */ (fc).toDate();
+        fechaIso = d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : null;
+      } catch {
+        fechaIso = null;
+      }
+    }
+    return {
+      id: r.id,
+      name: typeof r.name === "string" ? r.name : "",
+      amount: Number(r.amount) || 0,
+      frequency: typeof r.frequency === "string" ? r.frequency : "monthly",
+      active: r.active !== false,
+      fechaCobro: fechaIso,
+      chargeDayOfMonth: r.chargeDayOfMonth ?? null,
+      chargeWeekday: r.chargeWeekday ?? null,
+    };
+  });
 
   const campaignsShort = (campAgg.campaigns || []).slice(0, campaignCap);
   const clientsMentioned = findClientsMentionedInText(userMessage, clientsRaw);
@@ -2349,7 +2362,7 @@ async function loadFirebaseContext(business, options = {}) {
     financeRecent: serializeForAi(financeRows),
     fixedExpenses: yourColorFin ? serializeForAi(fixedExpensesForChat) : [],
     financePanelNote: yourColorFin
-      ? "YourColor: fixedExpenses son los recurrentes del panel Finanzas; financeRecent son movimientos puntuales. Los totales del mes incluyen fijos ya devengados."
+      ? "YourColor: fixedExpenses incluyen fechaCobro (YYYY-MM-DD) y frecuencia; el balance solo cuenta cuando la fecha de cobro ya llegó. Sin fechaCobro aplica el modo legado."
       : null,
     stats: {
       jobsActiveCount: jobSplit.active.length,

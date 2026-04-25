@@ -10033,6 +10033,39 @@ body.yourcolor-chat-page .maya-message.user {
   color: var(--text-muted);
 }
 
+.fin-fixed-item__next {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text);
+}
+
+.fin-fixed-badge {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.fin-fixed-badge--pendiente {
+  background: rgba(234, 179, 8, 0.22);
+  color: #a16207;
+}
+
+.fin-fixed-badge--listo {
+  background: rgba(34, 197, 94, 0.2);
+  color: #15803d;
+}
+
+.fin-field-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .fin-fixed-item__amount {
   font-weight: 800;
   font-variant-numeric: tabular-nums;

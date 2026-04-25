@@ -136,8 +136,8 @@
                   <div>
                     <h3 class="fin-fixed-panel__title" id="fin-fixed-title">Gastos fijos</h3>
                     <p class="fin-fixed-panel__sub" id="fin-fixed-sub">
-                      Pueden ser <strong>mensuales</strong> o <strong>semanales</strong>. Solo entran al balance cuando ya pasó la
-                      fecha de cobro que indicaste (no se anticipan cobros futuros).
+                      Cada gasto tiene una <strong>fecha de cobro</strong> (día/mes/año). Mensual: mismo día cada mes; semanal: cada 7 días.
+                      <strong>No suman al balance</strong> hasta que llegue esa fecha (ni antes). Los documentos viejos sin fecha usan el modo anterior (día del mes / día de semana).
                     </p>
                   </div>
                   <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="fin-fixed-add">
@@ -255,41 +255,22 @@
           <label class="fin-field">
             <span class="fin-field-label">Frecuencia</span>
             <select id="fin-fixed-frequency" class="fin-input" required>
-              <option value="monthly" selected>Mensual</option>
-              <option value="weekly">Semanal</option>
+              <option value="monthly" selected>Mensual (misma fecha cada mes)</option>
+              <option value="weekly">Semanal (cada 7 días desde la fecha)</option>
             </select>
           </label>
 
-          <label class="fin-field" id="fin-fixed-field-month">
-            <span class="fin-field-label">Día del mes en que se cobra (1–31)</span>
-            <input
-              type="number"
-              id="fin-fixed-charge-day-month"
-              class="fin-input"
-              min="1"
-              max="31"
-              step="1"
-              value="1"
-              required
-            />
-          </label>
-
-          <label class="fin-field" id="fin-fixed-field-week" hidden>
-            <span class="fin-field-label">Día de la semana en que se cobra</span>
-            <select id="fin-fixed-charge-weekday" class="fin-input">
-              <option value="0">Domingo</option>
-              <option value="1" selected>Lunes</option>
-              <option value="2">Martes</option>
-              <option value="3">Miércoles</option>
-              <option value="4">Jueves</option>
-              <option value="5">Viernes</option>
-              <option value="6">Sábado</option>
-            </select>
+          <label class="fin-field">
+            <span class="fin-field-label">Fecha de cobro (calendario)</span>
+            <input type="date" id="fin-fixed-fecha-cobro" class="fin-input" required />
+            <span class="fin-field-hint" id="fin-fixed-fecha-hint">
+              Primera o próxima fecha en que vence el cobro. No suma al balance hasta esa fecha (ni antes).
+            </span>
           </label>
 
           <label class="fin-radio fin-fixed-active-row">
             <input type="checkbox" id="fin-fixed-active" checked />
-            Activo (solo cuenta en el balance cuando llegue la fecha de cobro)
+            Activo (solo cuenta en el balance cuando la fecha de cobro ya llegó)
           </label>
 
           <div class="fin-modal-actions">

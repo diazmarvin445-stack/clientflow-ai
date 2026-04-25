@@ -1,5 +1,5 @@
 /**
- * Misma lógica que `dashboard-data.js` (gastos fijos devengados) para usar en Cloud Functions.
+ * Debe mantenerse alineado con `dashboard-data.js` (gastos fijos: fechaCobro ancla + legado).
  */
 
 function fixedExpStartOfDay(d) {
@@ -14,18 +14,70 @@ function fixedExpEndOfDay(d) {
   return x;
 }
 
-/**
- * @param {number} year
- * @param {number} month 0-11
- * @param {number} day
- */
 function fixedExpClampDom(year, month, day) {
   const last = new Date(year, month + 1, 0).getDate();
   return Math.min(Math.max(1, Math.floor(day)), last);
 }
 
+function fixedExpAtNoon(d) {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  return x;
+}
+
 /**
- * @param {Array<{ active?: boolean, amount?: unknown, frequency?: unknown, chargeDayOfMonth?: unknown, chargeWeekday?: unknown }>} rows
+ * @param {unknown} v
+ * @returns {Date | null}
+ */
+function fixedExpenseParseFechaCobro(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : fixedExpAtNoon(v);
+  if (typeof v === "object" && v !== null && typeof /** @type {{ toDate?: () => Date }} */ (v).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (v).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? fixedExpAtNoon(d) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v.trim())) {
+    const d = new Date(`${v.trim().slice(0, 10)}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : fixedExpAtNoon(d);
+  }
+  return null;
+}
+
+function fixedExpStepMonthly(anchorNoon) {
+  const y = anchorNoon.getFullYear();
+  const m = anchorNoon.getMonth();
+  const day = anchorNoon.getDate();
+  const nm = m + 1;
+  const ny = nm > 11 ? y + 1 : y;
+  const nmo = nm > 11 ? 0 : nm;
+  const last = new Date(ny, nmo + 1, 0).getDate();
+  const dom = Math.min(day, last);
+  return fixedExpAtNoon(new Date(ny, nmo, dom, 12, 0, 0, 0));
+}
+
+function fixedExpStepWeekly(anchorNoon) {
+  const x = new Date(anchorNoon);
+  x.setDate(x.getDate() + 7);
+  return fixedExpAtNoon(x);
+}
+
+function fixedExpAdvanceToOnOrAfter(anchorNoon, freq, rangeStartDay) {
+  const target = fixedExpStartOfDay(rangeStartDay).getTime();
+  let d = fixedExpAtNoon(new Date(anchorNoon));
+  let guard = 0;
+  while (d.getTime() < target && guard < 480) {
+    guard += 1;
+    d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+  }
+  return d;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rows
  * @param {Date} rangeStart
  * @param {Date} rangeEnd
  * @param {Date} asOfDate
@@ -44,7 +96,22 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
     if (raw.active === false) continue;
     const amt = Number(raw.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
-    const freq = String(raw.frequency || "monthly").toLowerCase();
+    const freq = String(raw.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+    const anchor = fixedExpenseParseFechaCobro(raw.fechaCobro);
+
+    if (anchor) {
+      let d = fixedExpAdvanceToOnOrAfter(anchor, freq, rs);
+      let guard = 0;
+      while (guard < 200) {
+        guard += 1;
+        if (d.getTime() > effectiveEnd.getTime()) break;
+        if (d.getTime() >= rs.getTime() && d.getTime() <= re.getTime() && d.getTime() <= effectiveEnd.getTime()) {
+          sum += amt;
+        }
+        d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+      }
+      continue;
+    }
 
     if (freq === "monthly") {
       const domRaw = raw.chargeDayOfMonth;

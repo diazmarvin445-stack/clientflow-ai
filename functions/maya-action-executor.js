@@ -118,26 +118,25 @@ export async function executeMayaAction({
     if (!Number.isFinite(amt) || amt <= 0) throw new Error("Monto inválido.");
     const freq = String(normalizedPayload.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
     const active = normalizedPayload.active !== false;
+    const fcRaw = normalizedPayload.fechaCobro;
+    const ds = typeof fcRaw === "string" ? fcRaw.trim() : String(fcRaw ?? "").trim();
+    const fcDate = ds ? new Date(ds.includes("T") ? ds : `${ds.slice(0, 10)}T12:00:00`) : null;
+    if (!fcDate || Number.isNaN(fcDate.getTime())) throw new Error("Fecha de cobro inválida (usa YYYY-MM-DD).");
+    if (!handlers.Timestamp || typeof handlers.Timestamp.fromDate !== "function") {
+      throw new Error("Timestamp no disponible en el ejecutor.");
+    }
     /** @type {Record<string, unknown>} */
     const row = {
       name,
       amount: amt,
       frequency: freq,
+      fechaCobro: handlers.Timestamp.fromDate(fcDate),
+      chargeDayOfMonth: null,
+      chargeWeekday: null,
       active,
       createdAt: handlers.FieldValue.serverTimestamp(),
       updatedAt: handlers.FieldValue.serverTimestamp(),
     };
-    if (freq === "weekly") {
-      let w = Number(normalizedPayload.chargeWeekday);
-      if (!Number.isFinite(w)) w = 1;
-      row.chargeWeekday = Math.min(6, Math.max(0, Math.floor(w)));
-      row.chargeDayOfMonth = null;
-    } else {
-      let d = Number(normalizedPayload.chargeDayOfMonth);
-      if (!Number.isFinite(d)) d = 1;
-      row.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(d)));
-      row.chargeWeekday = null;
-    }
     const ref = await db.collection("businesses").doc(businessId).collection("fixedExpenses").add(row);
     return { ok: true, result: { expenseId: ref.id, name }, resolutionMeta };
   }
@@ -159,23 +158,15 @@ export async function executeMayaAction({
       patch.active = normalizedPayload.active;
     }
     if (normalizedPayload.frequency) {
-      const freq = String(normalizedPayload.frequency).toLowerCase() === "weekly" ? "weekly" : "monthly";
-      patch.frequency = freq;
-      if (freq === "weekly") {
-        let w = Number(normalizedPayload.chargeWeekday);
-        if (Number.isFinite(w)) patch.chargeWeekday = Math.min(6, Math.max(0, Math.floor(w)));
+      patch.frequency = String(normalizedPayload.frequency).toLowerCase() === "weekly" ? "weekly" : "monthly";
+    }
+    if (normalizedPayload.fechaCobro != null && String(normalizedPayload.fechaCobro).trim()) {
+      const ds = String(normalizedPayload.fechaCobro).trim();
+      const fcDate = new Date(ds.includes("T") ? ds : `${ds.slice(0, 10)}T12:00:00`);
+      if (!Number.isNaN(fcDate.getTime()) && handlers.Timestamp?.fromDate) {
+        patch.fechaCobro = handlers.Timestamp.fromDate(fcDate);
         patch.chargeDayOfMonth = null;
-      } else {
-        let d = Number(normalizedPayload.chargeDayOfMonth);
-        if (Number.isFinite(d)) patch.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(d)));
         patch.chargeWeekday = null;
-      }
-    } else {
-      if (Number.isFinite(Number(normalizedPayload.chargeWeekday))) {
-        patch.chargeWeekday = Math.min(6, Math.max(0, Math.floor(Number(normalizedPayload.chargeWeekday))));
-      }
-      if (Number.isFinite(Number(normalizedPayload.chargeDayOfMonth))) {
-        patch.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(Number(normalizedPayload.chargeDayOfMonth))));
       }
     }
     await ref.set(patch, { merge: true });

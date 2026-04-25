@@ -713,10 +713,10 @@ FINANZAS (panel Finanzas — misma lógica que la app):
 - Categorías de gasto del panel: materiales, transporte, mano_obra, personal, servicios, alquiler, marketing, otros_gastos. Ingresos: ventas, anticipos, ganancias, otros_ingresos.
 - Borrar movimiento: delete_transaction o delete_finance (transactionId desde financeRecent del contexto, o pistas amount + description + dateHint + type income|expense).
 - Balance: get_balance con period day|week|month|all. En YourColor los gastos del período incluyen también los gastos fijos recurrentes ya devengados (fecha de cobro ≤ hoy), igual que las tarjetas de resumen en Finanzas.
-- Gastos fijos recurrentes (solo YourColor): en el contexto Firebase viene fixedExpenses (cada ítem con id, name, amount, frequency monthly|weekly, chargeDayOfMonth 1–31 o chargeWeekday 0=domingo…6=sábado, active). Podés crearlos, editarlos o borrarlos con MAYA_ACTION_JSON al final (una línea por acción):
-  {"action":"add_fixed_expense","data":{"name":"Renta local","amount":800,"frequency":"monthly","chargeDayOfMonth":1,"active":true}}
-  {"action":"add_fixed_expense","data":{"name":"Limpieza","amount":45,"frequency":"weekly","chargeWeekday":1,"active":true}}
-  {"action":"update_fixed_expense","data":{"expenseId":"PEGAR_ID_DEL_CONTEXTO","amount":820,"chargeDayOfMonth":3}}
+- Gastos fijos recurrentes (solo YourColor): fixedExpenses trae id, name, amount, frequency monthly|weekly, fechaCobro (ISO si existe; ancla de calendario completa), y a veces campos viejos chargeDayOfMonth / chargeWeekday si el doc aún no migró. La app calcula los cobros siguientes (mensual = +1 mes mismo día; semanal = +7 días) y solo suman al balance cuando la fecha ya llegó. add_fixed_expense exige fechaCobro en formato YYYY-MM-DD:
+  {"action":"add_fixed_expense","data":{"name":"Renta local","amount":800,"frequency":"monthly","fechaCobro":"2026-05-01","active":true}}
+  {"action":"add_fixed_expense","data":{"name":"Limpieza","amount":45,"frequency":"weekly","fechaCobro":"2026-04-28","active":true}}
+  {"action":"update_fixed_expense","data":{"expenseId":"PEGAR_ID_DEL_CONTEXTO","amount":820,"fechaCobro":"2026-06-01"}}
   {"action":"delete_fixed_expense","data":{"expenseId":"PEGAR_ID_DEL_CONTEXTO"}}
 Usá siempre los id de fixedExpenses que ves en el contexto; no inventes ids.
 

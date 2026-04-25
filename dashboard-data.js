@@ -790,12 +790,82 @@ function fixedExpClampDom(year, month, day) {
 }
 
 /**
- * Suma gastos fijos activos cuya fecha de cobro ya ocurrió dentro del rango (fecha local).
- * - Mensual: `chargeDayOfMonth` (1–31), un cobro por mes calendario que caiga en el rango.
- * - Semanal: `chargeWeekday` (0=dom … 6=sáb), un cobro por cada día del rango que coincida.
- * Solo cuenta si la fecha de cobro ≤ fin del día `asOfDate` (no anticipa cobros futuros).
+ * @param {Date} d
+ */
+function fixedExpAtNoon(d) {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  return x;
+}
+
+/**
+ * @param {unknown} v
+ * @returns {Date | null}
+ */
+export function fixedExpenseParseFechaCobro(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : fixedExpAtNoon(v);
+  if (typeof v === "object" && v !== null && typeof /** @type {{ toDate?: () => Date }} */ (v).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (v).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? fixedExpAtNoon(d) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v.trim())) {
+    const d = new Date(`${v.trim().slice(0, 10)}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : fixedExpAtNoon(d);
+  }
+  return null;
+}
+
+/**
+ * @param {Date} anchorNoon
+ */
+function fixedExpStepMonthly(anchorNoon) {
+  const y = anchorNoon.getFullYear();
+  const m = anchorNoon.getMonth();
+  const day = anchorNoon.getDate();
+  const nm = m + 1;
+  const ny = nm > 11 ? y + 1 : y;
+  const nmo = nm > 11 ? 0 : nm;
+  const last = new Date(ny, nmo + 1, 0).getDate();
+  const dom = Math.min(day, last);
+  return fixedExpAtNoon(new Date(ny, nmo, dom, 12, 0, 0, 0));
+}
+
+/**
+ * @param {Date} anchorNoon
+ */
+function fixedExpStepWeekly(anchorNoon) {
+  const x = new Date(anchorNoon);
+  x.setDate(x.getDate() + 7);
+  return fixedExpAtNoon(x);
+}
+
+/**
+ * @param {Date} anchorNoon
+ * @param {"monthly" | "weekly"} freq
+ * @param {Date} rangeStartDay
+ */
+function fixedExpAdvanceToOnOrAfter(anchorNoon, freq, rangeStartDay) {
+  const target = fixedExpStartOfDay(rangeStartDay).getTime();
+  let d = fixedExpAtNoon(new Date(anchorNoon));
+  let guard = 0;
+  while (d.getTime() < target && guard < 480) {
+    guard += 1;
+    d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+  }
+  return d;
+}
+
+/**
+ * Suma por ancla `fechaCobro` (fecha calendario completa): cuenta cada ocurrencia
+ * (mensual = mismo día del mes; semanal = +7 días) que cae en [rangeStart, rangeEnd] y ≤ asOfDate.
+ * Compatibilidad: si no hay `fechaCobro`, usa chargeDayOfMonth / chargeWeekday (comportamiento anterior).
  *
- * @param {Array<{ active?: boolean, amount?: unknown, frequency?: unknown, chargeDayOfMonth?: unknown, chargeWeekday?: unknown }>} rows
+ * @param {Array<Record<string, unknown>>} rows
  * @param {Date} rangeStart
  * @param {Date} rangeEnd
  * @param {Date} asOfDate
@@ -814,7 +884,22 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
     if (raw.active === false) continue;
     const amt = Number(raw.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
-    const freq = String(raw.frequency || "monthly").toLowerCase();
+    const freq = String(raw.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+    const anchor = fixedExpenseParseFechaCobro(raw.fechaCobro);
+
+    if (anchor) {
+      let d = fixedExpAdvanceToOnOrAfter(anchor, freq, rs);
+      let guard = 0;
+      while (guard < 200) {
+        guard += 1;
+        if (d.getTime() > effectiveEnd.getTime()) break;
+        if (d.getTime() >= rs.getTime() && d.getTime() <= re.getTime() && d.getTime() <= effectiveEnd.getTime()) {
+          sum += amt;
+        }
+        d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+      }
+      continue;
+    }
 
     if (freq === "monthly") {
       const domRaw = raw.chargeDayOfMonth;
@@ -851,6 +936,81 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
     }
   }
   return sum;
+}
+
+/**
+ * Primera fecha de cobro (ancla o legado) ≥ inicio del día `fromDate`.
+ * @param {Record<string, unknown>} row
+ * @param {Date} [fromDate]
+ * @returns {Date | null}
+ */
+export function fixedExpenseNextDueOnOrAfter(row, fromDate = new Date()) {
+  const freq = String(row.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+  const anchor = fixedExpenseParseFechaCobro(row.fechaCobro);
+  if (anchor) {
+    return fixedExpAdvanceToOnOrAfter(anchor, freq, fromDate);
+  }
+  const start = fixedExpStartOfDay(fromDate);
+  if (freq === "weekly") {
+    const wdRaw = row.chargeWeekday;
+    const wd = Number.isFinite(Number(wdRaw)) ? Math.min(6, Math.max(0, Math.floor(Number(wdRaw)))) : 1;
+    for (let i = 0; i < 370; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      if (d.getDay() === wd) return fixedExpAtNoon(d);
+    }
+    return null;
+  }
+  const domRaw = row.chargeDayOfMonth;
+  const dClamped = Number.isFinite(Number(domRaw)) ? Math.min(31, Math.max(1, Math.floor(Number(domRaw)))) : 1;
+  let y = start.getFullYear();
+  let m = start.getMonth();
+  for (let guard = 0; guard < 24; guard++) {
+    const dayUse = fixedExpClampDom(y, m, dClamped);
+    const due = new Date(y, m, dayUse, 12, 0, 0, 0);
+    if (due.getTime() >= start.getTime()) return due;
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return null;
+}
+
+/**
+ * Primera fecha de cobro **estrictamente después** del fin del día `asOf` (para “Próximo cobro” en UI).
+ * @param {Record<string, unknown>} row
+ * @param {Date} [asOf]
+ * @returns {Date | null}
+ */
+export function fixedExpenseNextChargeStrictlyAfter(row, asOf = new Date()) {
+  const first = fixedExpenseNextDueOnOrAfter(row, fixedExpStartOfDay(asOf));
+  if (!first) return null;
+  const eo = fixedExpEndOfDay(asOf);
+  const freq = String(row.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+  if (first.getTime() <= eo.getTime()) {
+    return freq === "weekly" ? fixedExpStepWeekly(first) : fixedExpStepMonthly(first);
+  }
+  return first;
+}
+
+/**
+ * @param {Record<string, unknown>} row
+ * @param {Date} [asOf]
+ * @returns {{ nextCobro: Date | null, status: "pendiente" | "listo", usesCalendar: boolean }}
+ */
+export function fixedExpenseScheduleUi(row, asOf = new Date()) {
+  const usesCalendar = Boolean(fixedExpenseParseFechaCobro(row.fechaCobro));
+  const ds = fixedExpStartOfDay(asOf);
+  const de = fixedExpEndOfDay(asOf);
+  const countsToday = sumAccruedFixedExpensesBetween([row], ds, de, asOf) > 0;
+  const nextCobro = fixedExpenseNextChargeStrictlyAfter(row, asOf);
+  return {
+    nextCobro,
+    status: countsToday ? "listo" : "pendiente",
+    usesCalendar,
+  };
 }
 
 /**

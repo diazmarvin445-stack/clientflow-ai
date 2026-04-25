@@ -56,6 +56,15 @@ export function validateAndNormalizeMayaAction(action, payload) {
   const fixedExpenseNameRaw = pickAliasedValue(data, "fixedExpenseName");
   if (fixedExpenseNameRaw !== undefined) normalized.name = asTrimmedString(fixedExpenseNameRaw);
 
+  const fechaCobroRaw = pickAliasedValue(data, "fechaCobro");
+  if (fechaCobroRaw !== undefined) {
+    const s = typeof fechaCobroRaw === "string" ? fechaCobroRaw.trim() : String(fechaCobroRaw).trim();
+    if (s) {
+      const d = new Date(s.includes("T") ? s : `${s.slice(0, 10)}T12:00:00`);
+      if (!Number.isNaN(d.getTime())) normalized.fechaCobro = s.slice(0, 10);
+    }
+  }
+
   const confirmedRaw = pickAliasedValue(data, "confirmed");
   if (confirmedRaw !== undefined) normalized.confirmed = confirmedRaw === true;
 
@@ -126,6 +135,16 @@ export function validateAndNormalizeMayaAction(action, payload) {
   }
   if (action === "add_fixed_expense" && !(Number(normalized.amount) > 0)) {
     return { ok: false, error: "Monto inválido para gasto fijo.", normalized: null };
+  }
+  if (action === "add_fixed_expense") {
+    const fc = normalized.fechaCobro;
+    if (!fc || typeof fc !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(fc)) {
+      return { ok: false, error: "Indica fechaCobro en formato YYYY-MM-DD (fecha completa de cobro).", normalized: null };
+    }
+    const test = new Date(`${fc}T12:00:00`);
+    if (Number.isNaN(test.getTime())) {
+      return { ok: false, error: "La fecha de cobro no es válida.", normalized: null };
+    }
   }
 
   return { ok: true, error: "", normalized };
