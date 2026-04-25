@@ -22,6 +22,7 @@ export const CATEGORY_CONFIGS = {
       { id: "finanzas", name: "Finanzas", href: "finanzas.html", icon: "finance" },
       { id: "campanas", name: "Campañas IA", href: "campanas.html", icon: "spark" },
       { id: "equipo", name: "Equipo", href: "equipo.html", icon: "team" },
+      { id: "diagnostico", name: "Diagnóstico", href: "diagnostico.html", icon: "gear" },
       { id: "configuracion", name: "Configuración", href: "configuracion.html", icon: "gear" },
     ],
   },

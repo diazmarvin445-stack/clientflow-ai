@@ -889,6 +889,37 @@ export function ensureClientesNavLink() {
 }
 
 /**
+ * Inserta/oculta «Diagnóstico» (solo dueño/admin del negocio).
+ * @param {boolean} canAccess
+ */
+export function ensureDiagnosticsNavLink(canAccess) {
+  const nav = document.querySelector("#dash-sidebar .dash-nav");
+  if (!nav) return;
+  let diagLink = nav.querySelector('a[href="diagnostico.html"]');
+
+  if (!canAccess) {
+    if (diagLink) diagLink.remove();
+    applyActiveNavLink(nav);
+    return;
+  }
+
+  if (!diagLink) {
+    diagLink = document.createElement("a");
+    diagLink.href = "diagnostico.html";
+    diagLink.className = "dash-nav-link";
+    diagLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
+        Diagnóstico`;
+  }
+  const configLink = nav.querySelector('a[href="configuracion.html"]');
+  if (configLink) {
+    nav.insertBefore(diagLink, configLink);
+  } else if (!diagLink.parentElement) {
+    nav.appendChild(diagLink);
+  }
+  applyActiveNavLink(nav);
+}
+
+/**
  * @param {{ auth?: import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").Auth }} opts
  */
 export function initDashShell(opts = {}) {
@@ -910,7 +941,19 @@ export function initDashShell(opts = {}) {
   if (auth && db) {
     onAuthStateChanged(auth, (user) => {
       if (user) {
-        void hydrateSidebarCategoryNav(db, user);
+        void hydrateSidebarCategoryNav(db, user).then(async () => {
+          try {
+            const business = await resolveBusinessForUser(db, user);
+            const ownerUid =
+              business && business.data && typeof business.data.ownerUid === "string"
+                ? business.data.ownerUid.trim()
+                : "";
+            ensureDiagnosticsNavLink(Boolean(ownerUid) && ownerUid === user.uid);
+          } catch (err) {
+            console.warn("[DashShell] diagnostics nav", err);
+            ensureDiagnosticsNavLink(false);
+          }
+        });
         void initFloatingCalendar(auth, db);
       }
     });

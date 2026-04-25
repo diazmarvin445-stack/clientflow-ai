@@ -18,6 +18,7 @@ import {
   SERVICE_LABELS,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 
 /** @type {string | null} */
 let businessId = null;
@@ -310,6 +311,14 @@ async function saveSection(section) {
     }
   } catch (err) {
     console.error(err);
+    await logPlatformIssue(
+      "config_save_failed",
+      "configuracion",
+      err?.message || String(err),
+      "",
+      { section },
+      "medium",
+    );
     const fb =
       section === "business"
         ? "cfg-feedback-business"
@@ -348,6 +357,14 @@ async function toggleIntegration(key) {
     }
   } catch (err) {
     console.error(err);
+    await logPlatformIssue(
+      "integration_toggle_failed",
+      "configuracion",
+      err?.message || String(err),
+      "",
+      { integrationKey: key },
+      "low",
+    );
     if (foot) foot.textContent = "No se pudo guardar el cambio. Inténtalo otra vez.";
   }
 }
@@ -460,13 +477,25 @@ async function loadPage(user) {
     }
 
     businessId = business.id;
+    const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
+    setDiagnosticsLoggerContext({ businessId, ownerUid });
     applyFormFromBusiness(business.data);
     await refreshReceiptSettingsForm();
+    const diagLink = document.getElementById("cfg-diagnostics-link");
+    if (diagLink) diagLink.hidden = !(ownerUid && ownerUid === user.uid);
 
     if (noBiz) noBiz.hidden = true;
     if (main) main.hidden = false;
   } catch (err) {
     console.error(err);
+    await logPlatformIssue(
+      "config_load_failed",
+      "configuracion",
+      err?.message || String(err),
+      "",
+      { stage: "loadPage" },
+      "high",
+    );
     showError("No se pudo cargar la configuración. Inténtalo de nuevo.");
     if (noBiz) noBiz.hidden = true;
     if (main) main.hidden = true;
@@ -475,6 +504,7 @@ async function loadPage(user) {
 
 function boot() {
   initDashShell({ auth, db });
+  wireGlobalDiagnosticsListeners("configuracion");
   wireLogoFile();
   wireReceiptLogo();
   wireSaveButtons();

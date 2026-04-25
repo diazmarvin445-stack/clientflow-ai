@@ -2950,6 +2950,95 @@ body.dash-menu-open {
   }
 }
 
+/* Centro de Diagnostico */
+.diag-page .diag-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.diag-page .diag-hero {
+  padding: 1rem 1.1rem;
+}
+
+.diag-kicker {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-subtle);
+}
+
+.diag-title {
+  margin: 0.35rem 0 0;
+}
+
+.diag-lead {
+  margin: 0.45rem 0 0;
+  color: var(--ink-subtle);
+}
+
+.diag-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.diag-card--full {
+  grid-column: 1 / -1;
+}
+
+.diag-card-body {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.diag-item {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.diag-item-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.diag-item-meta {
+  margin: 0.22rem 0 0;
+  color: var(--ink-subtle);
+  font-size: 0.85rem;
+}
+
+.diag-state {
+  margin: 0;
+  font-weight: 600;
+}
+
+.diag-metric {
+  margin: 0;
+  color: var(--ink-subtle);
+}
+
+.diag-muted {
+  margin: 0;
+  color: var(--ink-subtle);
+}
+
+.diag-empty {
+  padding: 1rem;
+}
+
+body.light-theme .diag-item {
+  background: rgba(248, 250, 252, 0.85);
+}
+
+@media (max-width: 900px) {
+  .diag-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dash-cal-week-list {
   margin: 0.7rem 0;
   display: grid;
@@ -7075,6 +7164,13 @@ body.cf-modal-open {
 
 .cfg-hero-profile-link:hover {
   text-decoration: underline;
+}
+
+.cfg-hero-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
 }
 
 .cfg-banner {

@@ -146,6 +146,11 @@ service cloud.firestore {
           && request.auth.uid == userId
           && isBusinessOwner(businessId);
       }
+
+      /* Centro de Diagnóstico interno (solo dueño/admin del negocio). */
+      match /diagnostics/{issueId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
     }
   }
 }

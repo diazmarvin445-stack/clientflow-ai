@@ -31,6 +31,7 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
+import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
@@ -1806,6 +1807,14 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
     }
   } catch (e) {
     console.error("[YourColor Chat] orden", e);
+    await logPlatformIssue(
+      "order_save_failed",
+      "maya_chat",
+      e instanceof Error ? e.message : String(e),
+      "",
+      { action: "convert_to_order" },
+      "high",
+    );
     showToast(e instanceof Error ? e.message : "No se pudo crear la orden.", true);
   }
 }
@@ -1905,6 +1914,14 @@ async function sendToClaude() {
         }
       } catch (e) {
         console.error("[YourColor Chat] MAYA_ACTION_JSON", e);
+        await logPlatformIssue(
+          "maya_action_failed",
+          "maya_chat",
+          e instanceof Error ? e.message : String(e),
+          "",
+          { action: actionPayload?.action || "unknown" },
+          "high",
+        );
         showToast(e instanceof Error ? e.message : "No se pudo ejecutar la acción.", true);
       }
     } else if (actionPayload && !activeBusiness?.id && actionPayload.action !== "save_client") {
@@ -1912,6 +1929,14 @@ async function sendToClaude() {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al contactar el asistente.";
+    await logPlatformIssue(
+      "chat_request_failed",
+      "maya_chat",
+      msg,
+      "",
+      { stage: "sendToClaude" },
+      "medium",
+    );
     showError(msg);
     apiConversation.pop();
     if (input) input.value = text;
@@ -2738,6 +2763,10 @@ async function bootWithUser(user) {
   try {
     const business = await resolveBusinessForUser(db, user);
     activeBusiness = business;
+    if (business?.id) {
+      const ownerUid = typeof business.data?.ownerUid === "string" ? business.data.ownerUid.trim() : "";
+      setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
+    }
     const body = document.body;
     if (body) {
       const businessName = typeof business?.data?.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
@@ -2799,6 +2828,14 @@ async function bootWithUser(user) {
     });
   } catch (e) {
     console.error("[YourColor Chat]", e);
+    await logPlatformIssue(
+      "chat_boot_failed",
+      "maya_chat",
+      e instanceof Error ? e.message : String(e),
+      "",
+      { stage: "bootWithUser" },
+      "high",
+    );
     if (loading) loading.hidden = true;
     showError(
       e instanceof Error ? e.message : "No se pudieron cargar los datos. Revisa Firestore y la red.",
@@ -2808,6 +2845,7 @@ async function bootWithUser(user) {
 
 function boot() {
   initDashShell({ auth, db });
+  wireGlobalDiagnosticsListeners("maya_chat");
   wireChatPageTabs();
 
   /** Evita tratar el primer `null` como cierre de sesión antes de restaurar persistencia. */

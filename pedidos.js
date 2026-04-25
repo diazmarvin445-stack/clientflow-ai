@@ -20,6 +20,7 @@ import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
 import { receiptStatusLabel, RECEIPT_SHARE_PAGE_BASE_URL } from "./receipt-config.js";
 import { ensurePublicReceiptDocument } from "./receipt-public-sync.js";
+import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -137,6 +138,14 @@ async function openDigitalReceipt(row) {
     modal.showModal();
   } catch (e) {
     console.error(e);
+    await logPlatformIssue(
+      "receipt_open_failed",
+      "pedidos",
+      e instanceof Error ? e.message : String(e),
+      "",
+      { action: "open_receipt" },
+      "medium",
+    );
     receiptModalOrder = null;
     window.alert("No se pudo abrir el recibo. Inténtalo de nuevo.");
   }
@@ -163,6 +172,14 @@ async function shareDigitalReceipt() {
     receiptId = out.receiptId;
   } catch (e) {
     console.error(e);
+    await logPlatformIssue(
+      "receipt_share_failed",
+      "pedidos",
+      e instanceof Error ? e.message : String(e),
+      "",
+      { action: "share_receipt" },
+      "high",
+    );
     window.alert("No se pudo preparar el enlace del recibo. Inténtalo de nuevo.");
     return;
   }
@@ -802,17 +819,32 @@ function subscribeOrders() {
 function boot() {
   console.log("Pedidos fixed and loading correctly");
   initDashShell({ auth, db });
+  wireGlobalDiagnosticsListeners("pedidos");
   wireUi();
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       window.location.replace("login.html");
       return;
     }
-    const business = await resolveBusinessForUser(db, user);
-    if (!business) return;
-    activeBusinessId = business.id;
-    renderHeader(business);
-    subscribeOrders();
+    try {
+      const business = await resolveBusinessForUser(db, user);
+      if (!business) return;
+      activeBusinessId = business.id;
+      const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
+      setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
+      renderHeader(business);
+      subscribeOrders();
+    } catch (e) {
+      console.error("[Pedidos] boot", e);
+      await logPlatformIssue(
+        "orders_boot_failed",
+        "pedidos",
+        e instanceof Error ? e.message : String(e),
+        "",
+        { stage: "auth_boot" },
+        "high",
+      );
+    }
   });
 }
 
