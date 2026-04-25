@@ -2738,6 +2738,15 @@ async function bootWithUser(user) {
   try {
     const business = await resolveBusinessForUser(db, user);
     activeBusiness = business;
+    const body = document.body;
+    if (body) {
+      const businessName = typeof business?.data?.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
+      const businessCategory =
+        typeof business?.data?.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
+      const isYourColorBusiness = businessName === "yourcolor" || businessCategory === "custom_apparel";
+      body.classList.toggle("yourcolor-chat-page", isYourColorBusiness);
+      body.classList.toggle("non-yourcolor-chat-page", !isYourColorBusiness);
+    }
     renderHeader(business);
 
     if (!business) {

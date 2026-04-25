@@ -8821,7 +8821,7 @@ body.dash-body.maya-cc-page .dash-main {
 }
 
 /* --- Maya simple rebuilt chat layout --- */
-.maya-chat-page {
+body.yourcolor-chat-page .maya-chat-page {
   height: calc(100dvh - 145px);
   display: flex;
   flex-direction: column;
@@ -8829,7 +8829,7 @@ body.dash-body.maya-cc-page .dash-main {
   min-height: 0;
 }
 
-.maya-chat-card {
+body.yourcolor-chat-page .maya-chat-card {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -8837,24 +8837,24 @@ body.dash-body.maya-cc-page .dash-main {
   overflow: hidden;
 }
 
-.maya-chat-header {
+body.yourcolor-chat-page .maya-chat-header {
   flex: 0 0 auto;
   padding: 12px 16px;
 }
 
-.maya-chat-title {
+body.yourcolor-chat-page .maya-chat-title {
   margin: 0;
 }
 
-.maya-chat-subtitle {
+body.yourcolor-chat-page .maya-chat-subtitle {
   margin: 0.2rem 0 0;
 }
 
-.maya-chat-context {
+body.yourcolor-chat-page .maya-chat-context {
   padding: 0 16px 8px;
 }
 
-.maya-chat-messages {
+body.yourcolor-chat-page .maya-chat-messages {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -8863,7 +8863,7 @@ body.dash-body.maya-cc-page .dash-main {
   padding: 14px;
 }
 
-.maya-input-bar {
+body.yourcolor-chat-page .maya-input-bar {
   flex: 0 0 auto;
   display: flex;
   gap: 8px;
@@ -8872,7 +8872,7 @@ body.dash-body.maya-cc-page .dash-main {
   border-top: 1px solid #eee;
 }
 
-#yc-chat-input {
+body.yourcolor-chat-page #yc-chat-input {
   flex: 1;
   min-height: 44px;
   max-height: 120px;
@@ -8890,12 +8890,12 @@ body.dash-body.maya-cc-page .dash-main {
 @media (max-width: 768px) {
   html,
   body,
-  body.dash-body.maya-cc-page {
+  body.dash-body.maya-cc-page.yourcolor-chat-page {
     height: 100%;
     overflow: hidden;
   }
 
-  body.dash-body.maya-cc-page .dash-shell {
+  body.dash-body.maya-cc-page.yourcolor-chat-page .dash-shell {
     height: 100dvh;
     min-height: 0;
     overflow: hidden;
@@ -8903,35 +8903,35 @@ body.dash-body.maya-cc-page .dash-main {
     flex-direction: column;
   }
 
-  .yc-chat-page .dash-main,
-  .maya-cc-page .maya-cc,
-  .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat,
-  .maya-cc-zone--chat > .maya-cc-zone__scroll,
-  .maya-cc-zone--chat .yc-chat-wrap,
-  .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
+  body.yourcolor-chat-page .yc-chat-page .dash-main,
+  body.yourcolor-chat-page .maya-cc-page .maya-cc,
+  body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat,
+  body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll,
+  body.yourcolor-chat-page .maya-cc-zone--chat .yc-chat-wrap,
+  body.yourcolor-chat-page .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
     min-height: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
 
-  .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
+  body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
     height: calc(100dvh - 150px);
     min-height: 0;
     overflow: hidden;
   }
 
-  .yc-chat-page .dash-shell,
-  .yc-chat-page .dash-main,
-  .maya-cc-page .maya-cc,
-  .maya-cc-zone--chat > .maya-cc-zone__scroll,
-  .maya-cc-zone--chat .yc-chat-wrap,
-  .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
+  body.yourcolor-chat-page .yc-chat-page .dash-shell,
+  body.yourcolor-chat-page .yc-chat-page .dash-main,
+  body.yourcolor-chat-page .maya-cc-page .maya-cc,
+  body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll,
+  body.yourcolor-chat-page .maya-cc-zone--chat .yc-chat-wrap,
+  body.yourcolor-chat-page .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
     min-height: 0;
     overflow: hidden;
   }
 
-  .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
+  body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
     height: calc(100dvh - 150px);
     min-height: 0;
     overflow: hidden;
@@ -8954,8 +8954,8 @@ body.dash-body.maya-cc-page .dash-main {
     padding: 0.55rem 0.7rem;
   }
 
-  .maya-chat-messages,
-  .yc-chat-stream {
+  body.yourcolor-chat-page .maya-chat-messages,
+  body.yourcolor-chat-page .yc-chat-stream {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: scroll;
@@ -9010,6 +9010,23 @@ body.dash-body.maya-cc-page .dash-main {
   display: flex;
   max-width: 88%;
   animation: yc-msg-in 0.22s var(--ease) both;
+}
+
+body.yourcolor-chat-page .maya-message {
+  max-width: 88%;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+body.yourcolor-chat-page .maya-message.assistant {
+  background: #fff;
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+body.yourcolor-chat-page .maya-message.user {
+  margin-left: auto;
 }
 
 @keyframes yc-msg-in {
