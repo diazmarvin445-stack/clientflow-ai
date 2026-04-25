@@ -23,8 +23,8 @@
         </a>
         <div class="onboarding-header-meta">
           <span class="onboarding-step-label">Nuevo negocio · Paso 1 de perfil</span>
-          <a href="dashboard.html" class="onboarding-panel-link">Ir al panel</a>
-          <a href="index.html" class="onboarding-exit">Salir</a>
+          <a href="dashboard.html" class="onboarding-panel-link" id="onboarding-panel-link">Entrar al panel</a>
+          <a href="login.html" class="onboarding-exit" id="onboarding-exit-btn">Salir</a>
         </div>
       </div>
       <div class="onboarding-progress-wrap">
@@ -47,8 +47,14 @@
           </p>
           <p class="onboarding-return-hint">
             ¿Ya tienes cuenta?
-            <a href="login.html" class="onboarding-inline-link">Entrar al panel</a>
+            <a href="dashboard.html" class="onboarding-inline-link" id="onboarding-inline-dashboard-link">Entrar al panel</a>
           </p>
+          <div class="onboarding-return-hint" id="onboarding-existing-business-guard" hidden>
+            Ya tienes un negocio configurado.
+            <a href="dashboard.html" class="onboarding-inline-link" id="onboarding-existing-business-link">
+              Entrar al panel
+            </a>
+          </div>
           <div class="onboarding-trust">
             <span class="onboarding-trust-item">
               <span class="onboarding-trust-icon" aria-hidden="true"></span>

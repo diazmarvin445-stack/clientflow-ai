@@ -5,13 +5,24 @@ import {
   addDoc,
   doc,
   setDoc,
+  getDocs,
+  limit,
+  query,
   getDocFromServer,
   serverTimestamp,
+  where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
 const form = document.getElementById("onboarding-form");
 const successEl = document.getElementById("onboarding-success");
 const saveErrorEl = document.getElementById("onboarding-save-error");
+const panelLinkEl = document.getElementById("onboarding-panel-link");
+const inlineDashboardLinkEl = document.getElementById("onboarding-inline-dashboard-link");
+const existingBusinessGuardEl = document.getElementById("onboarding-existing-business-guard");
+const existingBusinessLinkEl = document.getElementById("onboarding-existing-business-link");
+const exitBtnEl = document.getElementById("onboarding-exit-btn");
+let businessConfigured = false;
 
 function showSaveError(message) {
   if (!saveErrorEl) {
@@ -27,6 +38,60 @@ function hideSaveError() {
   if (saveErrorEl) {
     saveErrorEl.textContent = "";
     saveErrorEl.hidden = true;
+  }
+}
+
+function enterDashboard() {
+  console.log("[Onboarding] entering dashboard");
+  window.location.href = "dashboard.html";
+}
+
+function wireNavigationActions() {
+  const wiredAttr = "data-onboarding-nav-wired";
+  const panelButtons = [panelLinkEl, inlineDashboardLinkEl, existingBusinessLinkEl].filter(Boolean);
+  panelButtons.forEach((el) => {
+    if (!el || el.getAttribute(wiredAttr) === "1") return;
+    el.setAttribute(wiredAttr, "1");
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      const user = auth.currentUser;
+      if (user && businessConfigured) {
+        enterDashboard();
+        return;
+      }
+      enterDashboard();
+    });
+  });
+
+  if (exitBtnEl && exitBtnEl.getAttribute(wiredAttr) !== "1") {
+    exitBtnEl.setAttribute(wiredAttr, "1");
+    exitBtnEl.addEventListener("click", async (e) => {
+      e.preventDefault();
+      console.log("[Onboarding] signing out");
+      try {
+        await signOut(auth);
+      } catch (err) {
+        console.error("[Onboarding] sign out failed:", err);
+      }
+      window.location.href = "login.html";
+    });
+  }
+}
+
+async function checkExistingBusinessConfigured(user) {
+  if (!user || user.isAnonymous) return false;
+  const q = query(collection(db, "businesses"), where("ownerUid", "==", user.uid), limit(1));
+  const snap = await getDocs(q);
+  if (snap.empty) return false;
+  const businessDoc = snap.docs[0];
+  const data = businessDoc.data() || {};
+  if (typeof data.businessName === "string" && data.businessName.trim()) return true;
+  if (typeof data.businessCategory === "string" && data.businessCategory.trim()) return true;
+  try {
+    const profile = await getDocFromServer(doc(db, "businesses", businessDoc.id, "settings", "businessProfile"));
+    return profile.exists();
+  } catch (_) {
+    return true;
   }
 }
 const otherCheck = document.getElementById("service-other-check");
@@ -380,12 +445,25 @@ if (form && successEl) {
 
 /** Misma cuenta que el resto del panel: sin sesión de correo no guardamos (evita ownerUid anónimo ≠ usuario tras login). */
 (async function requireAccountForOnboarding() {
+  wireNavigationActions();
   if (!form) return;
   if (typeof auth.authStateReady === "function") {
     await auth.authStateReady();
   }
-  const u = auth.currentUser;
-  if (!u || u.isAnonymous) {
+  const user = auth.currentUser;
+  console.log("[Onboarding] user:", user?.uid);
+  if (!user || user.isAnonymous) {
     window.location.replace(`login.html?next=${encodeURIComponent("onboarding.html")}`);
+    return;
+  }
+  try {
+    businessConfigured = await checkExistingBusinessConfigured(user);
+  } catch (err) {
+    businessConfigured = false;
+    console.error("[Onboarding] business check failed:", err);
+  }
+  console.log("[Onboarding] businessConfigured:", businessConfigured);
+  if (existingBusinessGuardEl) {
+    existingBusinessGuardEl.hidden = !businessConfigured;
   }
 })();
