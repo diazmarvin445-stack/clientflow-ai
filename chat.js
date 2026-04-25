@@ -833,7 +833,6 @@ function appendAssistantBubble(content, opts = {}) {
   const quote = tryBuildQuoteFromAssistantText(cleanText, orderPayload);
   if (quote) {
     wrap.dataset.quoteJson = JSON.stringify(quote);
-    col.appendChild(buildQuoteCardEl(quote));
   }
   wrap.appendChild(col);
   stream.appendChild(wrap);
