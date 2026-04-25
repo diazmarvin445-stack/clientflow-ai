@@ -94,17 +94,21 @@ async function checkChatMayaHealth(businessId, incidentInfo) {
   let status = STATUS_OK;
   let explanation = "Maya tiene estructura base disponible.";
   try {
-    const [chatHtmlRes, stylesRes] = await Promise.all([fetch("chat.html"), fetch("styles.css")]);
+    const [chatHtmlRes, stylesRes, chatJsRes] = await Promise.all([fetch("chat.html"), fetch("styles.css"), fetch("chat.js")]);
     const chatHtml = chatHtmlRes.ok ? await chatHtmlRes.text() : "";
     const stylesCss = stylesRes.ok ? await stylesRes.text() : "";
-    const hasMessagesContainer = /id=["']yc-maya-messages-v2["']/.test(chatHtml);
-    const hasInput = /id=["']yc-chat-input["']/.test(chatHtml);
+    const chatJs = chatJsRes.ok ? await chatJsRes.text() : "";
+    const hasMessagesContainer =
+      /id=["']yc-maya-messages-v2["']/.test(chatHtml) || /yc-maya-messages-isolated/.test(chatJs);
+    const hasInput = /id=["']yc-chat-input["']/.test(chatHtml) || /id="yc-chat-input"/.test(chatJs);
     const hasScrollableRule =
       /\.yc-maya-messages-v2[\s\S]*overflow-y:\s*(auto|scroll)/i.test(stylesCss);
+    const hasIsolatedLayer = /yourcolor-maya-chat-isolated/.test(chatJs);
     details.push(`Contenedor de mensajes detectado: ${hasMessagesContainer ? "sí" : "no"}`);
     details.push(`Input de Maya detectado: ${hasInput ? "sí" : "no"}`);
     details.push(`Regla de scroll detectada en CSS: ${hasScrollableRule ? "sí" : "no"}`);
-    if (!hasMessagesContainer || !hasInput || !hasScrollableRule) {
+    details.push(`Capa aislada detectada en chat.js: ${hasIsolatedLayer ? "sí" : "no"}`);
+    if (!hasMessagesContainer || !hasInput || !hasScrollableRule || !hasIsolatedLayer) {
       status = STATUS_ERROR;
       explanation = "Faltan elementos o reglas clave para el chat Maya.";
     }
@@ -201,9 +205,9 @@ async function runMayaRuntimeUiProbe() {
       };
     }
 
-    const messages = doc.querySelector("#yc-maya-messages-v2, .yc-maya-messages-v2");
+    const messages = doc.querySelector("#yc-maya-messages-isolated, #yc-maya-messages-v2, .yc-maya-messages-v2");
     const input = doc.querySelector("#yc-chat-input, #yc-maya-input-v2, .yc-maya-input-v2");
-    const possibleStreams = doc.querySelectorAll("#yc-maya-messages-v2, .yc-maya-messages-v2");
+    const possibleStreams = doc.querySelectorAll("#yc-maya-messages-isolated, #yc-maya-messages-v2, .yc-maya-messages-v2");
 
     if (!messages || !input) {
       return {

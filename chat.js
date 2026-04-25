@@ -104,7 +104,86 @@ function scrollChatStreamToBottom(stream) {
 
 /** @returns {HTMLElement | null} */
 function getMayaMessagesEl() {
-  return document.getElementById("yc-maya-messages-v2");
+  return document.getElementById("yc-maya-messages-isolated");
+}
+
+/** @returns {HTMLElement | null} */
+function getIsolatedMayaRoot() {
+  return document.getElementById("yourcolor-maya-chat-isolated");
+}
+
+function ensureIsolatedMayaChatLayer() {
+  if (getIsolatedMayaRoot()) return;
+  const root = document.createElement("section");
+  root.id = "yourcolor-maya-chat-isolated";
+  root.className = "yourcolor-maya-chat-isolated";
+  root.setAttribute("aria-live", "polite");
+  root.hidden = true;
+  root.innerHTML = `
+    <div class="yourcolor-maya-chat-isolated__surface">
+      <div id="yc-chat-error" class="yc-chat-error" hidden role="alert"></div>
+      <div id="yc-chat-toast" class="yc-chat-toast" hidden role="status" aria-live="polite"></div>
+      <header class="yc-maya-header-v2 yourcolor-maya-chat-isolated__header">
+        <div class="yc-maya-header-v2__titles">
+          <h2 class="yc-maya-header-v2__title">Maya</h2>
+          <p class="yc-maya-header-v2__subtitle">Asistente YourColor</p>
+        </div>
+        <button type="button" class="yc-msg-action-btn" id="yc-chat-clear-btn">Limpiar conversación</button>
+      </header>
+      <p class="yc-maya-context-v2" id="yc-chat-context-meta">Sincronizando datos…</p>
+      <div id="yc-chat-loading" class="yc-chat-loading yc-maya-loading-v2">
+        <span>Cargando datos de Firebase</span>
+        <span class="yc-chat-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+      </div>
+      <div id="yc-maya-messages-isolated" class="yc-maya-messages-v2" hidden></div>
+      <form id="yc-maya-input-v2" class="yc-maya-input-v2">
+        <label class="visually-hidden" for="yc-chat-input">Escribe un mensaje</label>
+        <textarea
+          id="yc-chat-input"
+          class="yc-chat-input"
+          rows="1"
+          placeholder="Escribe un mensaje…"
+          autocomplete="off"
+          disabled
+        ></textarea>
+        <button
+          type="button"
+          class="yc-chat-mic"
+          id="yc-chat-mic"
+          aria-label="Dictar mensaje con voz"
+          title="Dictar mensaje con voz"
+          disabled
+        >
+          <span aria-hidden="true">🎤</span>
+        </button>
+        <button type="button" class="yc-chat-send" id="yc-chat-send" disabled>Enviar</button>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(root);
+}
+
+function positionIsolatedMayaChatLayer() {
+  const root = getIsolatedMayaRoot();
+  const main = document.getElementById("dash-main");
+  if (!root || !main) return;
+  const rect = main.getBoundingClientRect();
+  root.style.top = `${Math.max(0, rect.top)}px`;
+  root.style.left = `${Math.max(0, rect.left)}px`;
+  root.style.width = `${Math.max(0, rect.width)}px`;
+  root.style.height = `${Math.max(0, rect.height)}px`;
+}
+
+function syncIsolatedMayaChatLayerVisibility() {
+  const root = getIsolatedMayaRoot();
+  if (!root) return;
+  const isYourColor = document.body.classList.contains("yourcolor-chat-page");
+  const visible = isYourColor && chatPageTab === "maya";
+  root.hidden = !visible;
+  root.classList.toggle("is-active", visible);
+  if (visible) {
+    positionIsolatedMayaChatLayer();
+  }
 }
 
 function setChatPageTab(tab) {
@@ -146,6 +225,7 @@ function setChatPageTab(tab) {
   if (statsZone) {
     setPanelVisible(statsZone, false);
   }
+  syncIsolatedMayaChatLayerVisibility();
 }
 
 function wireChatPageTabs() {
@@ -2777,8 +2857,7 @@ function mayaInitControlCenter(business) {
 }
 
 async function bootWithUser(user) {
-  const loading = document.getElementById("yc-chat-loading");
-  const stream = getMayaMessagesEl();
+  let loading = null;
   try {
     const business = await resolveBusinessForUser(db, user);
     activeBusiness = business;
@@ -2794,7 +2873,13 @@ async function bootWithUser(user) {
       const isYourColorBusiness = businessName === "yourcolor" || businessCategory === "custom_apparel";
       body.classList.toggle("yourcolor-chat-page", isYourColorBusiness);
       body.classList.toggle("non-yourcolor-chat-page", !isYourColorBusiness);
+      if (isYourColorBusiness) {
+        ensureIsolatedMayaChatLayer();
+      }
     }
+    loading = document.getElementById("yc-chat-loading");
+    const stream = getMayaMessagesEl();
+    syncIsolatedMayaChatLayerVisibility();
     renderHeader(business);
 
     if (!business) {
@@ -2867,6 +2952,12 @@ function boot() {
   initDashShell({ auth, db });
   wireGlobalDiagnosticsListeners("maya_chat");
   wireChatPageTabs();
+  window.addEventListener("resize", () => {
+    positionIsolatedMayaChatLayer();
+  });
+  window.addEventListener("orientationchange", () => {
+    positionIsolatedMayaChatLayer();
+  });
 
   /** Evita tratar el primer `null` como cierre de sesión antes de restaurar persistencia. */
   let previousAuthUser = null;
