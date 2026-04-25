@@ -8058,6 +8058,18 @@ body.dash-body.maya-cc-page .dash-shell {
   overflow: hidden;
 }
 
+.maya-cc-page,
+.maya-cc-page html,
+.maya-cc-page body {
+  overflow-x: hidden;
+}
+
+body.dash-body.maya-cc-page,
+body.dash-body.maya-cc-page .dash-shell,
+body.dash-body.maya-cc-page .dash-main {
+  overscroll-behavior: none;
+}
+
 .maya-cc-page .maya-cc {
   flex: 1;
   min-height: 0;
@@ -8307,6 +8319,8 @@ body.dash-body.maya-cc-page .dash-shell {
   display: flex;
   flex-direction: column;
   max-height: 100%;
+  height: calc(100dvh - 160px);
+  overflow: hidden;
 }
 
 .maya-cc-zone--wa > .maya-cc-zone__scroll--wa {
@@ -8752,6 +8766,7 @@ body.dash-body.maya-cc-page .dash-shell {
 .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
   flex: 1;
   min-height: 0;
+  height: 100%;
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -8869,6 +8884,7 @@ body.dash-body.maya-cc-page .dash-shell {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  touch-action: pan-y;
 }
 
 .yc-msg {
@@ -8986,7 +9002,7 @@ body.dash-body.maya-cc-page .dash-shell {
   max-height: 8rem;
   resize: none;
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 16px;
   line-height: 1.45;
   padding: 0.65rem 0.85rem;
   border-radius: 0.75rem;
@@ -9203,7 +9219,7 @@ body.dash-body.maya-cc-page .dash-shell {
 .yc-quote-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 1rem;
   font-size: 0.8125rem;
 }
@@ -9212,7 +9228,8 @@ body.dash-body.maya-cc-page .dash-shell {
   margin: 0;
   font-weight: 600;
   color: var(--text-muted);
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
 }
 
 .yc-quote-row dd {
@@ -9220,6 +9237,10 @@ body.dash-body.maya-cc-page .dash-shell {
   font-weight: 700;
   color: var(--text);
   text-align: right;
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .yc-quote-row--accent dd {

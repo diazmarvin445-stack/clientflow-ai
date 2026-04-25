@@ -665,6 +665,33 @@ function cleanMayaMessage(text) {
   return out;
 }
 
+/**
+ * Normaliza respuestas de cotización/presupuesto para mostrarlas en líneas legibles.
+ * Solo afecta display del bubble (no altera la lógica de Maya).
+ * @param {string} text
+ */
+function formatMayaBudgetDisplayText(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return raw;
+  const budgetLike =
+    /presupuesto|cotizaci[oó]n|precio por pieza|subtotal|dep[oó]sito|saldo|logo\/?\s*(arte|diseño)?/i.test(raw) ||
+    /(producto|cantidad|total)\s*:/i.test(raw);
+  if (!budgetLike) return raw;
+
+  let out = raw.replace(/\r\n?/g, "\n");
+  out = out.replace(/[ \t]+\n/g, "\n");
+  out = out.replace(/\n{3,}/g, "\n\n");
+
+  // Si vino en una sola línea, abrimos cada campo clave como bloque independiente.
+  out = out.replace(
+    /\s*(Producto|Cantidad|Precio por pieza|Precio \(paquete\)|Subtotal(?:\s+prendas)?|Logo\/?\s*(?:arte|diseño)?|Total|Dep[oó]sito(?:\s*\d+%?)?|Saldo)\s*:/gi,
+    "\n$1:",
+  );
+  out = out.replace(/(Presupuesto|Cotizaci[oó]n)\s+(?=\w+:)/i, "$1\n");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
+}
+
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
   const metaEl = document.getElementById("dash-business-meta");
@@ -717,6 +744,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   const { displayText, orderPayload, actionPayload, ambiguityPayload } = stripMayaPanelMetadata(content);
   const cleanText = cleanMayaMessage(displayText);
+  const displayBubbleText = formatMayaBudgetDisplayText(cleanText);
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -726,7 +754,7 @@ function appendAssistantBubble(content, opts = {}) {
 
   const bubble = document.createElement("div");
   bubble.className = "yc-msg-bubble";
-  bubble.textContent = cleanText;
+  bubble.textContent = displayBubbleText;
 
   const time = document.createElement("div");
   time.className = "yc-msg-time";
@@ -782,7 +810,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnCopy.textContent = "Copiar";
     btnCopy.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(cleanText);
+        await navigator.clipboard.writeText(displayBubbleText);
         showToast("Copiado al portapapeles");
       } catch {
         showToast("No se pudo copiar", true);
@@ -793,7 +821,7 @@ function appendAssistantBubble(content, opts = {}) {
     btnOrder.type = "button";
     btnOrder.className = "yc-msg-action-btn yc-msg-action-btn--primary";
     btnOrder.textContent = "Convertir a orden";
-    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, cleanText));
+    btnOrder.addEventListener("click", () => convertConversationToOrder(wrap, displayBubbleText));
 
     actions.append(btnCopy, btnOrder);
     col.appendChild(actions);
@@ -802,6 +830,11 @@ function appendAssistantBubble(content, opts = {}) {
   col.appendChild(time);
 
   const stickToBottom = isNearBottom(stream);
+  const quote = tryBuildQuoteFromAssistantText(cleanText, orderPayload);
+  if (quote) {
+    wrap.dataset.quoteJson = JSON.stringify(quote);
+    col.appendChild(buildQuoteCardEl(quote));
+  }
   wrap.appendChild(col);
   stream.appendChild(wrap);
   if (stickToBottom) {
@@ -825,7 +858,7 @@ function appendAssistantBubble(content, opts = {}) {
     }
   }
 
-  return { visible: cleanText, actionPayload };
+  return { visible: displayBubbleText, actionPayload };
 }
 
 function showToast(message, isError = false) {
