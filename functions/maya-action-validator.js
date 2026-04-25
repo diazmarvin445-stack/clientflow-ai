@@ -45,6 +45,13 @@ export function validateAndNormalizeMayaAction(action, payload) {
 
   const phoneRaw = pickAliasedValue(data, "clientPhone");
   if (phoneRaw !== undefined) normalized.clientPhone = String(phoneRaw).replace(/\D/g, "");
+  if (normalized.clientPhone) normalized.normalizedPhone = normalized.clientPhone;
+
+  const clientIdRaw = pickAliasedValue(data, "clientId");
+  if (clientIdRaw !== undefined) normalized.clientId = asTrimmedString(clientIdRaw);
+
+  const confirmedRaw = pickAliasedValue(data, "confirmed");
+  if (confirmedRaw !== undefined) normalized.confirmed = confirmedRaw === true;
 
   if (normalized.quantity !== undefined) {
     const q = Number(normalized.quantity);
@@ -77,6 +84,14 @@ export function validateAndNormalizeMayaAction(action, payload) {
         normalized: null,
       };
     }
+  }
+
+  if (action === "delete_client" && normalized.confirmed !== true) {
+    return {
+      ok: false,
+      error: "¿Confirmas borrar este cliente? Responde con confirmed:true y el clientId o nombre exacto.",
+      normalized: null,
+    };
   }
 
   if (action === "set_order_expenses" && !(Number(normalized.expenses) >= 0)) {

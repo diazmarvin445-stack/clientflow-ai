@@ -35,6 +35,117 @@ export async function resolveMayaActionEntities(db, businessId, action, normaliz
   }
   const needsOrder =
     action === "set_order_expenses" || action === "mark_order_delivered";
+  const needsClient =
+    action === "update_client" || action === "delete_client" || action === "search_client";
+  if (needsClient) {
+    const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
+    const clientId = typeof normalizedPayload.clientId === "string" ? normalizedPayload.clientId.trim() : "";
+    if (clientId) {
+      const ref = clientsCol.doc(clientId);
+      const snap = await ref.get();
+      if (!snap.exists) {
+        return {
+          ok: false,
+          error: "No encontré cliente con ese clientId.",
+          resolved: null,
+          meta: { matchType: "clientId", confidence: "high", ambiguityStatus: "none" },
+        };
+      }
+      return {
+        ok: true,
+        error: "",
+        resolved: { clientRef: ref, clientSnap: snap, clientId },
+        meta: { matchType: "clientId", confidence: "high", ambiguityStatus: "none" },
+      };
+    }
+
+    const targetPhone = normalizePhone(normalizedPayload.clientPhone);
+    if (targetPhone) {
+      const byNormalized = await clientsCol.where("normalizedPhone", "==", targetPhone).limit(2).get();
+      if (byNormalized.size === 1) {
+        const d = byNormalized.docs[0];
+        return {
+          ok: true,
+          error: "",
+          resolved: { clientRef: d.ref, clientSnap: d, clientId: d.id },
+          meta: { matchType: "clientPhone", confidence: "high", ambiguityStatus: "none" },
+        };
+      }
+      if (byNormalized.size > 1) {
+        return {
+          ok: false,
+          error: "Ambiguo: hay varios clientes con ese teléfono.",
+          resolved: {
+            candidates: byNormalized.docs.map((d) => ({
+              id: d.id,
+              clientName: String(d.data()?.name || d.data()?.fullName || ""),
+              phone: String(d.data()?.phone || ""),
+            })),
+            followUpQuestion: "Hay varios clientes con ese teléfono. ¿Me das el clientId exacto?",
+          },
+          meta: { matchType: "clientPhone", confidence: "low", ambiguityStatus: "ambiguous" },
+        };
+      }
+      const byPhone = await clientsCol.where("phone", "==", targetPhone).limit(2).get();
+      if (byPhone.size === 1) {
+        const d = byPhone.docs[0];
+        return {
+          ok: true,
+          error: "",
+          resolved: { clientRef: d.ref, clientSnap: d, clientId: d.id },
+          meta: { matchType: "clientPhone", confidence: "medium", ambiguityStatus: "none" },
+        };
+      }
+    }
+
+    const targetName = String(normalizedPayload.clientName ?? "").trim().toLowerCase();
+    if (targetName) {
+      const snap = await clientsCol.limit(250).get();
+      const matches = snap.docs.filter((d) => {
+        const row = d.data() || {};
+        const n = String(row.name || row.fullName || "").trim().toLowerCase();
+        if (!n) return false;
+        return n.includes(targetName) || targetName.includes(n);
+      });
+      if (!matches.length) {
+        return {
+          ok: false,
+          error: "No encontré cliente con ese nombre.",
+          resolved: null,
+          meta: { matchType: "clientName", confidence: "none", ambiguityStatus: "none" },
+        };
+      }
+      if (matches.length > 1) {
+        return {
+          ok: false,
+          error: "Ambiguo: encontré varios clientes con nombre similar.",
+          resolved: {
+            candidates: matches.slice(0, 6).map((d) => ({
+              id: d.id,
+              clientName: String(d.data()?.name || d.data()?.fullName || ""),
+              phone: String(d.data()?.phone || ""),
+            })),
+            followUpQuestion: "Encontré varios clientes parecidos. ¿Confirmas el clientId exacto?",
+          },
+          meta: { matchType: "clientName", confidence: "low", ambiguityStatus: "ambiguous" },
+        };
+      }
+      const d = matches[0];
+      return {
+        ok: true,
+        error: "",
+        resolved: { clientRef: d.ref, clientSnap: d, clientId: d.id },
+        meta: { matchType: "clientName", confidence: "medium", ambiguityStatus: "none" },
+      };
+    }
+    return {
+      ok: false,
+      error: "Necesito clientId, clientPhone o clientName para ubicar el cliente.",
+      resolved: null,
+      meta: { matchType: "none", confidence: "none", ambiguityStatus: "none" },
+    };
+  }
+
   if (!needsOrder) {
     return { ok: true, error: "", resolved: {}, meta: { matchType: "none", confidence: "high", ambiguityStatus: "none" } };
   }

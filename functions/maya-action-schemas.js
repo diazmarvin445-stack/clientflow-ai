@@ -1,4 +1,20 @@
 export const MAYA_ACTION_SCHEMAS = {
+  create_client: {
+    required: [],
+    requiresOneOf: ["clientName", "clientPhone"],
+  },
+  update_client: {
+    required: [],
+    requiresOneOf: ["clientId", "clientName", "clientPhone"],
+  },
+  delete_client: {
+    required: [],
+    requiresOneOf: ["clientId", "clientName", "clientPhone"],
+  },
+  search_client: {
+    required: [],
+    requiresOneOf: ["clientId", "clientName", "clientPhone"],
+  },
   create_order: {
     required: ["clientName", "product", "quantity", "total"],
   },
@@ -23,6 +39,8 @@ export const MAYA_ACTION_FIELD_ALIASES = {
   amount: ["amount", "total", "monto", "price"],
   clientName: ["clientName", "customerName", "name"],
   clientPhone: ["clientPhone", "phone", "telefono", "whatsapp"],
+  clientId: ["clientId", "id"],
+  confirmed: ["confirmed", "confirm", "isConfirmed"],
 };
 
 export function hasMayaActionSchema(action) {

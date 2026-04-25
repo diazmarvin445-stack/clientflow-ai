@@ -4,6 +4,22 @@ function fmtMoney(v) {
 }
 
 export function buildMayaActionSuccessMessage(action, normalizedPayload, execResult, resolutionMeta = null) {
+  if (action === "create_client") {
+    return `Listo. Guardé el cliente ${normalizedPayload.clientName || "cliente"} en CRM.`;
+  }
+  if (action === "update_client") {
+    return `Hecho. Actualicé los datos del cliente ${normalizedPayload.clientName || ""}`.trim();
+  }
+  if (action === "delete_client") {
+    return "Listo. Cliente eliminado correctamente.";
+  }
+  if (action === "search_client") {
+    const name = String(execResult?.clientName || normalizedPayload.clientName || "Cliente");
+    const phone = String(execResult?.phone || execResult?.normalizedPhone || normalizedPayload.clientPhone || "");
+    const status = String(execResult?.status || "");
+    const tail = [phone ? `Tel: ${phone}` : "", status ? `Estado: ${status}` : ""].filter(Boolean).join(" · ");
+    return tail ? `Encontré a ${name}. ${tail}.` : `Encontré a ${name}.`;
+  }
   if (action === "create_order") {
     const total = Number(normalizedPayload.total ?? normalizedPayload.amount) || 0;
     return `Listo. Guardé el pedido de ${normalizedPayload.clientName || "cliente"} por ${fmtMoney(total)} en Pedidos.`;

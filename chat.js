@@ -15,6 +15,7 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
@@ -794,6 +795,12 @@ function appendAssistantBubble(content, opts = {}) {
   if (!stream) return empty;
 
   const { displayText, orderPayload, actionPayload, ambiguityPayload } = stripMayaPanelMetadata(content);
+  if (actionPayload?.action) {
+    console.log("[MayaAction] detected action", actionPayload.action, actionPayload);
+  }
+  if (orderPayload) {
+    console.log("[MayaAction] extracted client/order data", orderPayload);
+  }
   const cleanText = cleanMayaMessage(displayText);
   const normalizedText = normalizeMayaDisplayText(cleanText);
   const displayBubbleText = formatMayaBudgetDisplayText(normalizedText);
@@ -1382,6 +1389,68 @@ function pickOrderChanges(raw) {
   return out;
 }
 
+function normalizePhoneForMatch(raw) {
+  return String(raw ?? "").replace(/\D/g, "");
+}
+
+function hasValidPhoneDigits(raw) {
+  return normalizePhoneForMatch(raw).length >= 7;
+}
+
+async function resolveClientDocRefByActionData(businessId, data) {
+  const byId = typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
+  if (byId) {
+    const ref = doc(db, "businesses", businessId, "clients", byId);
+    const snap = await getDoc(ref);
+    if (snap.exists) return { ref, snap };
+  }
+
+  const phoneRaw =
+    typeof data.phone === "string"
+      ? data.phone
+      : typeof data.clientPhone === "string"
+        ? data.clientPhone
+        : "";
+  const normalizedPhone = normalizePhoneForMatch(phoneRaw);
+  if (hasValidPhoneDigits(normalizedPhone)) {
+    const byNormalized = await getDocs(
+      query(
+        collection(db, "businesses", businessId, "clients"),
+        where("normalizedPhone", "==", normalizedPhone),
+        limit(1),
+      ),
+    );
+    if (!byNormalized.empty) {
+      const hit = byNormalized.docs[0];
+      return { ref: hit.ref, snap: hit };
+    }
+    const byPhone = await getDocs(
+      query(collection(db, "businesses", businessId, "clients"), where("phone", "==", normalizedPhone), limit(1)),
+    );
+    if (!byPhone.empty) {
+      const hit = byPhone.docs[0];
+      return { ref: hit.ref, snap: hit };
+    }
+  }
+
+  const nameRaw =
+    typeof data.name === "string"
+      ? data.name.trim()
+      : typeof data.clientName === "string"
+        ? data.clientName.trim()
+        : "";
+  if (nameRaw) {
+    const byName = await getDocs(
+      query(collection(db, "businesses", businessId, "clients"), where("name", "==", nameRaw), limit(1)),
+    );
+    if (!byName.empty) {
+      const hit = byName.docs[0];
+      return { ref: hit.ref, snap: hit };
+    }
+  }
+  return null;
+}
+
 /**
  * Resuelve un pedido en `jobs` o `orders` por id de documento.
  * @param {string} businessId
@@ -1405,18 +1474,101 @@ async function executeMayaActionFromChat(businessId, payload) {
   const data = mergeMayaActionData(
     payload && typeof payload === "object" ? /** @type {Record<string, unknown>} */ (payload) : {},
   );
+  console.log("[MayaAction]", { action: payload.action, data });
 
   if (payload.action === "save_client") {
-    const name = typeof data.name === "string" ? data.name.trim() : "";
-    await addDoc(collection(db, "businesses", businessId, "clients"), {
-      fullName: name || "Cliente",
-      name: name || "Cliente",
-      phone: typeof data.phone === "string" ? data.phone.trim() : "",
-      email: typeof data.email === "string" ? data.email.trim() : "",
+    const nameRaw = typeof data.name === "string" ? data.name.trim() : "";
+    const phoneRaw =
+      typeof data.phone === "string"
+        ? data.phone.trim()
+        : typeof data.clientPhone === "string"
+          ? data.clientPhone.trim()
+          : "";
+    const normalizedPhone = normalizePhoneForMatch(phoneRaw);
+    const emailRaw = typeof data.email === "string" ? data.email.trim() : "";
+    console.log("[ClientSave]", { clientName: nameRaw, phone: phoneRaw, normalizedPhone });
+
+    const existing = await resolveClientDocRefByActionData(businessId, {
+      clientId: data.clientId,
+      name: nameRaw,
+      clientName: nameRaw,
+      phone: normalizedPhone || phoneRaw,
+    });
+    if (existing) {
+      const prev = existing.snap.data() || {};
+      const prevPhone = typeof prev.phone === "string" ? prev.phone : "";
+      const prevNormalized = typeof prev.normalizedPhone === "string" ? prev.normalizedPhone : "";
+      const patch = {
+        fullName: nameRaw || String(prev.fullName || prev.name || "Cliente"),
+        name: nameRaw || String(prev.name || prev.fullName || "Cliente"),
+        email: emailRaw || String(prev.email || ""),
+        source: "chat-maya",
+        updatedAt: serverTimestamp(),
+      };
+      if (normalizedPhone) {
+        patch.phone = phoneRaw || normalizedPhone;
+        patch.normalizedPhone = normalizedPhone;
+      } else if (!prevNormalized && hasValidPhoneDigits(prevPhone)) {
+        patch.normalizedPhone = normalizePhoneForMatch(prevPhone);
+      }
+      console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${existing.ref.id}`);
+      await updateDoc(existing.ref, patch);
+      return "save_client";
+    }
+
+    const createdRef = await addDoc(collection(db, "businesses", businessId, "clients"), {
+      fullName: nameRaw || "Cliente",
+      name: nameRaw || "Cliente",
+      phone: normalizedPhone ? phoneRaw || normalizedPhone : "",
+      normalizedPhone: normalizedPhone || "",
+      email: emailRaw,
       source: "chat-maya",
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
+    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${createdRef.id}`);
     return "save_client";
+  }
+
+  if (payload.action === "search_client") {
+    const found = await resolveClientDocRefByActionData(businessId, data);
+    if (!found) throw new Error("No encontré el cliente solicitado.");
+    return "search_client";
+  }
+
+  if (payload.action === "update_client") {
+    const resolved = await resolveClientDocRefByActionData(businessId, data);
+    if (!resolved) throw new Error("No encontré el cliente para actualizar.");
+    const prev = resolved.snap.data() || {};
+    const nameRaw =
+      typeof data.name === "string"
+        ? data.name.trim()
+        : typeof data.clientName === "string"
+          ? data.clientName.trim()
+          : "";
+    const phoneRaw =
+      typeof data.phone === "string"
+        ? data.phone.trim()
+        : typeof data.clientPhone === "string"
+          ? data.clientPhone.trim()
+          : "";
+    const normalizedPhone = normalizePhoneForMatch(phoneRaw);
+    const emailRaw = typeof data.email === "string" ? data.email.trim() : "";
+    const patch = { updatedAt: serverTimestamp() };
+    if (nameRaw) {
+      patch.name = nameRaw;
+      patch.fullName = nameRaw;
+    }
+    if (normalizedPhone) {
+      patch.phone = phoneRaw || normalizedPhone;
+      patch.normalizedPhone = normalizedPhone;
+    } else if (!prev.normalizedPhone && hasValidPhoneDigits(prev.phone)) {
+      patch.normalizedPhone = normalizePhoneForMatch(prev.phone);
+    }
+    if (emailRaw) patch.email = emailRaw;
+    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${resolved.ref.id}`);
+    await updateDoc(resolved.ref, patch);
+    return "update_client";
   }
 
   if (payload.action === "create_order") {
@@ -1470,10 +1622,22 @@ async function executeMayaActionFromChat(businessId, payload) {
   }
 
   if (payload.action === "delete_client") {
+    const needsConfirm = data.requiresConfirmation === true || payload.requiresConfirmation === true;
+    const confirmed = data.confirmed === true || payload.confirmed === true;
+    if (needsConfirm && !confirmed) {
+      throw new Error("¿Confirmas borrar este cliente?");
+    }
     const clientId =
       typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
-    if (!clientId) throw new Error("Falta clientId para eliminar el cliente.");
-    await deleteDoc(doc(db, "businesses", businessId, "clients", clientId));
+    if (clientId) {
+      await deleteDoc(doc(db, "businesses", businessId, "clients", clientId));
+      console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${clientId}`);
+      return "delete_client";
+    }
+    const resolved = await resolveClientDocRefByActionData(businessId, data);
+    if (!resolved) throw new Error("No encontré el cliente para eliminar.");
+    await deleteDoc(resolved.ref);
+    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${resolved.ref.id}`);
     return "delete_client";
   }
 
@@ -1533,6 +1697,8 @@ async function executeMayaActionFromChat(businessId, payload) {
 
 function mayaActionCompletedLabel(kind) {
   if (kind === "save_client") return "guardar cliente";
+  if (kind === "search_client") return "buscar cliente";
+  if (kind === "update_client") return "actualizar cliente";
   if (kind === "create_order") return "crear orden";
   if (kind === "schedule_delivery") return "programar entrega";
   if (kind === "delete_client") return "eliminar cliente";
@@ -1621,6 +1787,7 @@ async function sendToClaude() {
   const btn = document.getElementById("yc-chat-send");
   const text = input && "value" in input ? String(input.value).trim() : "";
   if (!text) return;
+  console.log("[MayaAction] incoming user message", text);
   if (!activeBusiness) {
     showToast("Espera a que cargue tu negocio o vuelve a iniciar sesión.", true);
     return;

@@ -360,6 +360,7 @@ async function syncClientRecord(db, businessId, payload) {
   const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
   const name = asText(payload.clientName, "Cliente");
   const phone = normalizePhoneDigits(payload.clientPhone);
+  const normalizedPhone = phone;
   const email = asText(payload.email);
   const source = asText(payload.source, "manual");
   const now = new Date();
@@ -373,11 +374,20 @@ async function syncClientRecord(db, businessId, payload) {
   const allowByPhone = hasValidClientPhone(phone);
   const allowByName = hasMeaningfulClientName(name);
   const allowByConfirmedOrder = Boolean(orderId);
+  console.log("[ClientSave]", { clientName: name, phone: payload.clientPhone ?? "", normalizedPhone });
   if (!allowByPhone && !allowByName && !allowByConfirmedOrder) {
     return { id: "" };
   }
 
-  if (phone) {
+  if (normalizedPhone) {
+    const byNormalized = await clientsCol.where("normalizedPhone", "==", normalizedPhone).limit(1).get();
+    if (!byNormalized.empty) {
+      const docSnap = byNormalized.docs[0];
+      existing = { id: docSnap.id, data: docSnap.data() || {} };
+    }
+  }
+
+  if (!existing && phone) {
     const byPhone = await clientsCol.where("phone", "==", phone).limit(1).get();
     if (!byPhone.empty) {
       const docSnap = byPhone.docs[0];
@@ -401,6 +411,7 @@ async function syncClientRecord(db, businessId, payload) {
       fullName: (allowByName ? name : "") || asText(prev.fullName, "Cliente"),
       name: (allowByName ? name : "") || asText(prev.name, "Cliente"),
       phone: phone || asText(prev.phone),
+      normalizedPhone: normalizedPhone || asText(prev.normalizedPhone) || normalizePhoneDigits(prev.phone),
       email: email || asText(prev.email),
       source: source || asText(prev.source, "manual"),
       status: life.status,
@@ -435,12 +446,14 @@ async function syncClientRecord(db, businessId, payload) {
 
   const createdPatch = buildPatch({});
   createdPatch.createdAt = FieldValue.serverTimestamp();
+  createdPatch.normalizedPhone = normalizedPhone || "";
   createdPatch.totalOrders = bumpOrderStats && orderId ? 1 : 0;
   createdPatch.totalSpent = 0;
   createdPatch.lastOrderId = orderId || "";
   createdPatch.lastOrderSource = orderId ? orderSource || "manual" : "";
   createdPatch.lastOrderAt = orderId ? nowIso : null;
   const created = await clientsCol.add(createdPatch);
+  console.log("[MayaAction]", { action: "sync_client_record", businessId, path: `businesses/${businessId}/clients/${created.id}` });
   return { id: created.id };
 }
 
@@ -2746,6 +2759,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
           resolved: { ...(resolution.resolved || {}), meta: resolution.meta || null },
           handlers: {
             processNewOrder,
+            syncClientRecord,
             finalizeOrderDeliveryAndProfit,
             mayaFinanceAddMovement,
             FieldValue,
