@@ -162,8 +162,7 @@ if (formSignUp) {
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      const next = getSafeNextPath();
-      window.location.assign(next || "onboarding.html");
+      window.location.assign("onboarding.html");
     } catch (err) {
       const code = err && err.code;
       let msg = "No se pudo crear la cuenta.";
