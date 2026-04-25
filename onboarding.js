@@ -4,6 +4,7 @@ import {
   collection,
   addDoc,
   doc,
+  setDoc,
   getDocFromServer,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
@@ -212,6 +213,14 @@ if (form && successEl) {
     }
 
     const raw = stripUndefined({
+      businessCategory: val("businessCategory"),
+      mayaServices: val("mayaServices"),
+      mayaEstimateMethod: val("mayaEstimateMethod"),
+      mayaDepositPolicy: val("mayaDepositPolicy"),
+      mayaSchedulingPolicy: val("mayaSchedulingPolicy"),
+      mayaMaterialsPolicy: val("mayaMaterialsPolicy"),
+      mayaTone: val("mayaTone"),
+      mayaNoPromises: val("mayaNoPromises"),
       businessName: val("businessName"),
       businessDescription: val("businessDescription"),
       phone: val("phone"),
@@ -289,6 +298,19 @@ if (form && successEl) {
       const businessRef = await addDoc(collection(db, "businesses"), docData);
       const path = `businesses/${businessRef.id}`;
       console.log("[ClientFlow onboarding] addDoc success:", { path, id: businessRef.id });
+
+      await setDoc(doc(db, "businesses", businessRef.id, "settings", "businessProfile"), {
+        category: raw.businessCategory || "custom_apparel",
+        businessName: raw.businessName || "",
+        services: raw.mayaServices || "",
+        pricingModel: raw.mayaEstimateMethod || "",
+        depositPolicy: raw.mayaDepositPolicy || "",
+        schedulingPolicy: raw.mayaSchedulingPolicy || "",
+        materialsPolicy: raw.mayaMaterialsPolicy || "",
+        communicationTone: raw.mayaTone || "",
+        noPromises: raw.mayaNoPromises || "",
+        updatedAt: serverTimestamp(),
+      });
 
       const verifyRef = doc(db, "businesses", businessRef.id);
       const verified = await getDocFromServer(verifyRef);

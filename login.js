@@ -1,4 +1,5 @@
-import { auth } from "./firebase.js";
+import { auth, db } from "./firebase.js";
+import { resolveBusinessForUser } from "./dashboard-data.js";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -29,9 +30,27 @@ function getSafeNextPath() {
   return raw;
 }
 
-function goAfterAuth() {
+async function goAfterAuth() {
   const next = getSafeNextPath();
-  window.location.replace(next || "dashboard.html");
+  if (next) {
+    window.location.replace(next);
+    return;
+  }
+  const user = auth.currentUser;
+  if (!hasSignedInAccount(user)) {
+    window.location.replace("login.html");
+    return;
+  }
+  try {
+    const business = await resolveBusinessForUser(db, user);
+    if (!business) {
+      window.location.replace("onboarding.html");
+      return;
+    }
+  } catch (err) {
+    console.error("[login] resolveBusinessForUser failed", err);
+  }
+  window.location.replace("dashboard.html");
 }
 
 function hasSignedInAccount(user) {
@@ -39,14 +58,21 @@ function hasSignedInAccount(user) {
 }
 
 onAuthStateChanged(auth, (user) => {
-  if (hasSignedInAccount(user)) goAfterAuth();
+  if (hasSignedInAccount(user)) void goAfterAuth();
 });
 
 if (typeof auth.authStateReady === "function") {
   auth.authStateReady().then(() => {
-    if (hasSignedInAccount(auth.currentUser)) goAfterAuth();
+    if (hasSignedInAccount(auth.currentUser)) void goAfterAuth();
   });
 }
+
+document.querySelectorAll('[data-action="setup-business"]').forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    window.location.href = "onboarding.html";
+  });
+});
 
 if (toggleToSignup && toggleToLogin && authPanels) {
   toggleToSignup.addEventListener("click", (e) => {
@@ -83,7 +109,7 @@ if (formSignIn) {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      goAfterAuth();
+      await goAfterAuth();
     } catch (err) {
       const code = err && err.code;
       let msg = "No se pudo iniciar sesión. Inténtalo de nuevo.";

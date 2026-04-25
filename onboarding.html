@@ -64,6 +64,69 @@
         <p id="onboarding-save-error" class="onboarding-save-error" role="alert" hidden></p>
 
         <form class="onboarding-form" id="onboarding-form" novalidate>
+          <!-- STEP 1 -->
+          <section class="onboarding-card">
+            <div class="onboarding-card-head">
+              <span class="onboarding-card-num">0</span>
+              <div>
+                <h2 class="onboarding-card-title">Categoría y configuración de Maya</h2>
+                <p class="onboarding-card-desc">Selecciona tipo de negocio y define cómo debe operar Maya.</p>
+              </div>
+            </div>
+            <div class="onboarding-fields">
+              <label class="field">
+                <span class="field-label">Tipo de negocio <abbr title="obligatorio">*</abbr></span>
+                <select name="businessCategory" required>
+                  <option value="custom_apparel">custom_apparel</option>
+                  <option value="construction_roofing">construction_roofing</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field-label">Servicios principales <abbr title="obligatorio">*</abbr></span>
+                <textarea
+                  name="mayaServices"
+                  rows="3"
+                  required
+                  placeholder="Ej. Roof repair, instalación de tejas, impermeabilización…"
+                ></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Cómo calcula estimados? <abbr title="obligatorio">*</abbr></span>
+                <textarea
+                  name="mayaEstimateMethod"
+                  rows="3"
+                  required
+                  placeholder="Reglas para estimar precio: materiales, mano de obra, mínimos, extras."
+                ></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Cómo cobra depósitos? <abbr title="obligatorio">*</abbr></span>
+                <textarea name="mayaDepositPolicy" rows="3" required placeholder="Porcentaje, métodos y condiciones."></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Cómo agenda trabajos / entregas? <abbr title="obligatorio">*</abbr></span>
+                <textarea name="mayaSchedulingPolicy" rows="3" required placeholder="Tiempos, ventanas de agenda, confirmaciones."></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Cómo maneja materiales? <abbr title="obligatorio">*</abbr></span>
+                <textarea name="mayaMaterialsPolicy" rows="3" required placeholder="Compra, stock, reposición y aprobación de costos."></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Cómo debe hablar Maya con clientes? <abbr title="obligatorio">*</abbr></span>
+                <textarea name="mayaTone" rows="3" required placeholder="Tono: formal, cercano, técnico, etc."></textarea>
+              </label>
+              <label class="field">
+                <span class="field-label">¿Qué no debe prometer Maya? <abbr title="obligatorio">*</abbr></span>
+                <textarea
+                  name="mayaNoPromises"
+                  rows="3"
+                  required
+                  placeholder="Límites claros: tiempos, descuentos, garantías, alcances."
+                ></textarea>
+              </label>
+            </div>
+          </section>
+
           <!-- SECTION 1 -->
           <section class="onboarding-card">
             <div class="onboarding-card-head">
