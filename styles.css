@@ -9225,6 +9225,126 @@ body.yourcolor-chat-page .maya-cc-alert {
   touch-action: pan-y;
 }
 
+/* ===== YourColor Maya chat panel v2 (new layout) ===== */
+body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat {
+  height: calc(100dvh - 150px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.yourcolor-chat-page #maya-cc-zone-chat > .maya-cc-zone__scroll {
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.yourcolor-chat-page #maya-cc-zone-chat .maya-cc-alerts {
+  display: none;
+}
+
+body.yourcolor-chat-page .yc-maya-panel-v2-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.65rem 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+}
+
+body.yourcolor-chat-page .yc-maya-panel-v2 {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #f0fdf4 0%, #f8fafc 12%, #f1f5f9 100%);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+body.yourcolor-chat-page .yc-maya-header-v2 {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+body.yourcolor-chat-page .yc-maya-header-v2__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+body.yourcolor-chat-page .yc-maya-header-v2__subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+body.yourcolor-chat-page .yc-maya-context-v2,
+body.yourcolor-chat-page .yc-maya-loading-v2 {
+  flex: 0 0 auto;
+}
+
+body.yourcolor-chat-page .yc-maya-context-v2 {
+  margin: 0;
+  padding: 0.45rem 1rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+body.yourcolor-chat-page .yc-maya-messages-v2 {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem 1rem;
+}
+
+body.yourcolor-chat-page .yc-maya-input-v2 {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  body.yourcolor-chat-page .yc-maya-panel-v2-wrap {
+    padding: 0.5rem;
+  }
+
+  body.yourcolor-chat-page .yc-maya-header-v2 {
+    padding: 0.6rem 0.75rem;
+  }
+
+  body.yourcolor-chat-page .yc-maya-context-v2 {
+    padding: 0.4rem 0.75rem 0.45rem;
+  }
+
+  body.yourcolor-chat-page .yc-maya-messages-v2 {
+    padding: 0.7rem 0.75rem 0.9rem;
+  }
+
+  body.yourcolor-chat-page .yc-maya-input-v2 {
+    padding: 0.55rem 0.7rem;
+  }
+}
+
 .yc-msg {
   display: flex;
   max-width: 88%;

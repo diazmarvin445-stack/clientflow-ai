@@ -97,11 +97,10 @@ async function checkChatMayaHealth(businessId, incidentInfo) {
     const [chatHtmlRes, stylesRes] = await Promise.all([fetch("chat.html"), fetch("styles.css")]);
     const chatHtml = chatHtmlRes.ok ? await chatHtmlRes.text() : "";
     const stylesCss = stylesRes.ok ? await stylesRes.text() : "";
-    const hasMessagesContainer = /id=["']yc-chat-stream["']/.test(chatHtml);
+    const hasMessagesContainer = /id=["']yc-maya-messages-v2["']/.test(chatHtml);
     const hasInput = /id=["']yc-chat-input["']/.test(chatHtml);
     const hasScrollableRule =
-      /\.maya-chat-messages[\s\S]*overflow-y:\s*(auto|scroll)/i.test(stylesCss) ||
-      /\.yc-chat-stream[\s\S]*overflow-y:\s*(auto|scroll)/i.test(stylesCss);
+      /\.yc-maya-messages-v2[\s\S]*overflow-y:\s*(auto|scroll)/i.test(stylesCss);
     details.push(`Contenedor de mensajes detectado: ${hasMessagesContainer ? "sí" : "no"}`);
     details.push(`Input de Maya detectado: ${hasInput ? "sí" : "no"}`);
     details.push(`Regla de scroll detectada en CSS: ${hasScrollableRule ? "sí" : "no"}`);
@@ -202,9 +201,9 @@ async function runMayaRuntimeUiProbe() {
       };
     }
 
-    const messages = doc.querySelector("#yc-chat-stream, .yc-chat-stream, .maya-chat-messages");
-    const input = doc.querySelector("#yc-chat-input, #mayaInputBar, .maya-input-bar");
-    const possibleStreams = doc.querySelectorAll("#yc-chat-stream, .yc-chat-stream, .maya-chat-messages");
+    const messages = doc.querySelector("#yc-maya-messages-v2, .yc-maya-messages-v2");
+    const input = doc.querySelector("#yc-chat-input, #yc-maya-input-v2, .yc-maya-input-v2");
+    const possibleStreams = doc.querySelectorAll("#yc-maya-messages-v2, .yc-maya-messages-v2");
 
     if (!messages || !input) {
       return {

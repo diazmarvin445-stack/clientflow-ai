@@ -102,6 +102,11 @@ function scrollChatStreamToBottom(stream) {
   stream.scrollTop = stream.scrollHeight;
 }
 
+/** @returns {HTMLElement | null} */
+function getMayaMessagesEl() {
+  return document.getElementById("yc-maya-messages-v2");
+}
+
 function setChatPageTab(tab) {
   chatPageTab = tab === "whatsapp" ? "whatsapp" : "maya";
   const root = document.querySelector(".maya-cc");
@@ -743,7 +748,7 @@ function formatMayaReadableBlocks(text) {
 /** @param {HTMLElement | null} messagesEl */
 function logChatScrollMetrics(messagesEl) {
   if (!messagesEl) return;
-  console.log("[MayaChat] yc-chat-stream metrics", {
+  console.log("[MayaChat] yc-maya-messages-v2 metrics", {
     scrollHeight: messagesEl.scrollHeight,
     clientHeight: messagesEl.clientHeight,
     scrollTop: messagesEl.scrollTop,
@@ -758,14 +763,14 @@ function logChatScrollMetrics(messagesEl) {
 /** @param {HTMLElement | null} stream */
 function logYcChatStreamDiagnostics(stream) {
   if (!stream) {
-    console.log("[MayaChat] yc-chat-stream diagnostics", { exists: false });
+    console.log("[MayaChat] yc-maya-messages-v2 diagnostics", { exists: false });
     return;
   }
   stream.scrollTop = 0;
   const before = stream.scrollTop;
   stream.scrollTop = Math.min(200, Math.max(stream.scrollHeight - stream.clientHeight, 0));
   const after = stream.scrollTop;
-  console.log("[MayaChat] yc-chat-stream diagnostics", {
+  console.log("[MayaChat] yc-maya-messages-v2 diagnostics", {
     exists: true,
     scrollHeight: stream.scrollHeight,
     clientHeight: stream.clientHeight,
@@ -811,7 +816,7 @@ function renderHeader(business) {
 }
 
 function appendUserBubble(content) {
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   if (!stream) return;
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--user";
@@ -840,7 +845,7 @@ function appendUserBubble(content) {
  */
 function appendAssistantBubble(content, opts = {}) {
   const empty = { visible: String(content ?? "").trim(), actionPayload: null };
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   if (!stream) return empty;
 
   const { displayText, orderPayload, actionPayload, ambiguityPayload } = stripMayaPanelMetadata(content);
@@ -1269,7 +1274,7 @@ async function loadPanelChatHistory(businessId, userId) {
 }
 
 function renderChatHistoryFromMemory() {
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   if (!stream) return;
   stream.innerHTML = "";
   for (const m of apiConversation) {
@@ -1898,7 +1903,7 @@ async function sendToClaude() {
       try {
         reply = await readMayaNdjsonStream(res, (chunk) => {
           shell.bubble.textContent += chunk;
-          const st = document.getElementById("yc-chat-stream");
+          const st = getMayaMessagesEl();
           scrollChatStreamToBottomIfNear(st);
         });
       } finally {
@@ -1974,7 +1979,7 @@ async function sendToClaude() {
 function wireComposer() {
   const input = document.getElementById("yc-chat-input");
   const btn = document.getElementById("yc-chat-send");
-  const form = document.getElementById("mayaInputBar");
+  const form = document.getElementById("yc-maya-input-v2");
   if (!input || !btn || btn.dataset.wired === "1") return;
   btn.dataset.wired = "1";
 
@@ -1998,7 +2003,7 @@ function wireComposer() {
 }
 
 function showWelcomeAssistant() {
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   if (!stream) return;
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -2019,7 +2024,7 @@ function showWelcomeAssistant() {
 
 async function clearChatHistory() {
   // Limpiar UI del chat
-  const chatContainer = document.getElementById("yc-chat-stream");
+  const chatContainer = getMayaMessagesEl();
   if (chatContainer) chatContainer.innerHTML = "";
 
   // Limpiar localStorage
@@ -2048,7 +2053,7 @@ async function clearChatHistory() {
   }
 
   // Mostrar bienvenida
-  const container = document.getElementById("yc-chat-stream");
+  const container = getMayaMessagesEl();
   if (container) {
     showWelcomeAssistant();
   }
@@ -2070,7 +2075,7 @@ function clearChatPageSession() {
  * @returns {{ wrap: HTMLDivElement, bubble: HTMLDivElement } | null}
  */
 function createStreamingAssistantShell() {
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   if (!stream) return null;
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -2773,7 +2778,7 @@ function mayaInitControlCenter(business) {
 
 async function bootWithUser(user) {
   const loading = document.getElementById("yc-chat-loading");
-  const stream = document.getElementById("yc-chat-stream");
+  const stream = getMayaMessagesEl();
   try {
     const business = await resolveBusinessForUser(db, user);
     activeBusiness = business;
@@ -2811,7 +2816,7 @@ async function bootWithUser(user) {
       wireMayaMobileScrollDebug(stream);
       logYcChatStreamDiagnostics(stream);
       console.log("[MayaChat] rebuilt simple layout mounted");
-      console.log("[MayaChat] active message container is yc-chat-stream:", stream);
+      console.log("[MayaChat] active message container is yc-maya-messages-v2:", stream);
     }
 
     setComposerEnabled(true);
