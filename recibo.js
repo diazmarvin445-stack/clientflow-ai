@@ -1,8 +1,14 @@
 import { db } from "./firebase.js";
-import { getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import {
+  collectionGroup,
+  documentId,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
-import { receiptPublicDocId, receiptPublicDocRef } from "./receipt-public-sync.js";
-import { receiptStatusLabel } from "./receipt-config.js";
+import { receiptStatusLabel, RECEIPT_BUSINESS } from "./receipt-config.js";
 
 function money(v) {
   const n = Number(v) || 0;
@@ -17,23 +23,37 @@ function toDate(v) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function textLogoFromName(name) {
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase().slice(0, 3);
+  }
+  return String(name || "YC")
+    .trim()
+    .slice(0, 2)
+    .toUpperCase() || "YC";
+}
+
 function getOrderTotalFromPublic(d) {
-  return Math.max(0, Number(d?.total ?? d?.amount) || 0);
+  return Math.max(0, Number(d?.total) || 0);
 }
 
 /**
  * @param {Record<string, unknown>} d
  */
-function publicSnapToOrderRow(d) {
-  const id = typeof d.orderId === "string" ? d.orderId : "";
+function publicDocToOrderRow(d) {
+  const oid = typeof d.orderId === "string" ? d.orderId : "";
   return {
-    id,
+    id: oid,
     clientName: d.clientName,
     clientPhone: d.clientPhone,
     product: d.product,
     quantity: d.quantity,
     total: d.total,
-    amount: d.amount,
+    amount: d.total,
     deposit: d.deposit,
     balance: d.balance,
     deliveryDate: d.deliveryDate,
@@ -44,19 +64,19 @@ function publicSnapToOrderRow(d) {
 /**
  * @param {Record<string, unknown>} d
  */
-function publicSnapToPdfBiz(d) {
-  const rgb = Array.isArray(d.brandRgb) && d.brandRgb.length >= 3 ? d.brandRgb : [99, 102, 241];
-  const lines = Array.isArray(d.addressLines) ? d.addressLines.filter((x) => typeof x === "string" && x.trim()) : [];
+function publicDocToPdfBiz(d) {
+  const legalName =
+    typeof d.businessName === "string" && d.businessName.trim() ? d.businessName.trim() : "YourColor Corporation";
   return {
-    legalName: typeof d.legalName === "string" && d.legalName.trim() ? d.legalName.trim() : "YourColor Corporation",
+    legalName,
     phone: typeof d.phone === "string" ? d.phone.trim() : "",
-    email: typeof d.email === "string" ? d.email.trim() : "",
+    email: "",
     logoUrl: typeof d.logoUrl === "string" ? d.logoUrl.trim() : "",
-    addressLines: lines.length ? lines : ["—"],
-    brandRgb: [Number(rgb[0]) || 0, Number(rgb[1]) || 0, Number(rgb[2]) || 0],
-    footerMessage: typeof d.footerMessage === "string" ? d.footerMessage.trim() : "",
-    notesTerms: typeof d.notesTerms === "string" ? d.notesTerms.trim() : "",
-    textLogo: typeof d.textLogo === "string" && d.textLogo.trim() ? d.textLogo.trim() : "YC",
+    addressLines: [...RECEIPT_BUSINESS.addressLines],
+    brandRgb: [...RECEIPT_BUSINESS.brandRgb],
+    footerMessage: "",
+    notesTerms: "",
+    textLogo: textLogoFromName(legalName),
   };
 }
 
@@ -77,7 +97,7 @@ function appendDlRows(dl, pairs) {
 }
 
 function renderReceipt(d) {
-  const biz = publicSnapToPdfBiz(d);
+  const biz = publicDocToPdfBiz(d);
   const nameEl = document.getElementById("recibo-business-name");
   const contactEl = document.getElementById("recibo-contact");
   const addrEl = document.getElementById("recibo-address");
@@ -88,12 +108,11 @@ function renderReceipt(d) {
 
   if (nameEl) nameEl.textContent = biz.legalName;
   if (contactEl) {
-    const bits = [biz.phone ? `Tel: ${biz.phone}` : "", biz.email ? biz.email : ""].filter(Boolean);
+    const bits = [biz.phone ? `Tel: ${biz.phone}` : ""].filter(Boolean);
     contactEl.textContent = bits.length ? bits.join(" · ") : "—";
   }
   if (addrEl) {
-    const raw = Array.isArray(d.addressLines) ? d.addressLines.filter((x) => typeof x === "string" && x.trim()) : [];
-    addrEl.textContent = raw.length ? raw.join("\n") : "—";
+    addrEl.textContent = biz.addressLines.length ? biz.addressLines.join("\n") : "—";
   }
 
   if (logoWrap) {
@@ -121,7 +140,7 @@ function renderReceipt(d) {
   const balance = Number.isFinite(balRaw) ? Math.max(0, balRaw) : Math.max(0, total - deposit);
 
   appendDlRows(orderDl, [
-    ["No. de recibo", typeof d.orderId === "string" ? d.orderId : "—"],
+    ["No. de pedido", typeof d.orderId === "string" ? d.orderId : "—"],
     ["Cliente", d.clientName != null ? String(d.clientName) : "—"],
     ["Teléfono", d.clientPhone != null ? String(d.clientPhone) : "—"],
     ["Producto", d.product != null ? String(d.product) : "—"],
@@ -141,10 +160,10 @@ function renderReceipt(d) {
   const pdfBtn = document.getElementById("recibo-download-pdf");
   if (pdfBtn) {
     pdfBtn.onclick = async () => {
-      const row = publicSnapToOrderRow(d);
-      const biz = publicSnapToPdfBiz(d);
+      const row = publicDocToOrderRow(d);
+      const pdfBiz = publicDocToPdfBiz(d);
       try {
-        await generateOrderReceiptPdf(row, biz);
+        await generateOrderReceiptPdf(row, pdfBiz);
       } catch (e) {
         console.error(e);
         window.alert("No se pudo generar el PDF. Inténtalo de nuevo.");
@@ -156,37 +175,31 @@ function renderReceipt(d) {
 async function boot() {
   const statusEl = document.getElementById("recibo-status");
   const params = new URLSearchParams(window.location.search);
-  const orderId = (params.get("id") || "").trim();
-  const businessId = (params.get("b") || "").trim();
+  const receiptId = (params.get("id") || "").trim();
 
-  if (!orderId) {
-    if (statusEl) statusEl.textContent = "Falta el número de recibo en el enlace (id).";
-    return;
-  }
-  if (!businessId) {
-    if (statusEl) statusEl.textContent = "Enlace incompleto. Usa el enlace compartido desde Pedidos.";
-    return;
-  }
-
-  const expected = receiptPublicDocId(businessId, orderId);
-  if (!expected) {
-    if (statusEl) statusEl.textContent = "Enlace no válido.";
+  if (!receiptId) {
+    if (statusEl) statusEl.textContent = "Falta el identificador del recibo en el enlace (id).";
     return;
   }
 
   if (statusEl) statusEl.textContent = "Cargando recibo…";
 
   try {
-    const ref = receiptPublicDocRef(db, businessId, orderId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
+    const q = query(collectionGroup(db, "publicReceipts"), where(documentId(), "==", receiptId), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) {
       if (statusEl) {
         statusEl.textContent =
-          "Este recibo no está disponible aún. Pide al comercio que abra el recibo en el panel o pulse Compartir.";
+          "Este recibo no está disponible. Pide al comercio que abra el recibo en el panel o pulse Compartir.";
       }
       return;
     }
-    const d = snap.data() || {};
+    const docSnap = snap.docs[0];
+    const d = docSnap.data() || {};
+    if (typeof d.receiptId === "string" && d.receiptId.trim() && d.receiptId.trim() !== receiptId) {
+      if (statusEl) statusEl.textContent = "Recibo no válido.";
+      return;
+    }
     if (statusEl) statusEl.textContent = "";
     renderReceipt(d);
   } catch (e) {

@@ -1446,10 +1446,13 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
     await d.ref.delete();
   }
 
-  try {
-    await db.collection("receiptPublic").doc(`${businessId}__${orderId}`).delete();
-  } catch {
-    /* doc puede no existir */
+  const pubRid = asText(order.publicReceiptId);
+  if (pubRid) {
+    try {
+      await db.collection("businesses").doc(businessId).collection("publicReceipts").doc(pubRid).delete();
+    } catch {
+      /* doc puede no existir */
+    }
   }
 
   await orderRef.delete();
@@ -3452,10 +3455,13 @@ export const deleteOrderCascade = onRequest(
           await d.ref.delete();
         }
 
-        try {
-          await db.collection("receiptPublic").doc(`${businessId}__${orderId}`).delete();
-        } catch {
-          /* doc puede no existir */
+        const pubRid = asText(row.publicReceiptId);
+        if (pubRid) {
+          try {
+            await db.collection("businesses").doc(businessId).collection("publicReceipts").doc(pubRid).delete();
+          } catch {
+            /* doc puede no existir */
+          }
         }
 
         await orderRef.delete();

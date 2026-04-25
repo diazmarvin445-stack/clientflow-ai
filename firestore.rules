@@ -25,37 +25,6 @@ service cloud.firestore {
         && businessOwnerUid(businessId) == request.auth.uid;
     }
 
-    /* Recibo digital compartible (solo campos de cliente; sin gastos ni ganancias). */
-    match /receiptPublic/{docId} {
-      allow get: if true;
-      allow list: if false;
-
-      function receiptPublicDocIdMatches() {
-        return request.resource.data.businessId is string
-          && request.resource.data.orderId is string
-          && docId == request.resource.data.businessId + '__' + request.resource.data.orderId;
-      }
-
-      function receiptPublicNoInternal() {
-        return !('expenses' in request.resource.data)
-          && !('netProfit' in request.resource.data)
-          && !('laborCost' in request.resource.data)
-          && !('totalLaborHours' in request.resource.data)
-          && !('totalLaborUsd' in request.resource.data);
-      }
-
-      allow create, update: if request.auth != null
-        && receiptPublicDocIdMatches()
-        && receiptPublicNoInternal()
-        && isBusinessOwner(request.resource.data.businessId);
-
-      allow delete: if request.auth != null
-        && resource.data.businessId is string
-        && resource.data.orderId is string
-        && docId == resource.data.businessId + '__' + resource.data.orderId
-        && isBusinessOwner(resource.data.businessId);
-    }
-
     match /businesses/{businessId} {
       /* Crear: dueño explícito (hasAll sobre keys fallaba en algunos payloads con FieldValue). */
       allow create: if request.auth != null
@@ -132,6 +101,29 @@ service cloud.firestore {
       /* Pedidos (incl. workStatus, totalLabor*, lastWorkedAt para Equipo). */
       match /orders/{orderId} {
         allow read, write: if isBusinessOwner(businessId);
+      }
+
+      /* Recibo compartible (solo lectura pública por id opaco; sin datos internos). */
+      match /publicReceipts/{receiptId} {
+        allow get: if true;
+        allow list: if false;
+
+        function publicReceiptSafeWrite() {
+          return !('expenses' in request.resource.data)
+            && !('netProfit' in request.resource.data)
+            && !('laborCost' in request.resource.data)
+            && !('labor' in request.resource.data)
+            && !('notes' in request.resource.data)
+            && !('totalLaborHours' in request.resource.data)
+            && !('totalLaborUsd' in request.resource.data)
+            && request.resource.data.receiptId == receiptId;
+        }
+
+        allow create, update: if request.auth != null
+          && isBusinessOwner(businessId)
+          && publicReceiptSafeWrite();
+
+        allow delete: if request.auth != null && isBusinessOwner(businessId);
       }
 
       match /finance/{transactionId} {

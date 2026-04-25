@@ -1,6 +1,9 @@
 /** Sitio oficial mostrado en recibos (enlace fijo para clientes). */
 export const CLIENT_PUBLIC_WEBSITE_URL = "https://your-color.com";
 
+/** Base pública para enlaces compartidos (GitHub Pages del repo). */
+export const RECEIPT_SHARE_PAGE_BASE_URL = "https://diazmarvin445-stack.github.io/clientflow-ai";
+
 /**
  * Branding and contact data for client-facing receipts (recibos).
  * Edit here so all PDF receipts stay consistent.

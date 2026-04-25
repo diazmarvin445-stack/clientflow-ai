@@ -18,8 +18,8 @@ import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./
 import { initDashShell } from "./dash-shell.js";
 import { getReceiptPdfBusiness } from "./receipt-settings.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
-import { receiptStatusLabel } from "./receipt-config.js";
-import { syncReceiptPublicSnapshot } from "./receipt-public-sync.js";
+import { receiptStatusLabel, RECEIPT_SHARE_PAGE_BASE_URL } from "./receipt-config.js";
+import { ensurePublicReceiptDocument } from "./receipt-public-sync.js";
 
 const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
 const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
@@ -118,8 +118,8 @@ async function openDigitalReceipt(row) {
   try {
     const biz = await getReceiptPdfBusiness(db, activeBusinessId);
     renderDigitalReceiptSheet(row, biz);
-    await syncReceiptPublicSnapshot(db, activeBusinessId, row, biz).catch((err) => {
-      console.warn("[receiptPublic]", err);
+    await ensurePublicReceiptDocument(db, activeBusinessId, row, biz).catch((err) => {
+      console.warn("[publicReceipts]", err);
     });
     modal.showModal();
   } catch (e) {
@@ -133,7 +133,7 @@ function fallbackShareClipboard(text) {
   if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
     navigator.clipboard
       .writeText(text)
-      .then(() => window.alert("Enlace del recibo copiado al portapapeles."))
+      .then(() => window.alert("Link del recibo copiado"))
       .catch(() => window.alert("Compartir no disponible en este dispositivo."));
   } else {
     window.alert("Compartir no disponible en este dispositivo.");
@@ -143,18 +143,17 @@ function fallbackShareClipboard(text) {
 async function shareDigitalReceipt() {
   const row = receiptModalOrder;
   if (!row || !activeBusinessId) return;
+  let receiptId = "";
   try {
     const biz = await getReceiptPdfBusiness(db, activeBusinessId);
-    await syncReceiptPublicSnapshot(db, activeBusinessId, row, biz);
+    const out = await ensurePublicReceiptDocument(db, activeBusinessId, row, biz);
+    receiptId = out.receiptId;
   } catch (e) {
     console.error(e);
     window.alert("No se pudo preparar el enlace del recibo. Inténtalo de nuevo.");
     return;
   }
-  const receiptUrl = new URL("recibo.html", window.location.href);
-  receiptUrl.searchParams.set("id", String(row.id));
-  receiptUrl.searchParams.set("b", activeBusinessId);
-  const url = receiptUrl.toString();
+  const url = `${RECEIPT_SHARE_PAGE_BASE_URL}/recibo.html?id=${encodeURIComponent(receiptId)}`;
   const title = "Recibo YourColor";
   const text = "Aquí está tu recibo digital de YourColor Corporation.";
   if (navigator.share) {
