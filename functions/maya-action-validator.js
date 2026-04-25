@@ -50,6 +50,12 @@ export function validateAndNormalizeMayaAction(action, payload) {
   const clientIdRaw = pickAliasedValue(data, "clientId");
   if (clientIdRaw !== undefined) normalized.clientId = asTrimmedString(clientIdRaw);
 
+  const expenseIdRaw = pickAliasedValue(data, "expenseId");
+  if (expenseIdRaw !== undefined) normalized.expenseId = asTrimmedString(expenseIdRaw);
+
+  const fixedExpenseNameRaw = pickAliasedValue(data, "fixedExpenseName");
+  if (fixedExpenseNameRaw !== undefined) normalized.name = asTrimmedString(fixedExpenseNameRaw);
+
   const confirmedRaw = pickAliasedValue(data, "confirmed");
   if (confirmedRaw !== undefined) normalized.confirmed = confirmedRaw === true;
 
@@ -60,6 +66,24 @@ export function validateAndNormalizeMayaAction(action, payload) {
   if (normalized.expenses !== undefined) {
     const e = Number(normalized.expenses);
     if (Number.isFinite(e)) normalized.expenses = e;
+  }
+
+  if (action === "add_fixed_expense" || action === "update_fixed_expense") {
+    const freq = String(normalized.frequency ?? data.frequency ?? "monthly")
+      .trim()
+      .toLowerCase();
+    normalized.frequency = freq === "weekly" || freq === "semanal" ? "weekly" : "monthly";
+  }
+  if (normalized.chargeDayOfMonth !== undefined) {
+    const d = Number(normalized.chargeDayOfMonth);
+    if (Number.isFinite(d)) normalized.chargeDayOfMonth = Math.floor(d);
+  }
+  if (normalized.chargeWeekday !== undefined) {
+    const w = Number(normalized.chargeWeekday);
+    if (Number.isFinite(w)) normalized.chargeWeekday = Math.floor(w);
+  }
+  if (normalized.active !== undefined) {
+    normalized.active = normalized.active === true || normalized.active === "true" || normalized.active === 1;
   }
 
   for (const field of schema.required) {
@@ -99,6 +123,9 @@ export function validateAndNormalizeMayaAction(action, payload) {
   }
   if ((action === "add_income" || action === "add_expense") && !(Number(normalized.amount) > 0)) {
     return { ok: false, error: "Monto inválido para movimiento financiero.", normalized: null };
+  }
+  if (action === "add_fixed_expense" && !(Number(normalized.amount) > 0)) {
+    return { ok: false, error: "Monto inválido para gasto fijo.", normalized: null };
   }
 
   return { ok: true, error: "", normalized };

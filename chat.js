@@ -24,8 +24,8 @@ import {
   fetchClientsForChatContext,
   fetchCampaignsListAndStats,
   fetchFinanceTransactionsCurrentMonth,
-  fetchAccruedFixedExpenseTotalForCurrentMonth,
   fetchCalendarEventsForChat,
+  sumAccruedFixedExpensesBetween,
   formatBusinessMeta,
   financeIncomeCountsTowardRealized,
   initialsFromName,
@@ -678,7 +678,7 @@ function inferMayaDataFocus(text) {
   const t = String(text || "").toLowerCase();
   const flags = {
     finance:
-      /\b(finanz|balance|gast(o|é|e)|ingres|cobr|pag(ué|o)|cobré|dinero|dólar|presupuesto|margen|rentabil|flujo)/i.test(
+      /\b(finanz|balance|gast(o|é|e)|gasto\s*fijo|gastos\s*fijos|ingres|cobr|pag(ué|o)|cobré|dinero|dólar|presupuesto|margen|rentabil|flujo|recurrente)/i.test(
         t,
       ) || /\$\s*\d/.test(t),
     calendar:
@@ -2252,36 +2252,65 @@ async function loadFirebaseContext(business, options = {}) {
     financeReadCap = 140;
   }
 
-  const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext] = await Promise.all([
+  const bn =
+    typeof business.data.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
+  const bc =
+    typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
+  const yourColorFin = bn === "yourcolor" || bc === "custom_apparel";
+  const fixedSnapPromise = yourColorFin
+    ? getDocs(collection(db, "businesses", business.id, "fixedExpenses"))
+    : Promise.resolve(null);
+
+  const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext, fixedSnapMaybe] = await Promise.all([
     fetchJobsSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
     fetchOrdersSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
     fetchClientsForChatContext(db, business.id, clientLimit),
     fetchCampaignsListAndStats(db, business.id),
     fetchFinanceTransactionsCurrentMonth(db, business.id, financeReadCap),
     fetchCalendarEventsForChat(db, business.id, calendarDays),
+    fixedSnapPromise,
   ]);
 
   const financeRows = financeMonth.slice(0, financeDetailCap);
 
   let monthIncome = 0;
-  let monthExpense = 0;
+  let monthVariableExpense = 0;
   for (const row of financeMonth) {
     const amt = Number(row.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
-    if (row.type === "expense") monthExpense += amt;
+    if (row.type === "expense") monthVariableExpense += amt;
     else if (financeIncomeCountsTowardRealized(row)) monthIncome += amt;
   }
 
-  const bn = typeof business.data.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
-  const bc =
-    typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
-  if (bn === "yourcolor" || bc === "custom_apparel") {
+  const nowCtx = new Date();
+  const monthStartCtx = new Date(nowCtx.getFullYear(), nowCtx.getMonth(), 1, 0, 0, 0, 0);
+  const monthEndCtx = new Date(nowCtx.getFullYear(), nowCtx.getMonth() + 1, 0, 23, 59, 59, 999);
+  const fixedRowsRaw =
+    yourColorFin && fixedSnapMaybe && /** @type {{ docs?: unknown[] }} */ (fixedSnapMaybe).docs
+      ? /** @type {{ docs: { id: string; data: () => Record<string, unknown> }[] }} */ (fixedSnapMaybe).docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      : [];
+  let monthFixedAccrued = 0;
+  if (yourColorFin && fixedRowsRaw.length) {
     try {
-      monthExpense += await fetchAccruedFixedExpenseTotalForCurrentMonth(db, business.id);
+      monthFixedAccrued = sumAccruedFixedExpensesBetween(fixedRowsRaw, monthStartCtx, monthEndCtx, nowCtx);
     } catch (e) {
-      console.warn("[YourColor Chat] fixed monthly expenses", e);
+      console.warn("[YourColor Chat] fixed expenses accrued", e);
     }
   }
+  const monthExpense = monthVariableExpense + monthFixedAccrued;
+
+  const fixedExpensesForChat = fixedRowsRaw.map((r) => ({
+    id: r.id,
+    name: typeof r.name === "string" ? r.name : "",
+    amount: Number(r.amount) || 0,
+    frequency: typeof r.frequency === "string" ? r.frequency : "monthly",
+    active: r.active !== false,
+    chargeDayOfMonth: r.chargeDayOfMonth ?? null,
+    chargeWeekday: r.chargeWeekday ?? null,
+  }));
 
   const campaignsShort = (campAgg.campaigns || []).slice(0, campaignCap);
   const clientsMentioned = findClientsMentionedInText(userMessage, clientsRaw);
@@ -2313,9 +2342,15 @@ async function loadFirebaseContext(business, options = {}) {
     financeThisMonth: {
       income: monthIncome,
       expense: monthExpense,
+      variableExpense: monthVariableExpense,
+      fixedExpenseAccrued: monthFixedAccrued,
       net: monthIncome - monthExpense,
     },
     financeRecent: serializeForAi(financeRows),
+    fixedExpenses: yourColorFin ? serializeForAi(fixedExpensesForChat) : [],
+    financePanelNote: yourColorFin
+      ? "YourColor: fixedExpenses son los recurrentes del panel Finanzas; financeRecent son movimientos puntuales. Los totales del mes incluyen fijos ya devengados."
+      : null,
     stats: {
       jobsActiveCount: jobSplit.active.length,
       jobsDeliveredListed: jobSplit.recentDelivered.length,

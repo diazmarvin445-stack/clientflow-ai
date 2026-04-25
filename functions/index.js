@@ -19,6 +19,7 @@ import { resolveMayaActionEntities } from "./maya-entity-resolver.js";
 import { executeMayaAction } from "./maya-action-executor.js";
 import { buildMayaActionSuccessMessage } from "./maya-response-builder.js";
 import { buildMayaContextSnapshot } from "./maya-context-snapshot.js";
+import { sumAccruedFixedExpensesBetween } from "./fixed-expense-math.js";
 
 /** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
@@ -860,6 +861,10 @@ function shrinkFirebaseContextInitial(fc) {
       .slice(0, 20);
   }
 
+  if (Array.isArray(c.fixedExpenses) && c.fixedExpenses.length > 18) {
+    c.fixedExpenses = c.fixedExpenses.slice(0, 18);
+  }
+
   const calendarRows = c.calendarUpcomingFourWeeks ?? c.calendarNextTwoWeeks;
   if (Array.isArray(calendarRows)) {
     const upcomingRaw = calendarRows
@@ -999,14 +1004,19 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
 
   const bizSnap = await db.collection("businesses").doc(businessId).get();
   const bizData = bizSnap.exists ? bizSnap.data() || {} : {};
+  const yourColorFin = isYourColorFinanceBusinessFromData(bizData);
+  const fixedSnapPromise = yourColorFin
+    ? db.collection("businesses").doc(businessId).collection("fixedExpenses").get()
+    : Promise.resolve(null);
 
-  const [jobsSnap, ordersSnap, clientsSnap, financeSnap, calendarRows, campSnap] = await Promise.all([
+  const [jobsSnap, ordersSnap, clientsSnap, financeSnap, calendarRows, campSnap, fixedSnapMaybe] = await Promise.all([
     db.collection("businesses").doc(businessId).collection("jobs").orderBy("createdAt", "desc").limit(150).get(),
     db.collection("businesses").doc(businessId).collection("orders").orderBy("createdAt", "desc").limit(150).get(),
     db.collection("businesses").doc(businessId).collection("clients").orderBy("createdAt", "desc").limit(35).get(),
     db.collection("businesses").doc(businessId).collection("finance").orderBy("date", "desc").limit(300).get(),
     mayaFetchCalendarForChatServer(db, businessId, 28, 120),
     db.collection("businesses").doc(businessId).collection("campaigns").limit(40).get(),
+    fixedSnapPromise,
   ]);
 
   const jobRows = [];
@@ -1049,13 +1059,33 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
   });
 
   let monthIncome = 0;
-  let monthExpense = 0;
+  let monthVariableExpense = 0;
   for (const row of financeMonth) {
     const amt = Number(row.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
-    if (row.type === "expense") monthExpense += amt;
+    if (row.type === "expense") monthVariableExpense += amt;
     else if (financeIncomeCountsAsRealizedAdmin(row)) monthIncome += amt;
   }
+
+  const fixedRowsRaw =
+    fixedSnapMaybe && Array.isArray(fixedSnapMaybe.docs)
+      ? fixedSnapMaybe.docs.map((d) => ({ id: d.id, ...d.data() }))
+      : [];
+  let monthFixedAccrued = 0;
+  if (yourColorFin && fixedRowsRaw.length) {
+    monthFixedAccrued = sumAccruedFixedExpensesBetween(fixedRowsRaw, startM, endM, now);
+  }
+  const monthExpenseTotal = monthVariableExpense + monthFixedAccrued;
+
+  const fixedExpensesForContext = fixedRowsRaw.map((r) => ({
+    id: r.id,
+    name: typeof r.name === "string" ? r.name : "",
+    amount: Number(r.amount) || 0,
+    frequency: typeof r.frequency === "string" ? r.frequency : "monthly",
+    active: r.active !== false,
+    chargeDayOfMonth: r.chargeDayOfMonth ?? null,
+    chargeWeekday: r.chargeWeekday ?? null,
+  }));
 
   const financeRecentCap = financeMonth.slice(0, 95);
   const campaigns = [];
@@ -1083,11 +1113,17 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
     calendarUpcomingFourWeeks: mayaPlainJsonForContext(calendarRows),
     financeThisMonth: {
       income: monthIncome,
-      expense: monthExpense,
-      net: monthIncome - monthExpense,
+      expense: monthExpenseTotal,
+      variableExpense: monthVariableExpense,
+      fixedExpenseAccrued: monthFixedAccrued,
+      net: monthIncome - monthExpenseTotal,
     },
     financeRecent: mayaPlainJsonForContext(financeRecentCap),
     campaigns: mayaPlainJsonForContext(campaignsShort),
+    fixedExpenses: yourColorFin ? mayaPlainJsonForContext(fixedExpensesForContext) : [],
+    financePanelNote: yourColorFin
+      ? "YourColor: en Finanzas hay movimientos variables (colección finance) y gastos fijos recurrentes (fixedExpenses: mensual o semanal con día de cobro). Los totales del mes incluyen solo fijos ya devengados (fecha de cobro ≤ hoy), igual que el panel."
+      : null,
     stats: {
       jobsActiveCount: jobsActive.length,
       jobsDeliveredListed: jobsDelivered.length,
@@ -1097,6 +1133,7 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
       campaignCount: campaignsShort.length,
       financeMonthCount: financeMonth.length,
       calendarEventCount: calendarRows.length,
+      fixedExpenseCount: yourColorFin ? fixedExpensesForContext.length : 0,
     },
     contextNote:
       "Datos del negocio recargados desde Firestore en el servidor en esta petición (instantánea actual, no caché del navegador).",
@@ -1130,6 +1167,11 @@ function mayaAggressiveShrinkFirebaseContext(c) {
       : null;
   if (!prot.has("calendar") && calKey && c[calKey].length > 2) {
     c[calKey] = c[calKey].slice(0, Math.max(2, Math.floor(c[calKey].length / 2)));
+    return true;
+  }
+
+  if (!prot.has("finance") && Array.isArray(c.fixedExpenses) && c.fixedExpenses.length > 4) {
+    c.fixedExpenses = c.fixedExpenses.slice(0, Math.max(3, Math.floor(c.fixedExpenses.length / 2)));
     return true;
   }
 
@@ -1297,12 +1339,16 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "get_balance",
   "set_order_expenses",
   "mark_order_delivered",
+  "add_fixed_expense",
+  "update_fixed_expense",
+  "delete_fixed_expense",
 ]);
 
 const FINANCE_INCOME_KEYS = new Set(["ventas", "anticipos", "otros_ingresos", "ganancias"]);
 const FINANCE_EXPENSE_KEYS = new Set([
   "materiales",
   "transporte",
+  "mano_obra",
   "personal",
   "servicios",
   "alquiler",
@@ -2094,6 +2140,19 @@ function formatMoneyUsd(n) {
 }
 
 /**
+ * @param {Record<string, unknown>} bizData
+ */
+function isYourColorFinanceBusinessFromData(bizData) {
+  const name = String(bizData?.businessName ?? "")
+    .trim()
+    .toLowerCase();
+  const cat = String(bizData?.businessCategory ?? "")
+    .trim()
+    .toLowerCase();
+  return name === "yourcolor" || cat === "custom_apparel";
+}
+
+/**
  * @param {string} period
  */
 function normalizeFinancePeriod(period) {
@@ -2117,6 +2176,8 @@ function financeBoundsForPeriod(period) {
     return {
       contains: () => true,
       label: "En total registrado",
+      rangeStart: null,
+      rangeEnd: null,
     };
   }
   if (period === "day") {
@@ -2125,6 +2186,8 @@ function financeBoundsForPeriod(period) {
     return {
       contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
       label: "Hoy",
+      rangeStart: start,
+      rangeEnd: end,
     };
   }
   if (period === "week") {
@@ -2138,6 +2201,8 @@ function financeBoundsForPeriod(period) {
     return {
       contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
       label: "Esta semana",
+      rangeStart: start,
+      rangeEnd: end,
     };
   }
   const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -2145,6 +2210,8 @@ function financeBoundsForPeriod(period) {
   return {
     contains: (d) => !!d && !Number.isNaN(d.getTime()) && d >= start && d <= end,
     label: "Este mes",
+    rangeStart: start,
+    rangeEnd: end,
   };
 }
 
@@ -2154,7 +2221,11 @@ function financeBoundsForPeriod(period) {
  * @param {"day" | "week" | "month" | "all"} period
  */
 async function aggregateFinanceTotals(db, businessId, period) {
-  const { contains } = financeBoundsForPeriod(period);
+  const { contains, rangeStart, rangeEnd } = financeBoundsForPeriod(period);
+  const bizSnap = await db.collection("businesses").doc(businessId).get();
+  const bizData = bizSnap.exists ? bizSnap.data() || {} : {};
+  const yourColorFin = isYourColorFinanceBusinessFromData(bizData);
+
   const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(3000).get();
   let income = 0;
   let expense = 0;
@@ -2175,7 +2246,15 @@ async function aggregateFinanceTotals(db, businessId, period) {
     if (d.type === "expense") expense += amt;
     else if (financeIncomeCountsAsRealizedAdmin(d)) income += amt;
   });
-  return { income, expense, net: income - expense };
+
+  let fixedAccrued = 0;
+  if (yourColorFin && rangeStart && rangeEnd && period !== "all") {
+    const fixedSnap = await db.collection("businesses").doc(businessId).collection("fixedExpenses").get();
+    const rows = fixedSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    fixedAccrued = sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, new Date());
+  }
+  const expenseTotal = expense + fixedAccrued;
+  return { income, expense: expenseTotal, variableExpense: expense, fixedAccrued, net: income - expenseTotal };
 }
 
 /**
@@ -2201,6 +2280,11 @@ function normalizeFinanceCategory(raw, kind) {
     transporte: "transporte",
     rent: "alquiler",
     alquiler: "alquiler",
+    labor: "mano_obra",
+    mano: "mano_obra",
+    manoobra: "mano_obra",
+    staff: "personal",
+    personal: "personal",
   };
   if (map[s]) return map[s];
   return "otros_gastos";
@@ -2622,11 +2706,15 @@ async function mayaMarkOrderDelivered(db, businessId, payload) {
  */
 async function mayaFinanceBalanceBlock(db, businessId, period) {
   const { label } = financeBoundsForPeriod(period);
-  const { income, expense, net } = await aggregateFinanceTotals(db, businessId, period);
+  const { income, expense, net, fixedAccrued, variableExpense } = await aggregateFinanceTotals(db, businessId, period);
   const face = net >= 0 ? "✅" : "⚠️";
+  const fixedLine =
+    Number(fixedAccrued) > 0
+      ? `\n• Gastos variables: ${formatMoneyUsd(variableExpense)}\n• Gastos fijos ya cobrados (YourColor): ${formatMoneyUsd(fixedAccrued)}`
+      : "";
   return `${label} llevas:
 • Ingresos: ${formatMoneyUsd(income)}
-• Gastos: ${formatMoneyUsd(expense)}
+• Gastos (total): ${formatMoneyUsd(expense)}${fixedLine}
 • Ganancia neta: ${formatMoneyUsd(net)} ${face}`;
 }
 
@@ -2716,6 +2804,14 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         raw_payload: payload,
         merged_payload: mergedActionData,
       });
+
+      if (action === "add_fixed_expense" || action === "update_fixed_expense" || action === "delete_fixed_expense") {
+        const bizSnap0 = await db.collection("businesses").doc(businessId).get();
+        const bd = bizSnap0.exists ? bizSnap0.data() || {} : {};
+        if (!isYourColorFinanceBusinessFromData(bd)) {
+          throw new Error("Los gastos fijos recurrentes solo están habilitados para YourColor.");
+        }
+      }
 
       if (hasMayaActionSchema(action)) {
         const validation = validateAndNormalizeMayaAction(action, mergedActionData);

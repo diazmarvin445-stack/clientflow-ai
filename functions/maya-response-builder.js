@@ -42,6 +42,16 @@ export function buildMayaActionSuccessMessage(action, normalizedPayload, execRes
     const amount = Number(execResult?.amount ?? normalizedPayload.amount) || 0;
     return `Registrado. Gasto por ${fmtMoney(amount)}.`;
   }
+  if (action === "add_fixed_expense") {
+    const name = String(execResult?.name ?? normalizedPayload.name ?? "gasto fijo");
+    return `Listo. Agregué el gasto fijo «${name}» en Finanzas (recurrente).`;
+  }
+  if (action === "update_fixed_expense") {
+    return "Hecho. Actualicé el gasto fijo en Finanzas.";
+  }
+  if (action === "delete_fixed_expense") {
+    return "Listo. Eliminé ese gasto fijo de Finanzas.";
+  }
   if (resolutionMeta?.ambiguityStatus === "ambiguous" && resolutionMeta?.followUpQuestion) {
     return resolutionMeta.followUpQuestion;
   }

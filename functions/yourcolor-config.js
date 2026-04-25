@@ -708,12 +708,24 @@ FINANZAS Y ENTREGA (regla de negocio única):
 - Registrar gastos del pedido (set_order_expenses) solo actualiza el pedido; tampoco crea movimientos en Finanzas.
 - Al marcar entregado (mark_order_delivered o estado entregado en panel), ahí se crean los movimientos en Finanzas: ingreso por total y gasto por expenses (si > 0).
 
+FINANZAS (panel Finanzas — misma lógica que la app):
+- Movimientos variables en la colección \`finance\`: add_income / add_expense con amount (obligatorio), category, description y date opcional (YYYY-MM-DD; si falta, hoy).
+- Categorías de gasto del panel: materiales, transporte, mano_obra, personal, servicios, alquiler, marketing, otros_gastos. Ingresos: ventas, anticipos, ganancias, otros_ingresos.
+- Borrar movimiento: delete_transaction o delete_finance (transactionId desde financeRecent del contexto, o pistas amount + description + dateHint + type income|expense).
+- Balance: get_balance con period day|week|month|all. En YourColor los gastos del período incluyen también los gastos fijos recurrentes ya devengados (fecha de cobro ≤ hoy), igual que las tarjetas de resumen en Finanzas.
+- Gastos fijos recurrentes (solo YourColor): en el contexto Firebase viene fixedExpenses (cada ítem con id, name, amount, frequency monthly|weekly, chargeDayOfMonth 1–31 o chargeWeekday 0=domingo…6=sábado, active). Podés crearlos, editarlos o borrarlos con MAYA_ACTION_JSON al final (una línea por acción):
+  {"action":"add_fixed_expense","data":{"name":"Renta local","amount":800,"frequency":"monthly","chargeDayOfMonth":1,"active":true}}
+  {"action":"add_fixed_expense","data":{"name":"Limpieza","amount":45,"frequency":"weekly","chargeWeekday":1,"active":true}}
+  {"action":"update_fixed_expense","data":{"expenseId":"PEGAR_ID_DEL_CONTEXTO","amount":820,"chargeDayOfMonth":3}}
+  {"action":"delete_fixed_expense","data":{"expenseId":"PEGAR_ID_DEL_CONTEXTO"}}
+Usá siempre los id de fixedExpenses que ves en el contexto; no inventes ids.
+
 === CONTROL TOTAL — PANEL ===
 Borrados y acciones reales: siempre una línea MAYA_ACTION_JSON:{"action":"…"} al FINAL (sin markdown). El servidor responde con [Sistema]; nunca digas "ya borré" sin JSON. Varias acciones → varias líneas MAYA_ACTION_JSON en el mismo mensaje.
 
 Borrar: delete_event|delete_calendar_event (eventId o query/fecha/weekday); delete_client (clientId|clientName, SIEMPRE requiere confirmed:true); delete_order (orderId|clientName, cascada en servidor); delete_transaction|delete_finance (transactionId o amount+description+dateHint+type). Ambiguo → pedir id del contexto.
 
-Crear / operar: create_client, update_client, search_client, create_order, create_calendar_event; add_income, add_expense, get_balance (period day|week|month|all); add_team_member, update_team_member, delete_team_member, assign_task, list_team; set_order_expenses; mark_order_delivered. Usá los campos que ya definieron las reglas de pago y catálogo; ids desde Firebase.
+Crear / operar: create_client, update_client, search_client, create_order, create_calendar_event; add_income, add_expense, get_balance (period day|week|month|all); add_fixed_expense, update_fixed_expense, delete_fixed_expense (YourColor, ver bloque FINANZAS); add_team_member, update_team_member, delete_team_member, assign_task, list_team; set_order_expenses; mark_order_delivered. Usá los campos que ya definieron las reglas de pago y catálogo; ids desde Firebase.
 
 Tras get_balance el sistema inserta totales reales en el mensaje; integrá ese bloque en tu respuesta visible.
 Usa números reales; deliveryDate ISO o legible. Solo incluye MAYA_ACTION_JSON si Marvin pidió la acción y tenés datos; si faltan datos, preguntá y no inventes la línea.`;

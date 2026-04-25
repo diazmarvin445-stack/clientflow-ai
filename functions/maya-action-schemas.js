@@ -32,6 +32,15 @@ export const MAYA_ACTION_SCHEMAS = {
   add_expense: {
     required: ["amount"],
   },
+  add_fixed_expense: {
+    required: ["name", "amount"],
+  },
+  update_fixed_expense: {
+    required: ["expenseId"],
+  },
+  delete_fixed_expense: {
+    required: ["expenseId"],
+  },
 };
 
 export const MAYA_ACTION_FIELD_ALIASES = {
@@ -40,6 +49,8 @@ export const MAYA_ACTION_FIELD_ALIASES = {
   clientName: ["clientName", "customerName", "name"],
   clientPhone: ["clientPhone", "phone", "telefono", "whatsapp"],
   clientId: ["clientId", "id"],
+  expenseId: ["expenseId", "fixedExpenseId"],
+  fixedExpenseName: ["name", "nombre", "titulo", "description"],
   confirmed: ["confirmed", "confirm", "isConfirmed"],
 };
 

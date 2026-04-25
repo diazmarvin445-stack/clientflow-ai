@@ -111,6 +111,87 @@ export async function executeMayaAction({
     return { ok: true, result: { kind: "expense", amount: Number(normalizedPayload.amount) || 0 }, resolutionMeta };
   }
 
+  if (action === "add_fixed_expense") {
+    const name = String(normalizedPayload.name || "").trim();
+    const amt = Number(normalizedPayload.amount);
+    if (!name) throw new Error("Falta nombre del gasto fijo.");
+    if (!Number.isFinite(amt) || amt <= 0) throw new Error("Monto inválido.");
+    const freq = String(normalizedPayload.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+    const active = normalizedPayload.active !== false;
+    /** @type {Record<string, unknown>} */
+    const row = {
+      name,
+      amount: amt,
+      frequency: freq,
+      active,
+      createdAt: handlers.FieldValue.serverTimestamp(),
+      updatedAt: handlers.FieldValue.serverTimestamp(),
+    };
+    if (freq === "weekly") {
+      let w = Number(normalizedPayload.chargeWeekday);
+      if (!Number.isFinite(w)) w = 1;
+      row.chargeWeekday = Math.min(6, Math.max(0, Math.floor(w)));
+      row.chargeDayOfMonth = null;
+    } else {
+      let d = Number(normalizedPayload.chargeDayOfMonth);
+      if (!Number.isFinite(d)) d = 1;
+      row.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(d)));
+      row.chargeWeekday = null;
+    }
+    const ref = await db.collection("businesses").doc(businessId).collection("fixedExpenses").add(row);
+    return { ok: true, result: { expenseId: ref.id, name }, resolutionMeta };
+  }
+
+  if (action === "update_fixed_expense") {
+    const id = String(normalizedPayload.expenseId || "").trim();
+    if (!id) throw new Error("Falta expenseId.");
+    const ref = db.collection("businesses").doc(businessId).collection("fixedExpenses").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Gasto fijo no encontrado.");
+    const patch = { updatedAt: handlers.FieldValue.serverTimestamp() };
+    if (typeof normalizedPayload.name === "string" && normalizedPayload.name.trim()) {
+      patch.name = normalizedPayload.name.trim();
+    }
+    if (Number.isFinite(Number(normalizedPayload.amount)) && Number(normalizedPayload.amount) > 0) {
+      patch.amount = Number(normalizedPayload.amount);
+    }
+    if (normalizedPayload.active === true || normalizedPayload.active === false) {
+      patch.active = normalizedPayload.active;
+    }
+    if (normalizedPayload.frequency) {
+      const freq = String(normalizedPayload.frequency).toLowerCase() === "weekly" ? "weekly" : "monthly";
+      patch.frequency = freq;
+      if (freq === "weekly") {
+        let w = Number(normalizedPayload.chargeWeekday);
+        if (Number.isFinite(w)) patch.chargeWeekday = Math.min(6, Math.max(0, Math.floor(w)));
+        patch.chargeDayOfMonth = null;
+      } else {
+        let d = Number(normalizedPayload.chargeDayOfMonth);
+        if (Number.isFinite(d)) patch.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(d)));
+        patch.chargeWeekday = null;
+      }
+    } else {
+      if (Number.isFinite(Number(normalizedPayload.chargeWeekday))) {
+        patch.chargeWeekday = Math.min(6, Math.max(0, Math.floor(Number(normalizedPayload.chargeWeekday))));
+      }
+      if (Number.isFinite(Number(normalizedPayload.chargeDayOfMonth))) {
+        patch.chargeDayOfMonth = Math.min(31, Math.max(1, Math.floor(Number(normalizedPayload.chargeDayOfMonth))));
+      }
+    }
+    await ref.set(patch, { merge: true });
+    return { ok: true, result: { expenseId: id }, resolutionMeta };
+  }
+
+  if (action === "delete_fixed_expense") {
+    const id = String(normalizedPayload.expenseId || "").trim();
+    if (!id) throw new Error("Falta expenseId.");
+    const ref = db.collection("businesses").doc(businessId).collection("fixedExpenses").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error("Gasto fijo no encontrado.");
+    await ref.delete();
+    return { ok: true, result: { expenseId: id }, resolutionMeta };
+  }
+
   return { ok: false, result: { skipped: true, reason: `Unsupported action: ${action}` } };
 }
 
