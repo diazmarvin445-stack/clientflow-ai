@@ -109,6 +109,16 @@ async function checkChatMayaHealth(businessId, incidentInfo) {
       status = STATUS_ERROR;
       explanation = "Faltan elementos o reglas clave para el chat Maya.";
     }
+
+    const runtimeProbe = await runMayaRuntimeUiProbe();
+    details.push(...runtimeProbe.details);
+    if (runtimeProbe.status === STATUS_ERROR) {
+      status = STATUS_ERROR;
+      explanation = runtimeProbe.explanation;
+    } else if (runtimeProbe.status === STATUS_WARNING && status !== STATUS_ERROR) {
+      status = STATUS_WARNING;
+      explanation = runtimeProbe.explanation;
+    }
   } catch (error) {
     status = STATUS_ERROR;
     explanation = "No se pudo validar la estructura de Chat Maya.";
@@ -121,6 +131,172 @@ async function checkChatMayaHealth(businessId, incidentInfo) {
   }
   details.push(`businessId detectado: ${businessId ? "sí" : "no"}`);
   return { status, explanation, details, checkedAt: formatNow() };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function withTimeout(promise, ms = 12000) {
+  return new Promise((resolve, reject) => {
+    const id = window.setTimeout(() => reject(new Error("Timeout en prueba de Maya UI")), ms);
+    promise
+      .then((value) => {
+        window.clearTimeout(id);
+        resolve(value);
+      })
+      .catch((err) => {
+        window.clearTimeout(id);
+        reject(err);
+      });
+  });
+}
+
+function readOverflow(el) {
+  const cs = window.getComputedStyle(el);
+  return {
+    x: cs.overflowX || "",
+    y: cs.overflowY || "",
+  };
+}
+
+async function runMayaRuntimeUiProbe() {
+  const details = [];
+  let status = STATUS_OK;
+  let explanation = "Chat Maya usable en pruebas de UI.";
+
+  /** @type {HTMLIFrameElement | null} */
+  let iframe = null;
+  try {
+    iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.tabIndex = -1;
+    iframe.style.position = "fixed";
+    iframe.style.left = "-20000px";
+    iframe.style.top = "0";
+    iframe.style.width = "390px";
+    iframe.style.height = "780px";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+    document.body.appendChild(iframe);
+
+    await withTimeout(
+      new Promise((resolve, reject) => {
+        iframe.addEventListener("load", resolve, { once: true });
+        iframe.addEventListener("error", () => reject(new Error("No se pudo cargar chat.html en iframe")), {
+          once: true,
+        });
+        iframe.src = "chat.html";
+      }),
+      15000,
+    );
+
+    await wait(1500);
+    const doc = iframe.contentDocument;
+    const win = iframe.contentWindow;
+    if (!doc || !win) {
+      return {
+        status: STATUS_ERROR,
+        explanation: "No se pudo acceder al documento de Chat Maya para pruebas de UI.",
+        details: ["iframe sin contentDocument/contentWindow"],
+      };
+    }
+
+    const messages = doc.querySelector("#yc-chat-stream, .yc-chat-stream, .maya-chat-messages");
+    const input = doc.querySelector("#yc-chat-input, #mayaInputBar, .maya-input-bar");
+    const possibleStreams = doc.querySelectorAll("#yc-chat-stream, .yc-chat-stream, .maya-chat-messages");
+
+    if (!messages || !input) {
+      return {
+        status: STATUS_ERROR,
+        explanation: "Chat Maya no renderiza contenedor de mensajes o input en runtime.",
+        details: [
+          `messages encontrado: ${messages ? "sí" : "no"}`,
+          `input encontrado: ${input ? "sí" : "no"}`,
+        ],
+      };
+    }
+
+    details.push(`Contenedores de mensajes detectados: ${possibleStreams.length}`);
+    if (possibleStreams.length > 1) {
+      status = STATUS_WARNING;
+      explanation = "Múltiples contenedores de mensajes pueden interferir con el layout.";
+      details.push("WARNING: Multiple containers interfering with layout");
+    }
+
+    const msgEl = /** @type {HTMLElement} */ (messages);
+    const inputEl = /** @type {HTMLElement} */ (input);
+
+    const beforeTop = msgEl.scrollTop;
+    const beforeHeight = msgEl.scrollHeight;
+    const beforeClient = msgEl.clientHeight;
+    msgEl.scrollTop = beforeTop + 120;
+    await wait(120);
+    const afterTop = msgEl.scrollTop;
+    const scrollHeightGt = beforeHeight > beforeClient;
+    const scrollMoved = afterTop !== beforeTop;
+    details.push(`scrollHeight/clientHeight: ${beforeHeight}/${beforeClient}`);
+    details.push(`scrollHeight > clientHeight: ${scrollHeightGt ? "sí" : "no"}`);
+    details.push(`scrollTop cambió tras prueba programática: ${scrollMoved ? "sí" : "no"}`);
+
+    if (scrollHeightGt && !scrollMoved) {
+      return {
+        status: STATUS_ERROR,
+        explanation: "Chat not scrollable",
+        details: [...details, "ERROR: Chat not scrollable"],
+      };
+    }
+
+    if (!scrollHeightGt) {
+      if (status !== STATUS_ERROR) {
+        status = STATUS_WARNING;
+        explanation = "No hay suficiente overflow para validar scroll completo en este momento.";
+      }
+      details.push("WARNING: No overflow yet (historial insuficiente para prueba completa)");
+    }
+
+    const parentIssues = [];
+    let ptr = msgEl.parentElement;
+    let hop = 0;
+    while (ptr && hop < 8) {
+      const ov = readOverflow(ptr);
+      const name = ptr.id ? `#${ptr.id}` : ptr.className ? `.${String(ptr.className).split(" ").join(".")}` : ptr.tagName;
+      if (ov.y === "hidden" && !ptr.classList.contains("maya-chat-card")) {
+        parentIssues.push(`${name} overflow-y hidden`);
+      }
+      ptr = ptr.parentElement;
+      hop += 1;
+    }
+    if (parentIssues.length) {
+      if (status !== STATUS_ERROR) status = STATUS_WARNING;
+      explanation = "Hay contenedores padre que podrían bloquear scroll.";
+      details.push(`WARNING: posibles bloqueos por overflow hidden (${parentIssues.length})`);
+      details.push(...parentIssues.slice(0, 3));
+    }
+
+    const msgRect = msgEl.getBoundingClientRect();
+    const inputRect = inputEl.getBoundingClientRect();
+    const viewportH = win.innerHeight || doc.documentElement.clientHeight || 0;
+    const inputNearBottom = viewportH > 0 ? viewportH - inputRect.bottom < 80 : false;
+    const inputAfterMessages = inputRect.top >= msgRect.bottom - 8;
+    details.push(`Input cerca del bottom viewport: ${inputNearBottom ? "sí" : "no"}`);
+    details.push(`Input debajo del stream: ${inputAfterMessages ? "sí" : "no"}`);
+    if ((!inputNearBottom || !inputAfterMessages) && status !== STATUS_ERROR) {
+      status = STATUS_WARNING;
+      explanation = "Layout de chat puede estar apilado incorrectamente.";
+      details.push("WARNING: posible layout incorrecto (input no fijo al fondo)");
+    }
+
+    return { status, explanation, details };
+  } catch (error) {
+    return {
+      status: STATUS_ERROR,
+      explanation: "No se pudo ejecutar la prueba real de UI de Maya.",
+      details: [`Error técnico: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  } finally {
+    if (iframe && iframe.parentElement) iframe.parentElement.removeChild(iframe);
+  }
 }
 
 async function checkCollectionRead(pathParts) {
