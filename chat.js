@@ -743,14 +743,34 @@ function formatMayaReadableBlocks(text) {
 /** @param {HTMLElement | null} messagesEl */
 function logChatScrollMetrics(messagesEl) {
   if (!messagesEl) return;
-  console.log("[MayaChat] messages container scrollHeight/clientHeight", {
+  console.log("[MayaChat] yc-chat-stream metrics", {
     scrollHeight: messagesEl.scrollHeight,
     clientHeight: messagesEl.clientHeight,
+    scrollTop: messagesEl.scrollTop,
   });
   console.log("[MayaChat Mobile Scroll]", {
     scrollTop: messagesEl.scrollTop,
     scrollHeight: messagesEl.scrollHeight,
     clientHeight: messagesEl.clientHeight,
+  });
+}
+
+/** @param {HTMLElement | null} stream */
+function logYcChatStreamDiagnostics(stream) {
+  if (!stream) {
+    console.log("[MayaChat] yc-chat-stream diagnostics", { exists: false });
+    return;
+  }
+  stream.scrollTop = 0;
+  const before = stream.scrollTop;
+  stream.scrollTop = Math.min(200, Math.max(stream.scrollHeight - stream.clientHeight, 0));
+  const after = stream.scrollTop;
+  console.log("[MayaChat] yc-chat-stream diagnostics", {
+    exists: true,
+    scrollHeight: stream.scrollHeight,
+    clientHeight: stream.clientHeight,
+    scrollTopBeforeProbe: before,
+    scrollTopAfterProbe: after,
   });
 }
 
@@ -1999,7 +2019,7 @@ function showWelcomeAssistant() {
 
 async function clearChatHistory() {
   // Limpiar UI del chat
-  const chatContainer = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
+  const chatContainer = document.getElementById("yc-chat-stream");
   if (chatContainer) chatContainer.innerHTML = "";
 
   // Limpiar localStorage
@@ -2028,15 +2048,9 @@ async function clearChatHistory() {
   }
 
   // Mostrar bienvenida
-  const container = document.getElementById("chatMessages") || document.getElementById("yc-chat-stream");
+  const container = document.getElementById("yc-chat-stream");
   if (container) {
-    if (container.id === "chatMessages") {
-      container.innerHTML = `
-      <div class="maya-message">Hola Marvin 👋</div>
-    `;
-    } else {
-      showWelcomeAssistant();
-    }
+    showWelcomeAssistant();
   }
 }
 
@@ -2795,8 +2809,9 @@ async function bootWithUser(user) {
       stream.innerHTML = "";
       showWelcomeAssistant();
       wireMayaMobileScrollDebug(stream);
+      logYcChatStreamDiagnostics(stream);
       console.log("[MayaChat] rebuilt simple layout mounted");
-      console.log("[MayaChat] message scroll container:", stream);
+      console.log("[MayaChat] active message container is yc-chat-stream:", stream);
     }
 
     setComposerEnabled(true);

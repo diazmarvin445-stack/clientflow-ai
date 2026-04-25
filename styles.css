@@ -8974,7 +8974,8 @@ body.yourcolor-chat-page .maya-chat-card {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  max-height: min(720px, calc(100dvh - 200px));
+  height: 100%;
+  max-height: 100%;
 }
 
 body.yourcolor-chat-page .maya-chat-header {
@@ -9011,9 +9012,6 @@ body.yourcolor-chat-page .maya-input-bar {
   padding: 10px;
   background: #fff;
   border-top: 1px solid #eee;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
 }
 
 body.yourcolor-chat-page #yc-chat-input {
@@ -9075,7 +9073,7 @@ body.yourcolor-chat-page .maya-cc-alerts {
 body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll:hover .maya-cc-alerts,
 body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll:focus-within .maya-cc-alerts {
   max-height: 84px;
-  overflow-y: auto;
+  overflow: hidden;
   padding-top: 0.45rem;
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border);
