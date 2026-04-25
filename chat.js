@@ -717,6 +717,29 @@ function logChatScrollMetrics(messagesEl) {
     scrollHeight: messagesEl.scrollHeight,
     clientHeight: messagesEl.clientHeight,
   });
+  console.log("[MayaChat Mobile Scroll]", {
+    scrollTop: messagesEl.scrollTop,
+    scrollHeight: messagesEl.scrollHeight,
+    clientHeight: messagesEl.clientHeight,
+  });
+}
+
+/** @param {HTMLElement | null} messagesEl */
+function wireMayaMobileScrollDebug(messagesEl) {
+  if (!messagesEl) return;
+  if (messagesEl.dataset.mobileScrollDebugWired === "1") return;
+  messagesEl.dataset.mobileScrollDebugWired = "1";
+  messagesEl.addEventListener(
+    "scroll",
+    () => {
+      console.log("[MayaChat Mobile Scroll]", {
+        scrollTop: messagesEl.scrollTop,
+        scrollHeight: messagesEl.scrollHeight,
+        clientHeight: messagesEl.clientHeight,
+      });
+    },
+    { passive: true },
+  );
 }
 
 function renderHeader(business) {
@@ -2530,6 +2553,7 @@ async function bootWithUser(user) {
       stream.hidden = false;
       stream.innerHTML = "";
       showWelcomeAssistant();
+      wireMayaMobileScrollDebug(stream);
     }
 
     setComposerEnabled(true);

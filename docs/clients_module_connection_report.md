@@ -1,4 +1,5 @@
-# Clients Module Connection Report
+
+### # Clients Module Connection Report
 
 ## Scope completed
 
@@ -48,8 +49,7 @@ The sync function now maintains:
 - `tags` (default empty array)
 
 ## Channel connections
-
-### Manual orders
+Manual orders
 
 - Manual order creation already routes to backend order creation (`processNewOrder`).
 - `processNewOrder` now calls `syncClientRecord(...)` to:

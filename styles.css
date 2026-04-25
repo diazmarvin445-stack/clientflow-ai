@@ -8825,6 +8825,39 @@ body.dash-body.maya-cc-page .dash-main {
 }
 
 @media (max-width: 768px) {
+  html,
+  body,
+  body.dash-body.maya-cc-page {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body.dash-body.maya-cc-page .dash-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .yc-chat-page .dash-main,
+  .maya-cc-page .maya-cc,
+  .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat,
+  .maya-cc-zone--chat > .maya-cc-zone__scroll,
+  .maya-cc-zone--chat .yc-chat-wrap,
+  .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
+    height: calc(100dvh - 150px);
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .yc-chat-page .dash-shell,
   .yc-chat-page .dash-main,
   .maya-cc-page .maya-cc,
@@ -8861,10 +8894,11 @@ body.dash-body.maya-cc-page .dash-main {
   .yc-chat-stream {
     flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    overflow-y: scroll;
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     padding: 0.7rem 0.7rem 1rem;
+    touch-action: pan-y;
   }
 
   .yc-chat-composer {

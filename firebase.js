@@ -1,3 +1,7 @@
+
+
+
+
 /**
  * ClientFlow AI — Firebase (modular SDK)
  * Ensure Firestore rules allow authenticated writes to `businesses`. Onboarding usa cuenta con correo (mismo uid que el panel).
