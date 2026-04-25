@@ -9345,6 +9345,94 @@ body.yourcolor-chat-page .yc-maya-input-v2 {
   }
 }
 
+/* ===== YourColor Maya root scroll ownership (final) ===== */
+body.dash-body.yourcolor-chat-page {
+  height: 100dvh;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+body.dash-body.yourcolor-chat-page .dash-shell,
+body.dash-body.yourcolor-chat-page .dash-main,
+body.dash-body.yourcolor-chat-page .maya-cc,
+body.dash-body.yourcolor-chat-page #maya-cc-zone-chat,
+body.dash-body.yourcolor-chat-page #maya-cc-zone-chat > .maya-cc-zone__scroll,
+body.dash-body.yourcolor-chat-page .yc-maya-panel-v2-wrap,
+body.dash-body.yourcolor-chat-page .yc-maya-panel-v2 {
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.dash-body.yourcolor-chat-page .dash-shell {
+  height: 100dvh;
+}
+
+body.dash-body.yourcolor-chat-page .dash-main {
+  flex: 1 1 auto;
+  padding: 0;
+}
+
+body.dash-body.yourcolor-chat-page .maya-cc {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+}
+
+body.dash-body.yourcolor-chat-page .maya-cc-top-tabs {
+  flex: 0 0 auto;
+}
+
+body.dash-body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat {
+  flex: 1 1 auto;
+  height: auto;
+  max-height: none;
+  margin: 0;
+}
+
+body.dash-body.yourcolor-chat-page .yc-maya-panel-v2 {
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+body.dash-body.yourcolor-chat-page .yc-maya-messages-v2 {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+body.dash-body.yourcolor-chat-page .yc-maya-input-v2 {
+  flex: 0 0 auto;
+}
+
+/* WhatsApp hidden tab must occupy zero space while Maya is active. */
+body.dash-body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-wa,
+body.dash-body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-stats {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Legacy wrappers from old chat layout: hard-hide if injected. */
+body.dash-body.yourcolor-chat-page .yc-chat-wrap,
+body.dash-body.yourcolor-chat-page .yc-chat-panel,
+body.dash-body.yourcolor-chat-page .yc-chat-stream,
+body.dash-body.yourcolor-chat-page .maya-chat-page,
+body.dash-body.yourcolor-chat-page .maya-chat-card,
+body.dash-body.yourcolor-chat-page .maya-input-bar {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 .yc-msg {
   display: flex;
   max-width: 88%;
