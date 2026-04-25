@@ -135,10 +135,6 @@
                 <div class="fin-fixed-panel__head">
                   <div>
                     <h3 class="fin-fixed-panel__title" id="fin-fixed-title">Gastos fijos</h3>
-                    <p class="fin-fixed-panel__sub" id="fin-fixed-sub">
-                      Cada gasto tiene una <strong>fecha de cobro</strong> (día/mes/año). Mensual: mismo día cada mes; semanal: cada 7 días.
-                      <strong>No suman al balance</strong> hasta que llegue esa fecha (ni antes). Los documentos viejos sin fecha usan el modo anterior (día del mes / día de semana).
-                    </p>
                   </div>
                   <button type="button" class="dash-quick-btn dash-quick-btn--primary" id="fin-fixed-add">
                     Agregar gasto fijo
@@ -257,6 +253,7 @@
             <select id="fin-fixed-frequency" class="fin-input" required>
               <option value="monthly" selected>Mensual (misma fecha cada mes)</option>
               <option value="weekly">Semanal (cada 7 días desde la fecha)</option>
+              <option value="annual">Anual (misma fecha cada año)</option>
             </select>
           </label>
 

@@ -25,7 +25,6 @@ import {
   fetchCampaignsListAndStats,
   fetchFinanceTransactionsCurrentMonth,
   fetchCalendarEventsForChat,
-  sumAccruedFixedExpensesBetween,
   formatBusinessMeta,
   financeIncomeCountsTowardRealized,
   initialsFromName,
@@ -2282,9 +2281,6 @@ async function loadFirebaseContext(business, options = {}) {
     else if (financeIncomeCountsTowardRealized(row)) monthIncome += amt;
   }
 
-  const nowCtx = new Date();
-  const monthStartCtx = new Date(nowCtx.getFullYear(), nowCtx.getMonth(), 1, 0, 0, 0, 0);
-  const monthEndCtx = new Date(nowCtx.getFullYear(), nowCtx.getMonth() + 1, 0, 23, 59, 59, 999);
   const fixedRowsRaw =
     yourColorFin && fixedSnapMaybe && /** @type {{ docs?: unknown[] }} */ (fixedSnapMaybe).docs
       ? /** @type {{ docs: { id: string; data: () => Record<string, unknown> }[] }} */ (fixedSnapMaybe).docs.map((d) => ({
@@ -2292,15 +2288,7 @@ async function loadFirebaseContext(business, options = {}) {
           ...d.data(),
         }))
       : [];
-  let monthFixedAccrued = 0;
-  if (yourColorFin && fixedRowsRaw.length) {
-    try {
-      monthFixedAccrued = sumAccruedFixedExpensesBetween(fixedRowsRaw, monthStartCtx, monthEndCtx, nowCtx);
-    } catch (e) {
-      console.warn("[YourColor Chat] fixed expenses accrued", e);
-    }
-  }
-  const monthExpense = monthVariableExpense + monthFixedAccrued;
+  const monthExpense = monthVariableExpense;
 
   const fixedExpensesForChat = fixedRowsRaw.map((r) => {
     const fc = r.fechaCobro;
@@ -2356,13 +2344,13 @@ async function loadFirebaseContext(business, options = {}) {
       income: monthIncome,
       expense: monthExpense,
       variableExpense: monthVariableExpense,
-      fixedExpenseAccrued: monthFixedAccrued,
+      fixedExpenseAccrued: 0,
       net: monthIncome - monthExpense,
     },
     financeRecent: serializeForAi(financeRows),
     fixedExpenses: yourColorFin ? serializeForAi(fixedExpensesForChat) : [],
     financePanelNote: yourColorFin
-      ? "YourColor: fixedExpenses incluyen fechaCobro (YYYY-MM-DD) y frecuencia; el balance solo cuenta cuando la fecha de cobro ya llegó. Sin fechaCobro aplica el modo legado."
+      ? "YourColor: fixedExpenses es la programación recurrente; el balance de finanzas se refleja cuando cada cobro se aplica automáticamente y se registra en finance."
       : null,
     stats: {
       jobsActiveCount: jobSplit.active.length,

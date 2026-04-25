@@ -81,7 +81,12 @@ export function validateAndNormalizeMayaAction(action, payload) {
     const freq = String(normalized.frequency ?? data.frequency ?? "monthly")
       .trim()
       .toLowerCase();
-    normalized.frequency = freq === "weekly" || freq === "semanal" ? "weekly" : "monthly";
+    normalized.frequency =
+      freq === "weekly" || freq === "semanal"
+        ? "weekly"
+        : freq === "annual" || freq === "yearly" || freq === "anual"
+          ? "annual"
+          : "monthly";
   }
   if (normalized.chargeDayOfMonth !== undefined) {
     const d = Number(normalized.chargeDayOfMonth);

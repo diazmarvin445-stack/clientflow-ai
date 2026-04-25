@@ -846,6 +846,28 @@ function fixedExpStepWeekly(anchorNoon) {
 
 /**
  * @param {Date} anchorNoon
+ */
+function fixedExpStepAnnual(anchorNoon) {
+  const y = anchorNoon.getFullYear() + 1;
+  const m = anchorNoon.getMonth();
+  const day = anchorNoon.getDate();
+  const last = new Date(y, m + 1, 0).getDate();
+  return fixedExpAtNoon(new Date(y, m, Math.min(day, last), 12, 0, 0, 0));
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {"monthly" | "weekly" | "annual"}
+ */
+function fixedExpNormalizeFreq(raw) {
+  const f = String(raw || "monthly").toLowerCase();
+  if (f === "weekly") return "weekly";
+  if (f === "annual" || f === "yearly" || f === "anual") return "annual";
+  return "monthly";
+}
+
+/**
+ * @param {Date} anchorNoon
  * @param {"monthly" | "weekly"} freq
  * @param {Date} rangeStartDay
  */
@@ -855,7 +877,7 @@ function fixedExpAdvanceToOnOrAfter(anchorNoon, freq, rangeStartDay) {
   let guard = 0;
   while (d.getTime() < target && guard < 480) {
     guard += 1;
-    d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+    d = freq === "weekly" ? fixedExpStepWeekly(d) : freq === "annual" ? fixedExpStepAnnual(d) : fixedExpStepMonthly(d);
   }
   return d;
 }
@@ -884,7 +906,7 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
     if (raw.active === false) continue;
     const amt = Number(raw.amount);
     if (!Number.isFinite(amt) || amt <= 0) continue;
-    const freq = String(raw.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+    const freq = fixedExpNormalizeFreq(raw.frequency);
     const anchor = fixedExpenseParseFechaCobro(raw.fechaCobro);
 
     if (anchor) {
@@ -896,7 +918,7 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
         if (d.getTime() >= rs.getTime() && d.getTime() <= re.getTime() && d.getTime() <= effectiveEnd.getTime()) {
           sum += amt;
         }
-        d = freq === "weekly" ? fixedExpStepWeekly(d) : fixedExpStepMonthly(d);
+        d = freq === "weekly" ? fixedExpStepWeekly(d) : freq === "annual" ? fixedExpStepAnnual(d) : fixedExpStepMonthly(d);
       }
       continue;
     }
@@ -933,6 +955,22 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
         }
         d.setDate(d.getDate() + 1);
       }
+    } else if (freq === "annual") {
+      const anchorAnnual = fixedExpenseParseFechaCobro(raw.fechaCobro);
+      if (anchorAnnual) {
+        let y = rs.getFullYear();
+        const endY = effectiveEnd.getFullYear();
+        let guard = 0;
+        while (y <= endY && guard < 12) {
+          guard += 1;
+          const m = anchorAnnual.getMonth();
+          const day = anchorAnnual.getDate();
+          const last = new Date(y, m + 1, 0).getDate();
+          const due = new Date(y, m, Math.min(day, last), 12, 0, 0, 0);
+          if (due.getTime() >= rs.getTime() && due.getTime() <= effectiveEnd.getTime()) sum += amt;
+          y += 1;
+        }
+      }
     }
   }
   return sum;
@@ -945,7 +983,7 @@ export function sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, asOfD
  * @returns {Date | null}
  */
 export function fixedExpenseNextDueOnOrAfter(row, fromDate = new Date()) {
-  const freq = String(row.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+  const freq = fixedExpNormalizeFreq(row.frequency);
   const anchor = fixedExpenseParseFechaCobro(row.fechaCobro);
   if (anchor) {
     return fixedExpAdvanceToOnOrAfter(anchor, freq, fromDate);
@@ -960,6 +998,21 @@ export function fixedExpenseNextDueOnOrAfter(row, fromDate = new Date()) {
       if (d.getDay() === wd) return fixedExpAtNoon(d);
     }
     return null;
+  }
+  if (freq === "annual") {
+    const anchor = fixedExpenseParseFechaCobro(row.fechaCobro);
+    if (anchor) {
+      let y = start.getFullYear();
+      for (let guard = 0; guard < 8; guard++) {
+        const m = anchor.getMonth();
+        const day = anchor.getDate();
+        const last = new Date(y, m + 1, 0).getDate();
+        const due = new Date(y, m, Math.min(day, last), 12, 0, 0, 0);
+        if (due.getTime() >= start.getTime()) return due;
+        y += 1;
+      }
+      return null;
+    }
   }
   const domRaw = row.chargeDayOfMonth;
   const dClamped = Number.isFinite(Number(domRaw)) ? Math.min(31, Math.max(1, Math.floor(Number(domRaw)))) : 1;
@@ -988,9 +1041,9 @@ export function fixedExpenseNextChargeStrictlyAfter(row, asOf = new Date()) {
   const first = fixedExpenseNextDueOnOrAfter(row, fixedExpStartOfDay(asOf));
   if (!first) return null;
   const eo = fixedExpEndOfDay(asOf);
-  const freq = String(row.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+  const freq = fixedExpNormalizeFreq(row.frequency);
   if (first.getTime() <= eo.getTime()) {
-    return freq === "weekly" ? fixedExpStepWeekly(first) : fixedExpStepMonthly(first);
+    return freq === "weekly" ? fixedExpStepWeekly(first) : freq === "annual" ? fixedExpStepAnnual(first) : fixedExpStepMonthly(first);
   }
   return first;
 }

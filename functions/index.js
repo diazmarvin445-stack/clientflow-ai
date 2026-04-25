@@ -19,7 +19,6 @@ import { resolveMayaActionEntities } from "./maya-entity-resolver.js";
 import { executeMayaAction } from "./maya-action-executor.js";
 import { buildMayaActionSuccessMessage } from "./maya-response-builder.js";
 import { buildMayaContextSnapshot } from "./maya-context-snapshot.js";
-import { sumAccruedFixedExpensesBetween } from "./fixed-expense-math.js";
 
 /** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
@@ -1071,11 +1070,7 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
     fixedSnapMaybe && Array.isArray(fixedSnapMaybe.docs)
       ? fixedSnapMaybe.docs.map((d) => ({ id: d.id, ...d.data() }))
       : [];
-  let monthFixedAccrued = 0;
-  if (yourColorFin && fixedRowsRaw.length) {
-    monthFixedAccrued = sumAccruedFixedExpensesBetween(fixedRowsRaw, startM, endM, now);
-  }
-  const monthExpenseTotal = monthVariableExpense + monthFixedAccrued;
+  const monthExpenseTotal = monthVariableExpense;
 
   const fixedExpensesForContext = fixedRowsRaw.map((r) => ({
     id: r.id,
@@ -1119,14 +1114,14 @@ async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
       income: monthIncome,
       expense: monthExpenseTotal,
       variableExpense: monthVariableExpense,
-      fixedExpenseAccrued: monthFixedAccrued,
+      fixedExpenseAccrued: 0,
       net: monthIncome - monthExpenseTotal,
     },
     financeRecent: mayaPlainJsonForContext(financeRecentCap),
     campaigns: mayaPlainJsonForContext(campaignsShort),
     fixedExpenses: yourColorFin ? mayaPlainJsonForContext(fixedExpensesForContext) : [],
     financePanelNote: yourColorFin
-      ? "YourColor: gastos fijos usan fechaCobro (fecha calendario completa) y frecuencia mensual (+1 mes mismo día) o semanal (+7 días). No suman al balance hasta esa fecha. Sin fechaCobro se usan los campos legado chargeDayOfMonth / chargeWeekday."
+      ? "YourColor: fixedExpenses es programación recurrente (mensual/semanal/anual) con fechaCobro; al vencerse se registra automáticamente un movimiento en finance y luego avanza al siguiente período."
       : null,
     stats: {
       jobsActiveCount: jobsActive.length,
@@ -2225,10 +2220,7 @@ function financeBoundsForPeriod(period) {
  * @param {"day" | "week" | "month" | "all"} period
  */
 async function aggregateFinanceTotals(db, businessId, period) {
-  const { contains, rangeStart, rangeEnd } = financeBoundsForPeriod(period);
-  const bizSnap = await db.collection("businesses").doc(businessId).get();
-  const bizData = bizSnap.exists ? bizSnap.data() || {} : {};
-  const yourColorFin = isYourColorFinanceBusinessFromData(bizData);
+  const { contains } = financeBoundsForPeriod(period);
 
   const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(3000).get();
   let income = 0;
@@ -2251,14 +2243,7 @@ async function aggregateFinanceTotals(db, businessId, period) {
     else if (financeIncomeCountsAsRealizedAdmin(d)) income += amt;
   });
 
-  let fixedAccrued = 0;
-  if (yourColorFin && rangeStart && rangeEnd && period !== "all") {
-    const fixedSnap = await db.collection("businesses").doc(businessId).collection("fixedExpenses").get();
-    const rows = fixedSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    fixedAccrued = sumAccruedFixedExpensesBetween(rows, rangeStart, rangeEnd, new Date());
-  }
-  const expenseTotal = expense + fixedAccrued;
-  return { income, expense: expenseTotal, variableExpense: expense, fixedAccrued, net: income - expenseTotal };
+  return { income, expense, variableExpense: expense, fixedAccrued: 0, net: income - expense };
 }
 
 /**
@@ -4324,6 +4309,189 @@ export const clientsLifecycleDaily = onSchedule(
       }
     }
     console.log("[CLIENT_LIFECYCLE_DAILY]", { totalScanned, totalUpdated });
+  },
+);
+
+function fixedAutoToDate(v) {
+  if (v == null) return null;
+  if (typeof /** @type {{ toDate?: () => Date }} */ (v).toDate === "function") {
+    try {
+      const d = /** @type {{ toDate: () => Date }} */ (v).toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  }
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v.trim())) {
+    const d = new Date(`${v.trim().slice(0, 10)}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function fixedAutoNormalizeFrequency(v) {
+  const f = String(v || "monthly").trim().toLowerCase();
+  if (f === "weekly") return "weekly";
+  if (f === "annual" || f === "yearly" || f === "anual") return "annual";
+  return "monthly";
+}
+
+function fixedAutoNextDate(current, frequency) {
+  const base = new Date(current);
+  base.setHours(12, 0, 0, 0);
+  if (frequency === "weekly") {
+    base.setDate(base.getDate() + 7);
+    return base;
+  }
+  if (frequency === "annual") {
+    const y = base.getFullYear() + 1;
+    const m = base.getMonth();
+    const d = base.getDate();
+    const last = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(d, last), 12, 0, 0, 0);
+  }
+  const y = base.getFullYear();
+  const m = base.getMonth() + 1;
+  const ny = m > 11 ? y + 1 : y;
+  const nm = m > 11 ? 0 : m;
+  const d = base.getDate();
+  const last = new Date(ny, nm + 1, 0).getDate();
+  return new Date(ny, nm, Math.min(d, last), 12, 0, 0, 0);
+}
+
+function fixedAutoPeriodKey(dueDate, frequency) {
+  const y = dueDate.getFullYear();
+  const m = String(dueDate.getMonth() + 1).padStart(2, "0");
+  const d = String(dueDate.getDate()).padStart(2, "0");
+  if (frequency === "weekly") return `${y}-${m}-${d}`;
+  if (frequency === "annual") return String(y);
+  return `${y}-${m}`;
+}
+
+async function processFixedRecurringForBusiness(db, businessId, now) {
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  let applied = 0;
+  let advanced = 0;
+
+  const fixedSnap = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("fixedExpenses")
+    .where("active", "==", true)
+    .get();
+
+  for (const docSnap of fixedSnap.docs) {
+    const row = docSnap.data() || {};
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const frequency = fixedAutoNormalizeFrequency(row.frequency);
+    let due = fixedAutoToDate(row.fechaCobro);
+    if (!due) continue;
+    due.setHours(12, 0, 0, 0);
+
+    const existingPeriods = new Set();
+    const existingSnap = await db
+      .collection("businesses")
+      .doc(businessId)
+      .collection("finance")
+      .where("fixedExpenseId", "==", docSnap.id)
+      .limit(250)
+      .get();
+    existingSnap.forEach((d) => {
+      const data = d.data() || {};
+      const pk = typeof data.fixedExpensePeriod === "string" ? data.fixedExpensePeriod.trim() : "";
+      if (pk) existingPeriods.add(pk);
+    });
+    const lastAppliedPeriod =
+      typeof row.lastAppliedPeriod === "string" && row.lastAppliedPeriod.trim() ? row.lastAppliedPeriod.trim() : "";
+    if (lastAppliedPeriod) existingPeriods.add(lastAppliedPeriod);
+
+    let loops = 0;
+    let changed = false;
+    let localAppliedCount = 0;
+    let lastAppliedAt = fixedAutoToDate(row.lastAppliedAt);
+    let lastPeriod = lastAppliedPeriod || null;
+
+    while (due.getTime() <= todayEnd.getTime() && loops < 120) {
+      loops += 1;
+      const periodKey = fixedAutoPeriodKey(due, frequency);
+      if (!existingPeriods.has(periodKey)) {
+        const desc =
+          typeof row.name === "string" && row.name.trim()
+            ? `${row.name.trim()} (Gasto fijo automático)`
+            : "Gasto fijo automático";
+        await db
+          .collection("businesses")
+          .doc(businessId)
+          .collection("finance")
+          .add({
+            type: "expense",
+            status: "cobrado",
+            amount,
+            category: "otros_gastos",
+            description: desc,
+            clientId: null,
+            orderId: null,
+            createdAt: FieldValue.serverTimestamp(),
+            createdBy: "system",
+            date: Timestamp.fromDate(due),
+            fixedExpenseId: docSnap.id,
+            fixedExpensePeriod: periodKey,
+            fixedAuto: true,
+          });
+        existingPeriods.add(periodKey);
+        changed = true;
+        localAppliedCount += 1;
+      }
+      lastAppliedAt = new Date(due);
+      lastPeriod = periodKey;
+      due = fixedAutoNextDate(due, frequency);
+      changed = true;
+    }
+
+    if (changed) {
+      const patch = {
+        fechaCobro: Timestamp.fromDate(due),
+        lastAppliedPeriod: lastPeriod,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (lastAppliedAt) patch.lastAppliedAt = Timestamp.fromDate(lastAppliedAt);
+      await docSnap.ref.set(patch, { merge: true });
+      applied += localAppliedCount;
+      advanced += 1;
+    }
+  }
+
+  return { applied, advanced };
+}
+
+export const fixedExpensesRecurringDaily = onSchedule(
+  {
+    schedule: "*/20 * * * *",
+    timeZone: "America/Guayaquil",
+    memory: "256MiB",
+  },
+  async () => {
+    const db = getAdminDb();
+    const businesses = await db.collection("businesses").get();
+    const now = new Date();
+    let businessesTouched = 0;
+    let totalApplied = 0;
+    let totalAdvanced = 0;
+    for (const b of businesses.docs) {
+      const out = await processFixedRecurringForBusiness(db, b.id, now);
+      if (out.advanced > 0 || out.applied > 0) businessesTouched += 1;
+      totalApplied += out.applied;
+      totalAdvanced += out.advanced;
+    }
+    console.log("[FIXED_EXPENSES_RECURRING]", {
+      at: now.toISOString(),
+      businessesTouched,
+      totalApplied,
+      totalAdvanced,
+    });
   },
 );
 

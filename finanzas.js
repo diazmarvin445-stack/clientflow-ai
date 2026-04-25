@@ -18,7 +18,6 @@ import {
   formatBusinessMeta,
   initialsFromName,
   financeIncomeCountsTowardRealized,
-  sumAccruedFixedExpensesBetween,
   fixedExpenseScheduleUi,
   fixedExpenseNextDueOnOrAfter,
 } from "./dashboard-data.js";
@@ -61,10 +60,10 @@ let unsubFixedExpenses = null;
 /** @type {{ id: string, type: string, amount: number, category: string, description: string, date: Date | null, createdBy?: string }[]} */
 let rowsCache = [];
 
-/** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean, fechaCobro?: Date | null, chargeDayOfMonth?: number, chargeWeekday?: number }[]} */
+/** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean, fechaCobro?: Date | null, lastAppliedAt?: Date | null, chargeDayOfMonth?: number, chargeWeekday?: number }[]} */
 let fixedExpensesCache = [];
 
-/** YourColor / custom_apparel: gastos fijos (mensual / semanal) en Finanzas. */
+/** YourColor / custom_apparel: gastos fijos (mensual / semanal / anual) en Finanzas. */
 let yourColorFinMode = false;
 
 /**
@@ -72,7 +71,9 @@ let yourColorFinMode = false;
  */
 function describeFixedFrequency(row) {
   const f = String(row.frequency || "monthly").toLowerCase();
-  return f === "weekly" ? "Cada 7 días (semanal)" : "Mensual (mismo día cada mes)";
+  if (f === "weekly") return "Semanal (cada 7 días)";
+  if (f === "annual") return "Anual (misma fecha cada año)";
+  return "Mensual (misma fecha cada mes)";
 }
 
 /**
@@ -231,45 +232,23 @@ function filterRows(rows, period) {
 
 /**
  * @param {typeof rowsCache} rows
- * @param {number} [fixedAccruedAddon] gastos fijos ya devengados en el período (hasta hoy, según día de cobro)
  */
-function summarize(rows, fixedAccruedAddon = 0) {
+function summarize(rows) {
   let income = 0;
-  let variableExpense = 0;
+  let expense = 0;
   for (const r of rows) {
     const a = Number(r.amount);
     if (!Number.isFinite(a) || a <= 0) continue;
     if (r.type === "income") {
       if (!financeIncomeCountsTowardRealized(r)) continue;
       income += a;
-    } else if (r.type === "expense") variableExpense += a;
+    } else if (r.type === "expense") expense += a;
   }
-  const addon = currentPeriod === "all" ? 0 : Math.max(0, fixedAccruedAddon);
-  const expense = variableExpense + addon;
-  return { income, expense, variableExpense, net: income - expense };
+  return { income, expense, net: income - expense };
 }
 
 function updateSummaryCards(rows) {
-  let fixedAddon = 0;
-  if (yourColorFinMode && currentPeriod !== "all") {
-    const bounds = periodBounds(currentPeriod);
-    if (bounds.start && bounds.end) {
-      fixedAddon = sumAccruedFixedExpensesBetween(
-        fixedExpensesCache.map((r) => ({
-          active: r.active,
-          amount: r.amount,
-          frequency: r.frequency,
-          fechaCobro: r.fechaCobro,
-          chargeDayOfMonth: r.chargeDayOfMonth,
-          chargeWeekday: r.chargeWeekday,
-        })),
-        bounds.start,
-        bounds.end,
-        new Date(),
-      );
-    }
-  }
-  const { income, expense, net, variableExpense } = summarize(rows, fixedAddon);
+  const { income, expense, net } = summarize(rows);
   const incEl = document.getElementById("fin-sum-income");
   const expEl = document.getElementById("fin-sum-expense");
   const netEl = document.getElementById("fin-sum-net");
@@ -278,13 +257,8 @@ function updateSummaryCards(rows) {
   if (incEl) incEl.textContent = formatUsd(income);
   if (expEl) expEl.textContent = formatUsd(expense);
   if (expNote) {
-    if (yourColorFinMode && currentPeriod !== "all" && fixedAddon > 0) {
-      expNote.hidden = false;
-      expNote.textContent = `Incluye fijos ya cobrados en el período: ${formatUsd(fixedAddon)} · Variables: ${formatUsd(variableExpense)}`;
-    } else {
-      expNote.hidden = true;
-      expNote.textContent = "";
-    }
+    expNote.hidden = true;
+    expNote.textContent = "";
   }
   if (netEl) {
     netEl.textContent = formatUsd(net);
@@ -448,7 +422,7 @@ function buildFixedRow(row) {
   meta.className = "fin-fixed-item__meta";
   meta.textContent = describeFixedFrequency(row);
 
-  const { nextCobro, status } = fixedExpenseScheduleUi(
+  const { nextCobro } = fixedExpenseScheduleUi(
     /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (row)),
     new Date(),
   );
@@ -463,8 +437,15 @@ function buildFixedRow(row) {
       })}`
     : "Próximo cobro: —";
   const badge = document.createElement("span");
-  badge.className = `fin-fixed-badge ${status === "listo" ? "fin-fixed-badge--listo" : "fin-fixed-badge--pendiente"}`;
-  badge.textContent = status === "listo" ? "Aplicado" : "Pendiente";
+  const la = row.lastAppliedAt instanceof Date && !Number.isNaN(row.lastAppliedAt.getTime()) ? row.lastAppliedAt : null;
+  const now = new Date();
+  const appliedToday =
+    !!la &&
+    la.getDate() === now.getDate() &&
+    la.getMonth() === now.getMonth() &&
+    la.getFullYear() === now.getFullYear();
+  badge.className = `fin-fixed-badge ${appliedToday ? "fin-fixed-badge--listo" : "fin-fixed-badge--pendiente"}`;
+  badge.textContent = appliedToday ? "Aplicado" : "Pendiente";
   left.append(name, meta, nextLine, badge);
 
   const amt = document.createElement("span");
@@ -570,7 +551,7 @@ function openFixedModal(editId = null) {
     if (amtI) amtI.value = row && Number.isFinite(row.amount) ? String(row.amount) : "";
     if (freq) {
       const fv = String(row?.frequency || "monthly").toLowerCase();
-      freq.value = fv === "weekly" ? "weekly" : "monthly";
+      freq.value = fv === "weekly" || fv === "annual" ? fv : "monthly";
     }
     if (fechaI) {
       if (row?.fechaCobro instanceof Date && !Number.isNaN(row.fechaCobro.getTime())) {
@@ -629,7 +610,7 @@ function wireFixedModal() {
     const payload = {
       name,
       amount: rawAmt,
-      frequency: frequency === "weekly" ? "weekly" : "monthly",
+      frequency: frequency === "weekly" ? "weekly" : frequency === "annual" ? "annual" : "monthly",
       fechaCobro: Timestamp.fromDate(fcDate),
       chargeDayOfMonth: null,
       chargeWeekday: null,
@@ -682,6 +663,7 @@ function subscribeFixedExpenses(bid) {
         const chargeDayOfMonth = Number(data.chargeDayOfMonth);
         const chargeWeekday = Number(data.chargeWeekday);
         const fechaCobro = tsToDate(data.fechaCobro);
+        const lastAppliedAt = tsToDate(data.lastAppliedAt);
         fixedExpensesCache.push({
           id: d.id,
           name: name || "Sin nombre",
@@ -689,6 +671,7 @@ function subscribeFixedExpenses(bid) {
           frequency,
           active,
           fechaCobro,
+          lastAppliedAt,
           chargeDayOfMonth: Number.isFinite(chargeDayOfMonth) ? chargeDayOfMonth : undefined,
           chargeWeekday: Number.isFinite(chargeWeekday) ? chargeWeekday : undefined,
         });

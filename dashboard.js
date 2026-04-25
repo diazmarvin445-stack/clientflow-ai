@@ -12,7 +12,6 @@ import {
   formatBusinessMeta,
   initialsFromName,
   financeIncomeCountsTowardRealized,
-  sumAccruedFixedExpensesBetween,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
@@ -47,26 +46,12 @@ function toDate(v) {
  * @param {Record<string, unknown>[]} campaignRows
  */
 /**
- * @param {{ data: Record<string, unknown> }} business
- */
-function isYourColorFinanceBusiness(business) {
-  const name = String(business.data.businessName || "")
-    .trim()
-    .toLowerCase();
-  const cat = String(business.data.businessCategory || "")
-    .trim()
-    .toLowerCase();
-  return name === "yourcolor" || cat === "custom_apparel";
-}
-
-/**
  * @param {{ id: string, data: Record<string, unknown> }} business
  * @param {Record<string, unknown>[]} orders
  * @param {Record<string, unknown>[]} clients
  * @param {Record<string, unknown>[]} financeRows
  * @param {Record<string, unknown>[]} calendarRows
  * @param {Record<string, unknown>[]} campaignRows
- * @param {number} [monthFixedAccruedTotal] gastos fijos ya devengados en el mes (según día de cobro y hoy)
  */
 function renderDashboardSnapshot(
   business,
@@ -75,7 +60,6 @@ function renderDashboardSnapshot(
   financeRows,
   calendarRows,
   campaignRows,
-  monthFixedAccruedTotal = 0,
 ) {
   renderHeader(business);
   renderGreeting();
@@ -119,7 +103,7 @@ function renderDashboardSnapshot(
     if (!d || d < monthStart || d > monthEnd) return sum;
     return sum + (Number(r.amount) || 0);
   }, 0);
-  const monthExpense = monthExpenseVariables + Math.max(0, monthFixedAccruedTotal || 0);
+  const monthExpense = monthExpenseVariables;
 
   let activeCampaigns = 0;
   for (const row of campaignRows) {
@@ -308,24 +292,16 @@ async function loadDashboardForUser(user) {
   }
 
   const bid = business.id;
-  /** @type {{ orders: Record<string, unknown>[]; clients: Record<string, unknown>[]; finance: Record<string, unknown>[]; calendar: Record<string, unknown>[]; campaigns: Record<string, unknown>[]; fixedExpenses: Record<string, unknown>[] }} */
+  /** @type {{ orders: Record<string, unknown>[]; clients: Record<string, unknown>[]; finance: Record<string, unknown>[]; calendar: Record<string, unknown>[]; campaigns: Record<string, unknown>[] }} */
   const state = {
     orders: [],
     clients: [],
     finance: [],
     calendar: [],
     campaigns: [],
-    fixedExpenses: [],
   };
 
   const rerender = () => {
-    const today = new Date();
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
-    let monthFixedAccrued = 0;
-    if (isYourColorFinanceBusiness(business) && state.fixedExpenses.length) {
-      monthFixedAccrued = sumAccruedFixedExpensesBetween(state.fixedExpenses, monthStart, monthEnd, today);
-    }
     renderDashboardSnapshot(
       business,
       state.orders,
@@ -333,7 +309,6 @@ async function loadDashboardForUser(user) {
       state.finance,
       state.calendar,
       state.campaigns,
-      monthFixedAccrued,
     );
   };
 
@@ -370,19 +345,6 @@ async function loadDashboardForUser(user) {
       (err) => console.error("[dashboard] finance", err),
     ),
   );
-
-  if (isYourColorFinanceBusiness(business)) {
-    unsubs.push(
-      onSnapshot(
-        collection(db, "businesses", bid, "fixedExpenses"),
-        (snap) => {
-          state.fixedExpenses = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          rerender();
-        },
-        (err) => console.error("[dashboard] fixedExpenses", err),
-      ),
-    );
-  }
 
   unsubs.push(
     onSnapshot(

@@ -6,6 +6,12 @@ export async function executeMayaAction({
   resolved,
   handlers,
 }) {
+  const normalizeFixedFrequency = (raw) => {
+    const f = String(raw || "monthly").toLowerCase();
+    if (f === "weekly") return "weekly";
+    if (f === "annual" || f === "yearly" || f === "anual") return "annual";
+    return "monthly";
+  };
   const resolutionMeta = resolved?.meta || null;
   if (action === "create_client") {
     const result = await handlers.syncClientRecord(db, businessId, {
@@ -116,7 +122,7 @@ export async function executeMayaAction({
     const amt = Number(normalizedPayload.amount);
     if (!name) throw new Error("Falta nombre del gasto fijo.");
     if (!Number.isFinite(amt) || amt <= 0) throw new Error("Monto inválido.");
-    const freq = String(normalizedPayload.frequency || "monthly").toLowerCase() === "weekly" ? "weekly" : "monthly";
+    const freq = normalizeFixedFrequency(normalizedPayload.frequency);
     const active = normalizedPayload.active !== false;
     const fcRaw = normalizedPayload.fechaCobro;
     const ds = typeof fcRaw === "string" ? fcRaw.trim() : String(fcRaw ?? "").trim();
@@ -158,7 +164,7 @@ export async function executeMayaAction({
       patch.active = normalizedPayload.active;
     }
     if (normalizedPayload.frequency) {
-      patch.frequency = String(normalizedPayload.frequency).toLowerCase() === "weekly" ? "weekly" : "monthly";
+      patch.frequency = normalizeFixedFrequency(normalizedPayload.frequency);
     }
     if (normalizedPayload.fechaCobro != null && String(normalizedPayload.fechaCobro).trim()) {
       const ds = String(normalizedPayload.fechaCobro).trim();
