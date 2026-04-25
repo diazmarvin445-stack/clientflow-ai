@@ -16,14 +16,16 @@
     <main class="recibo-page-main">
       <p id="recibo-status" class="recibo-status" role="status"></p>
       <article id="recibo-doc" class="orders-receipt-doc recibo-doc" hidden>
-        <header class="orders-receipt-brand">
-          <div id="recibo-logo-wrap" class="orders-receipt-logo-wrap" hidden></div>
-          <h1 id="recibo-business-name" class="orders-receipt-business-name">YourColor Corporation</h1>
-          <p id="recibo-contact" class="orders-receipt-meta"></p>
-          <p id="recibo-address" class="orders-receipt-meta orders-receipt-address"></p>
-          <a href="https://your-color.com" target="_blank" rel="noopener" class="orders-receipt-website">
-            Visitar YourColor
-          </a>
+        <header class="orders-receipt-brand receipt-header">
+          <div id="recibo-logo-wrap" class="orders-receipt-logo-wrap receipt-logo-wrap" hidden></div>
+          <div class="receipt-business-info">
+            <h1 id="recibo-business-name" class="orders-receipt-business-name">YourColor Corporation</h1>
+            <p id="recibo-contact" class="orders-receipt-meta receipt-business-line"></p>
+            <div id="recibo-address" class="orders-receipt-address receipt-business-address"></div>
+            <a href="https://your-color.com" target="_blank" rel="noopener" class="orders-receipt-website receipt-website">
+              Visitar YourColor
+            </a>
+          </div>
         </header>
         <div class="orders-receipt-divider" aria-hidden="true"></div>
         <h2 class="orders-receipt-subtitle">Detalle del pedido</h2>

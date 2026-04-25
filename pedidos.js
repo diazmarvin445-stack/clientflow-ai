@@ -53,7 +53,20 @@ function renderDigitalReceiptSheet(row, biz) {
   }
   if (addrEl) {
     const lines = Array.isArray(biz.addressLines) ? biz.addressLines.filter(Boolean) : [];
-    addrEl.textContent = lines.length ? lines.join("\n") : "—";
+    addrEl.innerHTML = "";
+    if (lines.length) {
+      lines.forEach((line) => {
+        const p = document.createElement("p");
+        p.className = "orders-receipt-meta receipt-business-line";
+        p.textContent = line;
+        addrEl.appendChild(p);
+      });
+    } else {
+      const p = document.createElement("p");
+      p.className = "orders-receipt-meta receipt-business-line";
+      p.textContent = "—";
+      addrEl.appendChild(p);
+    }
   }
 
   if (logoWrap) {

@@ -112,7 +112,20 @@ function renderReceipt(d) {
     contactEl.textContent = bits.length ? bits.join(" · ") : "—";
   }
   if (addrEl) {
-    addrEl.textContent = biz.addressLines.length ? biz.addressLines.join("\n") : "—";
+    addrEl.innerHTML = "";
+    if (biz.addressLines.length) {
+      biz.addressLines.forEach((line) => {
+        const p = document.createElement("p");
+        p.className = "orders-receipt-meta receipt-business-line";
+        p.textContent = line;
+        addrEl.appendChild(p);
+      });
+    } else {
+      const p = document.createElement("p");
+      p.className = "orders-receipt-meta receipt-business-line";
+      p.textContent = "—";
+      addrEl.appendChild(p);
+    }
   }
 
   if (logoWrap) {

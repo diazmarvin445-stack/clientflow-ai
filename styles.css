@@ -3694,47 +3694,60 @@ body.dash-menu-open {
 }
 
 .orders-receipt-brand {
-  text-align: center;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .orders-receipt-logo-wrap {
-  margin: 0 auto 0.65rem;
-  max-width: 7.5rem;
-  max-height: 4rem;
+  margin: 0;
+  max-width: 5rem;
+  width: 5rem;
+  max-height: 5rem;
+  min-height: 3rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 5rem;
 }
 
 .orders-receipt-logo {
   max-width: 100%;
-  max-height: 4rem;
+  max-height: 5rem;
   object-fit: contain;
   display: block;
 }
 
+.receipt-business-info {
+  min-width: 0;
+  flex: 1;
+}
+
 .orders-receipt-business-name {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.35rem;
   font-size: 1.1rem;
   font-weight: 800;
   line-height: 1.25;
 }
 
 .orders-receipt-meta {
-  margin: 0.2rem 0;
+  margin: 0;
   font-size: 0.82rem;
   color: var(--text-muted, #64748b);
   line-height: 1.45;
-  white-space: pre-line;
 }
 
 .orders-receipt-address {
-  margin-top: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.receipt-business-line {
+  margin: 0.12rem 0;
 }
 
 .orders-receipt-website {
-  display: inline-block;
-  margin-top: 0.65rem;
+  display: inline-flex;
+  margin-top: 0.55rem;
   font-size: 0.88rem;
   font-weight: 700;
   color: #2563eb;
@@ -3843,6 +3856,24 @@ body.dash-menu-open {
   margin-top: 1.25rem;
   display: flex;
   justify-content: center;
+}
+
+@media (max-width: 560px) {
+  .orders-receipt-brand {
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .orders-receipt-logo-wrap {
+    width: 100%;
+    max-width: 100%;
+    flex-basis: auto;
+    justify-content: flex-start;
+  }
+
+  .orders-receipt-logo {
+    max-width: 5rem;
+  }
 }
 
 .orders-detail-grid {
