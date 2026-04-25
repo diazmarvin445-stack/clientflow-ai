@@ -666,6 +666,23 @@ function cleanMayaMessage(text) {
 }
 
 /**
+ * Limpia markdown básico para evitar ver símbolos crudos en la burbuja.
+ * @param {string} text
+ */
+function normalizeMayaDisplayText(text) {
+  let out = String(text ?? "");
+  out = out.replace(/\r\n?/g, "\n");
+  out = out.replace(/\*\*(.*?)\*\*/g, "$1");
+  out = out.replace(/__(.*?)__/g, "$1");
+  out = out.replace(/`([^`]+)`/g, "$1");
+  out = out.replace(/^#{1,6}\s*/gm, "");
+  out = out.replace(/\[(.*?)\]\((.*?)\)/g, "$1");
+  out = out.replace(/^\s*[-*]\s+/gm, "• ");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
+}
+
+/**
  * Normaliza respuestas de cotización/presupuesto para mostrarlas en líneas legibles.
  * Solo afecta display del bubble (no altera la lógica de Maya).
  * @param {string} text
@@ -682,14 +699,24 @@ function formatMayaBudgetDisplayText(text) {
   out = out.replace(/[ \t]+\n/g, "\n");
   out = out.replace(/\n{3,}/g, "\n\n");
 
-  // Si vino en una sola línea, abrimos cada campo clave como bloque independiente.
+  // Si vino compacto, abrimos cada campo clave como bloque independiente.
   out = out.replace(
     /\s*(Producto|Cantidad|Precio por pieza|Precio \(paquete\)|Subtotal(?:\s+prendas)?|Logo\/?\s*(?:arte|diseño)?|Total|Dep[oó]sito(?:\s*\d+%?)?|Saldo)\s*:/gi,
     "\n$1:",
   );
   out = out.replace(/(Presupuesto|Cotizaci[oó]n)\s+(?=\w+:)/i, "$1\n");
+  out = out.replace(/\s+\?\s*Quieres agregar logo, dep[oó]sito o cliente\?/i, "\n\n¿Quieres agregar logo, depósito o cliente?");
   out = out.replace(/\n{3,}/g, "\n\n");
   return out.trim();
+}
+
+/** @param {HTMLElement | null} messagesEl */
+function logChatScrollMetrics(messagesEl) {
+  if (!messagesEl) return;
+  console.log("[MayaChat] messages container scrollHeight/clientHeight", {
+    scrollHeight: messagesEl.scrollHeight,
+    clientHeight: messagesEl.clientHeight,
+  });
 }
 
 function renderHeader(business) {
@@ -729,6 +756,7 @@ function appendUserBubble(content) {
   inner.appendChild(time);
   wrap.appendChild(inner);
   stream.appendChild(wrap);
+  logChatScrollMetrics(stream);
   scrollChatStreamToBottom(stream);
 }
 
@@ -744,7 +772,8 @@ function appendAssistantBubble(content, opts = {}) {
 
   const { displayText, orderPayload, actionPayload, ambiguityPayload } = stripMayaPanelMetadata(content);
   const cleanText = cleanMayaMessage(displayText);
-  const displayBubbleText = formatMayaBudgetDisplayText(cleanText);
+  const normalizedText = normalizeMayaDisplayText(cleanText);
+  const displayBubbleText = formatMayaBudgetDisplayText(normalizedText);
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -830,12 +859,13 @@ function appendAssistantBubble(content, opts = {}) {
   col.appendChild(time);
 
   const stickToBottom = isNearBottom(stream);
-  const quote = tryBuildQuoteFromAssistantText(cleanText, orderPayload);
+  const quote = tryBuildQuoteFromAssistantText(displayBubbleText, orderPayload);
   if (quote) {
     wrap.dataset.quoteJson = JSON.stringify(quote);
   }
   wrap.appendChild(col);
   stream.appendChild(wrap);
+  logChatScrollMetrics(stream);
   if (stickToBottom) {
     scrollChatStreamToBottom(stream);
   }

@@ -8825,6 +8825,22 @@ body.dash-body.maya-cc-page .dash-main {
 }
 
 @media (max-width: 768px) {
+  .yc-chat-page .dash-shell,
+  .yc-chat-page .dash-main,
+  .maya-cc-page .maya-cc,
+  .maya-cc-zone--chat > .maya-cc-zone__scroll,
+  .maya-cc-zone--chat .yc-chat-wrap,
+  .maya-cc-page .maya-cc-zone--chat .yc-chat-panel {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
+    height: calc(100dvh - 150px);
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .maya-cc {
     padding: 0.5rem;
     gap: 0.5rem;
@@ -8843,7 +8859,12 @@ body.dash-body.maya-cc-page .dash-main {
   }
 
   .yc-chat-stream {
-    padding: 0.7rem 0.7rem 0.5rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 0.7rem 0.7rem 1rem;
   }
 
   .yc-chat-composer {
@@ -8880,7 +8901,7 @@ body.dash-body.maya-cc-page .dash-main {
   overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 1rem 1rem 0.75rem;
+  padding: 1rem 1rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
