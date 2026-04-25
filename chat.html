@@ -136,25 +136,30 @@
                 </p>
               </section>
 
-              <div class="yc-chat-wrap">
+              <section class="maya-chat-page yc-chat-wrap">
                 <div id="yc-chat-error" class="yc-chat-error" hidden role="alert"></div>
                 <div id="yc-chat-toast" class="yc-chat-toast" hidden role="status" aria-live="polite"></div>
 
-                <div class="yc-chat-panel" id="yc-chat-panel" aria-live="polite">
-                  <div class="yc-chat-toolbar">
-                    <span class="yc-chat-toolbar-title">YourColor · Claude</span>
-                    <span class="yc-chat-toolbar-meta" id="yc-chat-context-meta">Sincronizando datos…</span>
-                    <button type="button" class="yc-msg-action-btn" id="yc-chat-clear-btn">Limpiar conversación</button>
+                <div class="maya-chat-card yc-chat-panel" id="yc-chat-panel" aria-live="polite">
+                  <div class="maya-chat-header yc-chat-toolbar">
+                    <div>
+                      <h2 class="maya-chat-title yc-chat-toolbar-title">Maya</h2>
+                      <p class="maya-chat-subtitle yc-chat-toolbar-meta">Asistente de YourColor</p>
+                    </div>
+                    <button type="button" class="yc-msg-action-btn" id="yc-chat-clear-btn">
+                      Limpiar conversación
+                    </button>
                   </div>
+                  <p class="yc-chat-toolbar-meta maya-chat-context" id="yc-chat-context-meta">Sincronizando datos…</p>
 
                   <div id="yc-chat-loading" class="yc-chat-loading">
                     <span>Cargando datos de Firebase</span>
                     <span class="yc-chat-dots" aria-hidden="true"><span></span><span></span><span></span></span>
                   </div>
 
-                  <div id="yc-chat-stream" class="yc-chat-stream" hidden></div>
+                  <div id="yc-chat-stream" class="maya-chat-messages yc-chat-stream" hidden></div>
 
-                  <div class="yc-chat-composer">
+                  <form id="mayaInputBar" class="maya-input-bar yc-chat-composer">
                     <label class="visually-hidden" for="yc-chat-input">Escribe un mensaje</label>
                     <textarea
                       id="yc-chat-input"
@@ -174,10 +179,10 @@
                     >
                       <span aria-hidden="true">🎤</span>
                     </button>
-                    <button type="button" class="yc-chat-send" id="yc-chat-send" disabled>Enviar</button>
-                  </div>
+                    <button type="submit" class="yc-chat-send" id="yc-chat-send" disabled>Enviar</button>
+                  </form>
                 </div>
-              </div>
+              </section>
             </div>
           </details>
 

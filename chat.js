@@ -711,6 +711,34 @@ function formatMayaBudgetDisplayText(text) {
   return out.trim();
 }
 
+/**
+ * Mejora legibilidad para respuestas largas (sin cambiar lógica).
+ * @param {string} text
+ */
+function formatMayaReadableBlocks(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) return raw;
+  const lines = raw.split("\n");
+  /** @type {string[]} */
+  const out = [];
+  for (const line of lines) {
+    const clean = line.trim();
+    if (!clean) {
+      out.push("");
+      continue;
+    }
+    if (clean.length > 220 && !/:/.test(clean)) {
+      const chunks = clean.split(/(?<=[.!?])\s+/).filter(Boolean);
+      if (chunks.length > 1) {
+        out.push(chunks.join("\n"));
+        continue;
+      }
+    }
+    out.push(clean);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** @param {HTMLElement | null} messagesEl */
 function logChatScrollMetrics(messagesEl) {
   if (!messagesEl) return;
@@ -769,7 +797,7 @@ function appendUserBubble(content) {
 
   const inner = document.createElement("div");
   const bubble = document.createElement("div");
-  bubble.className = "yc-msg-bubble";
+  bubble.className = "yc-msg-bubble maya-message user";
   bubble.textContent = content;
 
   const time = document.createElement("div");
@@ -803,7 +831,7 @@ function appendAssistantBubble(content, opts = {}) {
   }
   const cleanText = cleanMayaMessage(displayText);
   const normalizedText = normalizeMayaDisplayText(cleanText);
-  const displayBubbleText = formatMayaBudgetDisplayText(normalizedText);
+  const displayBubbleText = formatMayaReadableBlocks(formatMayaBudgetDisplayText(normalizedText));
 
   const wrap = document.createElement("div");
   wrap.className = "yc-msg yc-msg--assistant";
@@ -812,7 +840,7 @@ function appendAssistantBubble(content, opts = {}) {
   col.className = "yc-msg-inner-col";
 
   const bubble = document.createElement("div");
-  bubble.className = "yc-msg-bubble";
+  bubble.className = "yc-msg-bubble maya-message assistant";
   bubble.textContent = displayBubbleText;
 
   const time = document.createElement("div");
@@ -1901,10 +1929,18 @@ async function sendToClaude() {
 function wireComposer() {
   const input = document.getElementById("yc-chat-input");
   const btn = document.getElementById("yc-chat-send");
+  const form = document.getElementById("mayaInputBar");
   if (!input || !btn || btn.dataset.wired === "1") return;
   btn.dataset.wired = "1";
 
   btn.addEventListener("click", () => sendToClaude());
+  if (form && form.dataset.wired !== "1") {
+    form.dataset.wired = "1";
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      sendToClaude();
+    });
+  }
 
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1924,7 +1960,7 @@ function showWelcomeAssistant() {
   const col = document.createElement("div");
   col.className = "yc-msg-inner-col";
   const bubble = document.createElement("div");
-  bubble.className = "yc-msg-bubble";
+  bubble.className = "yc-msg-bubble maya-message assistant";
   bubble.textContent = MAYA_WELCOME_STATIC;
   const time = document.createElement("div");
   time.className = "yc-msg-time";
@@ -2002,7 +2038,7 @@ function createStreamingAssistantShell() {
   const col = document.createElement("div");
   col.className = "yc-msg-inner-col";
   const bubble = document.createElement("div");
-  bubble.className = "yc-msg-bubble";
+  bubble.className = "yc-msg-bubble maya-message assistant";
   bubble.textContent = "";
   bubble.setAttribute("aria-busy", "true");
   const time = document.createElement("div");
@@ -2721,6 +2757,8 @@ async function bootWithUser(user) {
       stream.innerHTML = "";
       showWelcomeAssistant();
       wireMayaMobileScrollDebug(stream);
+      console.log("[MayaChat] rebuilt simple layout mounted");
+      console.log("[MayaChat] message scroll container:", stream);
     }
 
     setComposerEnabled(true);
