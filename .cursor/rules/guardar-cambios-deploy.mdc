@@ -1,0 +1,17 @@
+---
+description: Al pedir guardar cambios, commit, push y Firebase deploy en un solo paso
+alwaysApply: true
+---
+
+# Guardar cambios (proyecto clientflow-ai)
+
+Cuando el usuario pida **guardar los cambios**, **guardar**, **commit**, o equivalente en español, hacer **en secuencia** (salvo que indique lo contrario):
+
+1. **`git status`** — revisar qué hay pendiente.
+2. **`git add`** de los archivos relevantes y **`git commit`** con mensaje claro en español o inglés (convención del repo).
+3. **`git push origin main`** (o la rama en la que esté trabajando).
+4. **`firebase deploy`** desde la raíz del repo para publicar hosting / reglas / lo que incluya `firebase.json`.
+
+Si no hay cambios que commitear, igual hacer **push** (por si ya había commits locales) y luego **`firebase deploy`**.
+
+Informar al usuario el resultado de push y deploy (URL de hosting si aplica).
