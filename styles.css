@@ -8960,19 +8960,21 @@ body.dash-body.maya-cc-page .dash-main {
 
 /* --- Maya simple rebuilt chat layout --- */
 body.yourcolor-chat-page .maya-chat-page {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0;
+  /* Real height: fill remaining column under Alertas (do not use height:100% — parent % collapses). */
 }
 
 body.yourcolor-chat-page .maya-chat-card {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  max-height: min(720px, calc(100dvh - 200px));
 }
 
 body.yourcolor-chat-page .maya-chat-header {
@@ -8989,6 +8991,7 @@ body.yourcolor-chat-page .maya-chat-subtitle {
 }
 
 body.yourcolor-chat-page .maya-chat-context {
+  flex: 0 0 auto;
   padding: 0 16px 8px;
 }
 
@@ -9025,7 +9028,7 @@ body.yourcolor-chat-page #yc-chat-input {
 body.yourcolor-chat-page .dash-shell,
 body.yourcolor-chat-page .dash-main,
 body.yourcolor-chat-page .maya-cc,
-body.yourcolor-chat-page .maya-cc-zone--chat,
+body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat,
 body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll,
 body.yourcolor-chat-page .maya-cc-zone--chat .yc-chat-wrap,
 body.yourcolor-chat-page .maya-cc-page .maya-cc-zone--chat .yc-chat-panel,
@@ -9036,15 +9039,16 @@ body.yourcolor-chat-page .maya-chat-card {
   flex-direction: column;
 }
 
+/* Constrain scroll chain: hidden on flex ancestors so #yc-chat-stream gets a real clientHeight. */
 body.yourcolor-chat-page .dash-shell,
 body.yourcolor-chat-page .dash-main,
 body.yourcolor-chat-page .maya-cc,
-body.yourcolor-chat-page .maya-cc-zone--chat,
+body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat,
 body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll,
 body.yourcolor-chat-page .maya-cc-zone--chat .yc-chat-wrap,
 body.yourcolor-chat-page .maya-cc-page .maya-cc-zone--chat .yc-chat-panel,
 body.yourcolor-chat-page .maya-chat-page {
-  overflow: visible;
+  overflow: hidden;
 }
 
 body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
@@ -9052,12 +9056,41 @@ body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] .maya-cc-zone--chat {
   max-height: calc(100dvh - 150px);
 }
 
+/* Alertas: collapsed by default so height budget goes to the chat card; expand on hover/focus-within. */
 body.yourcolor-chat-page .maya-cc-alerts {
   flex: 0 0 auto;
+  max-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    max-height 0.2s ease,
+    opacity 0.15s ease,
+    padding 0.2s ease;
+}
+
+body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll:hover .maya-cc-alerts,
+body.yourcolor-chat-page .maya-cc-zone--chat > .maya-cc-zone__scroll:focus-within .maya-cc-alerts {
   max-height: 84px;
   overflow-y: auto;
   padding-top: 0.45rem;
   padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Desktop grid: give Maya zone a real min-height so inner flex + stream still constrain. */
+body.yourcolor-chat-page .maya-cc[data-active-tab="maya"] #maya-cc-zone-chat {
+  min-height: min(720px, calc(100dvh - 200px));
+}
+
+body.yourcolor-chat-page .maya-cc-zone--chat .yc-chat-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 body.yourcolor-chat-page .maya-cc-alerts__list {
