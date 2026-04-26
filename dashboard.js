@@ -68,20 +68,53 @@ function renderDashboardSnapshot(
     return;
   }
 
-  const activeOrders = orders.filter((o) => !["entregado", "cancelado"].includes(String(o.status || "").toLowerCase()));
-  const pendingPayments = orders.filter((o) => (Number(o.balance) || 0) > 0).length;
+  const cat = String(business?.data?.businessCategory || business?.data?.category || "")
+    .trim()
+    .toLowerCase();
+  const isConstruction = cat === "construction";
+  const activeOrders = orders.filter((o) =>
+    isConstruction
+      ? ["pending", "in_progress"].includes(String(o.status || "").toLowerCase())
+      : !["entregado", "cancelado"].includes(String(o.status || "").toLowerCase()),
+  );
+  const pendingPayments = orders.filter((o) => {
+    if (isConstruction) {
+      const st = String(o.status || "").toLowerCase();
+      const unpaid = st !== "paid";
+      const bal = Math.max(0, (Number(o.totalCharged) || 0) - (Number(o.paidAmount) || 0));
+      return (st === "completed" || st === "in_progress") && (unpaid || bal > 0);
+    }
+    return (Number(o.balance) || 0) > 0;
+  }).length;
   const today = new Date();
   const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
   const dayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
   const deliveriesToday = orders.filter((o) => {
-    const d = toDate(o.deliveryDate);
+    const d = toDate(isConstruction ? o.startDate : o.deliveryDate);
     return d && d >= dayStart && d <= dayEnd;
   }).length;
 
-  setText(
-    "dash-alert-strip",
-    `🔥 ${deliveriesToday} entregas hoy • ${pendingPayments} pagos pendientes • ${activeOrders.length} pedidos activos`,
-  );
+  if (isConstruction) {
+    const delayed = orders.filter((o) => {
+      const eta = toDate(o.estimatedEndDate);
+      const st = String(o.status || "").toLowerCase();
+      return eta && eta < dayStart && !["completed", "paid"].includes(st);
+    }).length;
+    const pendingMaterials = orders.filter((o) => {
+      const mats = Array.isArray(o.materialsUsed) ? o.materialsUsed.length : 0;
+      const st = String(o.status || "").toLowerCase();
+      return st === "in_progress" && mats === 0;
+    }).length;
+    setText(
+      "dash-alert-strip",
+      `⚠️ ${delayed} trabajos retrasados • ${pendingMaterials} materiales pendientes • ${pendingPayments} trabajos sin pago`,
+    );
+  } else {
+    setText(
+      "dash-alert-strip",
+      `🔥 ${deliveriesToday} entregas hoy • ${pendingPayments} pagos pendientes • ${activeOrders.length} pedidos activos`,
+    );
+  }
 
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -105,15 +138,25 @@ function renderDashboardSnapshot(
   }, 0);
   const monthExpense = monthExpenseVariables;
 
-  let activeCampaigns = 0;
-  for (const row of campaignRows) {
-    if (String(row.status || "").toLowerCase() === "active") activeCampaigns += 1;
-  }
-
   setText("dash-mini-active", String(activeOrders.length));
-  setText("dash-mini-balance", formatUsd(monthIncome - monthExpense));
-  setText("dash-mini-clients", String(clients.length));
-  setText("dash-mini-campaigns", String(activeCampaigns));
+  if (isConstruction) {
+    const completed = orders.filter((o) => ["completed", "paid"].includes(String(o.status || "").toLowerCase())).length;
+    const upcoming = orders.filter((o) => {
+      const d = toDate(o.startDate || o.estimatedEndDate);
+      return d && d >= dayStart;
+    }).length;
+    setText("dash-mini-completed", String(completed));
+    setText("dash-mini-upcoming", String(upcoming));
+    setText("dash-mini-revenue", formatUsd(monthIncome));
+    setText("dash-mini-expenses", formatUsd(monthExpense));
+    setText("dash-mini-profit", formatUsd(monthIncome - monthExpense));
+  } else {
+    setText("dash-mini-completed", String(orders.filter((o) => ["entregado"].includes(String(o.status || "").toLowerCase())).length));
+    setText("dash-mini-upcoming", String(deliveriesToday));
+    setText("dash-mini-revenue", formatUsd(monthIncome));
+    setText("dash-mini-expenses", formatUsd(monthExpense));
+    setText("dash-mini-profit", formatUsd(monthIncome - monthExpense));
+  }
 
   const upcoming = calendarRows
     .map((x) => ({ ...x, _d: toDate(x.date) }))
@@ -292,6 +335,10 @@ async function loadDashboardForUser(user) {
   }
 
   const bid = business.id;
+  const cat = String(business?.data?.businessCategory || business?.data?.category || "")
+    .trim()
+    .toLowerCase();
+  const jobsCollection = cat === "construction" ? "jobs" : "orders";
   /** @type {{ orders: Record<string, unknown>[]; clients: Record<string, unknown>[]; finance: Record<string, unknown>[]; calendar: Record<string, unknown>[]; campaigns: Record<string, unknown>[] }} */
   const state = {
     orders: [],
@@ -315,7 +362,7 @@ async function loadDashboardForUser(user) {
   const unsubs = [];
   unsubs.push(
     onSnapshot(
-      query(collection(db, "businesses", bid, "orders"), orderBy("createdAt", "desc"), limit(400)),
+      query(collection(db, "businesses", bid, jobsCollection), orderBy("createdAt", "desc"), limit(400)),
       (snap) => {
         state.orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();

@@ -1,17 +1,25 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  serverTimestamp,
+  updateDoc,
+} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import {
   resolveBusinessForUser,
   fetchClientsForBusiness,
   formatBusinessMeta,
-  formatShortDate,
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 
 let allClients = [];
 let cachedBusinessId = null;
-const DELETE_CLIENT_SAFE_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/deleteClientSafe";
+let jobsByClientId = new Map();
 
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
@@ -42,7 +50,7 @@ function setMetaLine(count) {
     el.textContent = "Tu base de clientes convertidos y de largo plazo.";
     return;
   }
-  el.textContent = `${count} ${count === 1 ? "cliente" : "clientes"} · más recientes primero`;
+  el.textContent = `${count} ${count === 1 ? "cliente" : "clientes"} · CRM de construcción`;
 }
 
 function showLoadError(msg) {
@@ -105,12 +113,12 @@ function renderClientList(root, businessId, list) {
     <thead>
       <tr>
         <th>Nombre</th>
+        <th>Tipo</th>
         <th>Teléfono</th>
-        <th>Último pedido</th>
-        <th>Último contacto</th>
-        <th>Total pedidos</th>
-        <th>Estado</th>
-        <th>Fuente</th>
+        <th>Email</th>
+        <th>Dirección</th>
+        <th>Trabajos enlazados</th>
+        <th>Notas</th>
         <th>Acciones</th>
       </tr>
     </thead>
@@ -121,24 +129,42 @@ function renderClientList(root, businessId, list) {
     const tr = document.createElement("tr");
     const fullName = (typeof c.fullName === "string" && c.fullName.trim()) || c.name || "Sin nombre";
     const phoneRaw = typeof c.phone === "string" ? c.phone.trim() : "—";
-    const lastOrderAt = c.lastOrderAt ? formatShortDate(c.lastOrderAt) : "—";
-    const lastContactAt = c.lastContactAt ? formatShortDate(c.lastContactAt) : "—";
-    const totalOrders = Number(c.totalOrders || 0) || 0;
-    const status = (typeof c.status === "string" && c.status.trim()) || "activo";
-    const source = (typeof c.source === "string" && c.source.trim()) || "manual";
+    const type = (typeof c.clientType === "string" && c.clientType.trim()) || "homeowner";
+    const email = (typeof c.email === "string" && c.email.trim()) || "—";
+    const address = (typeof c.address === "string" && c.address.trim()) || "—";
+    const linkedJobs = Number(jobsByClientId.get(c.id) || 0);
+    const notes = (typeof c.notes === "string" && c.notes.trim()) || "—";
     const clientId = typeof c.id === "string" ? c.id : "";
     tr.innerHTML = `
       <td><strong>${fullName}</strong></td>
+      <td>${type}</td>
       <td>${phoneRaw}</td>
-      <td>${lastOrderAt}</td>
-      <td>${lastContactAt}</td>
-      <td>${totalOrders}</td>
-      <td>${status}</td>
-      <td>${source}</td>
-      <td><button type="button" class="dash-icon-btn" data-client-delete="${clientId}" aria-label="Borrar cliente">🗑️</button></td>
+      <td>${email}</td>
+      <td>${address}</td>
+      <td>${linkedJobs}</td>
+      <td>${notes}</td>
+      <td>
+        <button type="button" class="dash-icon-btn" data-client-edit="${clientId}" aria-label="Editar cliente">✏️</button>
+        <button type="button" class="dash-icon-btn" data-client-delete="${clientId}" aria-label="Borrar cliente">🗑️</button>
+      </td>
     `;
     tbody.appendChild(tr);
   }
+  tbody.querySelectorAll("[data-client-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-client-edit");
+      const row = allClients.find((x) => x.id === id);
+      if (!row) return;
+      document.getElementById("cli-id").value = row.id || "";
+      document.getElementById("cli-name").value = row.fullName || row.name || "";
+      document.getElementById("cli-type").value = row.clientType || "homeowner";
+      document.getElementById("cli-phone").value = row.phone || "";
+      document.getElementById("cli-email").value = row.email || "";
+      document.getElementById("cli-address").value = row.address || "";
+      document.getElementById("cli-notes").value = row.notes || "";
+      document.getElementById("cli-modal")?.showModal();
+    });
+  });
   tbody.querySelectorAll("[data-client-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-client-delete");
@@ -147,20 +173,7 @@ function renderClientList(root, businessId, list) {
       if (!ok) return;
       btn.disabled = true;
       try {
-        const res = await fetch(DELETE_CLIENT_SAFE_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ businessId: cachedBusinessId, clientId: id }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg =
-            typeof body?.error === "string" && body.error
-              ? body.error
-              : "No se pudo borrar el cliente.";
-          window.alert(msg);
-          return;
-        }
+        await deleteDoc(doc(db, "businesses", cachedBusinessId, "clients", id));
         allClients = allClients.filter((x) => x.id !== id);
         setMetaLine(allClients.length);
         if (cachedBusinessId) applySearch(cachedBusinessId);
@@ -173,6 +186,37 @@ function renderClientList(root, businessId, list) {
   });
   wrap.appendChild(table);
   root.appendChild(wrap);
+}
+
+async function saveClient(ev) {
+  ev.preventDefault();
+  if (!cachedBusinessId) return;
+  const id = document.getElementById("cli-id").value.trim();
+  const payload = {
+    fullName: document.getElementById("cli-name").value.trim(),
+    name: document.getElementById("cli-name").value.trim(),
+    clientType: document.getElementById("cli-type").value,
+    phone: document.getElementById("cli-phone").value.trim(),
+    email: document.getElementById("cli-email").value.trim(),
+    address: document.getElementById("cli-address").value.trim(),
+    notes: document.getElementById("cli-notes").value.trim(),
+    updatedAt: serverTimestamp(),
+  };
+  if (!id) {
+    await addDoc(collection(db, "businesses", cachedBusinessId, "clients"), {
+      ...payload,
+      source: "manual",
+      status: "active",
+      createdAt: serverTimestamp(),
+    });
+  } else {
+    await updateDoc(doc(db, "businesses", cachedBusinessId, "clients", id), payload);
+  }
+  document.getElementById("cli-modal")?.close();
+  const fresh = await fetchClientsForBusiness(db, cachedBusinessId);
+  allClients = fresh;
+  setMetaLine(allClients.length);
+  applySearch(cachedBusinessId);
 }
 
 function applySearch(businessId) {
@@ -210,6 +254,19 @@ async function loadClientesForUser(user) {
   }
 
   cachedBusinessId = business.id;
+  try {
+    const jobsSnap = await getDocs(collection(db, "businesses", business.id, "jobs"));
+    const map = new Map();
+    jobsSnap.forEach((d) => {
+      const row = d.data() || {};
+      const cid = typeof row.clientId === "string" ? row.clientId : "";
+      if (!cid) return;
+      map.set(cid, Number(map.get(cid) || 0) + 1);
+    });
+    jobsByClientId = map;
+  } catch {
+    jobsByClientId = new Map();
+  }
 
   let clients;
   try {
@@ -234,6 +291,20 @@ function boot() {
 
   document.getElementById("cli-search")?.addEventListener("input", () => {
     if (cachedBusinessId) applySearch(cachedBusinessId);
+  });
+  document.getElementById("cli-btn-new")?.addEventListener("click", () => {
+    document.getElementById("cli-form")?.reset();
+    document.getElementById("cli-id").value = "";
+    document.getElementById("cli-modal")?.showModal();
+  });
+  document.getElementById("cli-btn-cancel")?.addEventListener("click", () => {
+    document.getElementById("cli-modal")?.close();
+  });
+  document.getElementById("cli-form")?.addEventListener("submit", (ev) => {
+    saveClient(ev).catch((e) => {
+      console.error(e);
+      window.alert("No se pudo guardar el cliente.");
+    });
   });
 
   onAuthStateChanged(auth, (user) => {

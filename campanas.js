@@ -46,6 +46,11 @@ function isRoofingConstructionBusiness(business) {
   );
 }
 
+function isConstructionBusiness(business) {
+  const data = business?.data || {};
+  return normalizeBusinessCategory(data.businessCategory) === "construction";
+}
+
 function applyCampaignsSoonMode(enabled) {
   const subtitle = document.querySelector(".camp-hub-hero-subtitle");
   if (subtitle) {
@@ -59,6 +64,15 @@ function applyCampaignsSoonMode(enabled) {
     el.disabled = !!enabled;
     el.setAttribute("aria-disabled", enabled ? "true" : "false");
   });
+}
+
+function applyConstructionCampaignMode(enabled) {
+  if (!enabled) return;
+  const subtitle = document.querySelector(".camp-hub-hero-subtitle");
+  if (subtitle) {
+    subtitle.textContent =
+      "Campañas operativas para construcción: seguimientos con contractors, recordatorios a clientes y actualizaciones de estatus de trabajos.";
+  }
 }
 
 function formatUsd(n) {
@@ -1042,6 +1056,7 @@ async function loadCampanasForUser(user) {
     hideCampaignSaveError();
     renderHeader(business, {});
     applyCampaignsSoonMode(isRoofingConstructionBusiness(business));
+    applyConstructionCampaignMode(isConstructionBusiness(business));
     await renderCampaignsPage(business);
   } catch (err) {
     console.error(LOG_PREFIX, "Firestore / render error:", err);

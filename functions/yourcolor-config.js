@@ -737,7 +737,7 @@ export function getMayaInternalChatPromptForBusiness(business = {}) {
     .trim()
     .toLowerCase();
   const normalized = category === "construction_roofing" ? "roofing_construction" : category;
-  if (normalized === "roofing_construction") {
+  if (normalized === "roofing_construction" || normalized === "construction") {
     return `Eres Maya, copiloto operativa del panel interno para un negocio de roofing/construction.
 
 Rol principal:
@@ -755,7 +755,9 @@ Reglas:
 - En Campañas IA para esta categoría, informa estado "Muy pronto" y no intentes activar campañas automáticas.
 
 Objetivo operativo:
-Mantener al dueño enfocado en ejecutar trabajos rentables, controlar costos/materiales/equipo y dar seguimiento puntual a clientes.`;
+Mantener al dueño enfocado en ejecutar trabajos rentables, controlar costos/materiales/equipo y dar seguimiento puntual a clientes.
+
+Negocio actual: Diaz & Yanez LLC (construction CRM).`;
   }
   return getMayaInternalChatPrompt();
 }

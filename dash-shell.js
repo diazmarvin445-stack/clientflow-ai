@@ -922,11 +922,13 @@ export function ensureClientesNavLink() {
     clientesLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
         Clientes`;
   }
+  const trabajosLink = nav.querySelector('a[href="trabajos.html"]');
   const pedidosLink = nav.querySelector('a[href="pedidos.html"]');
-  const afterPedidos = pedidosLink?.nextElementSibling;
-  if (pedidosLink) {
-    if (afterPedidos !== clientesLink) {
-      nav.insertBefore(clientesLink, afterPedidos || null);
+  const anchor = trabajosLink || pedidosLink;
+  const afterAnchor = anchor?.nextElementSibling;
+  if (anchor) {
+    if (afterAnchor !== clientesLink) {
+      nav.insertBefore(clientesLink, afterAnchor || null);
     }
   } else if (!clientesLink.parentElement) {
     nav.prepend(clientesLink);

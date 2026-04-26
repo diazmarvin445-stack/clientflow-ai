@@ -99,9 +99,9 @@
               <div class="dash-panel-head">
                 <div>
                   <h2 class="dash-panel-title" id="cli-panel-title">Clientes</h2>
-                  <p class="cli-panel-sub" id="cli-clients-meta">Cargando…</p>
+                  <p class="cli-panel-sub" id="cli-clients-meta">Contratistas, compañías y homeowners</p>
                 </div>
-                <a href="solicitudes.html" class="dash-panel-link">Ir a solicitudes</a>
+                <button type="button" class="dash-panel-link" id="cli-btn-new">+ Nuevo cliente</button>
               </div>
 
               <div class="cli-toolbar">
@@ -122,6 +122,29 @@
         </div>
       </main>
     </div>
+
+    <dialog id="cli-modal" class="orders-modal">
+      <form method="dialog" id="cli-form">
+        <h3>Nuevo cliente</h3>
+        <input type="hidden" id="cli-id" />
+        <div class="orders-grid">
+          <input id="cli-name" class="orders-input" placeholder="Nombre" required />
+          <select id="cli-type" class="orders-input">
+            <option value="contractor">contractor</option>
+            <option value="company">company</option>
+            <option value="homeowner">homeowner</option>
+          </select>
+          <input id="cli-phone" class="orders-input" placeholder="Teléfono" />
+          <input id="cli-email" class="orders-input" type="email" placeholder="Email" />
+          <input id="cli-address" class="orders-input" placeholder="Dirección" />
+          <textarea id="cli-notes" class="orders-input orders-notes" placeholder="Notas"></textarea>
+        </div>
+        <div class="orders-modal-actions">
+          <button type="button" class="dash-quick-btn" id="cli-btn-cancel">Cancelar</button>
+          <button type="submit" class="dash-quick-btn dash-quick-btn--primary">Guardar</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="clientes.js"></script>
   </body>

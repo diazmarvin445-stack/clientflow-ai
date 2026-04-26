@@ -123,6 +123,7 @@ function normalizeBusinessCategory(raw) {
     .toLowerCase();
   if (v === "construction_roofing") return "roofing_construction";
   if (v === "roofing_construction") return "roofing_construction";
+  if (v === "construction") return "construction";
   return "custom_apparel";
 }
 
