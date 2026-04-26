@@ -1323,6 +1323,7 @@ const MAYA_PANEL_EXECUTABLE_ACTIONS = new Set([
   "create_order",
   "add_income",
   "add_expense",
+  "search_finance",
   "create_calendar_event",
   "delete_order",
   "delete_client",
@@ -2251,7 +2252,9 @@ async function aggregateFinanceTotals(db, businessId, period) {
  * @param {"income" | "expense"} kind
  */
 function normalizeFinanceCategory(raw, kind) {
-  const s = String(raw ?? "")
+  const inRaw = String(raw ?? "").trim();
+  if (!inRaw) return "general";
+  const s = inRaw
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "_");
@@ -2263,6 +2266,8 @@ function normalizeFinanceCategory(raw, kind) {
   }
   if (FINANCE_EXPENSE_KEYS.has(s)) return s;
   const map = {
+    gasolina: "transporte",
+    gas: "transporte",
     material: "materiales",
     materiales: "materiales",
     transport: "transporte",
@@ -2277,6 +2282,12 @@ function normalizeFinanceCategory(raw, kind) {
   };
   if (map[s]) return map[s];
   return "otros_gastos";
+}
+
+function mayaFinanceMovementDedupeKey(kind, amount, category, description, movementDate) {
+  const d = movementDate instanceof Date && !Number.isNaN(movementDate.getTime()) ? movementDate : new Date();
+  const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${kind}|${Number(amount).toFixed(2)}|${String(category || "general").toLowerCase()}|${String(description || "").toLowerCase()}|${ds}`;
 }
 
 /**
@@ -2318,6 +2329,22 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
   const movementDate = parseFinanceMovementDate(data.date);
   const clientId = typeof data.clientId === "string" && data.clientId.trim() ? data.clientId.trim() : null;
   const orderId = typeof data.orderId === "string" && data.orderId.trim() ? data.orderId.trim() : null;
+  const dedupeKey = mayaFinanceMovementDedupeKey(kind, amt, category, description, movementDate);
+
+  const recent = await db
+    .collection("businesses")
+    .doc(businessId)
+    .collection("finance")
+    .where("createdBy", "==", "maya")
+    .limit(60)
+    .get();
+  for (const d of recent.docs) {
+    const row = d.data() || {};
+    const k = typeof row.mayaDedupeKey === "string" ? row.mayaDedupeKey : "";
+    if (k && k === dedupeKey) {
+      return { duplicate: true, amount: amt, category, description };
+    }
+  }
 
   await db.collection("businesses").doc(businessId).collection("finance").add({
     type: kind,
@@ -2329,8 +2356,51 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
     orderId,
     createdAt: FieldValue.serverTimestamp(),
     createdBy: "maya",
+    source: "maya",
+    mayaDedupeKey: dedupeKey,
     date: Timestamp.fromDate(movementDate),
   });
+  return { duplicate: false, amount: amt, category, description };
+}
+
+async function mayaFinanceSearchMovements(db, businessId, payload) {
+  const data = mergeFinancePayload(payload);
+  const qTypeRaw = typeof data.type === "string" ? data.type.trim().toLowerCase() : "";
+  const qType = qTypeRaw === "gasto" ? "expense" : qTypeRaw === "ingreso" ? "income" : qTypeRaw;
+  const qText = typeof data.description === "string" ? data.description.trim().toLowerCase() : "";
+  const qCat = typeof data.category === "string" ? data.category.trim().toLowerCase() : "";
+  const amountHint = Number(data.amount);
+  const max = Math.min(20, Math.max(3, Number(data.limit) || 8));
+
+  const snap = await db.collection("businesses").doc(businessId).collection("finance").orderBy("date", "desc").limit(300).get();
+  const items = [];
+  snap.forEach((docSnap) => {
+    const row = docSnap.data() || {};
+    const type = String(row.type || "").toLowerCase();
+    if (qType && type !== qType) return;
+    const desc = String(row.description || "").toLowerCase();
+    const cat = String(row.category || "").toLowerCase();
+    if (qText && !desc.includes(qText)) return;
+    if (qCat && !cat.includes(qCat)) return;
+    const amt = Number(row.amount);
+    if (Number.isFinite(amountHint) && amountHint > 0 && Math.abs(amt - amountHint) > 0.02) return;
+    let dateIso = "";
+    if (row.date && typeof row.date.toDate === "function") {
+      try {
+        const d = row.date.toDate();
+        if (d instanceof Date && !Number.isNaN(d.getTime())) dateIso = d.toISOString().slice(0, 10);
+      } catch {}
+    }
+    items.push({
+      id: docSnap.id,
+      type,
+      amount: Number.isFinite(amt) ? amt : 0,
+      category: cat || "general",
+      description: row.description || "",
+      date: dateIso,
+    });
+  });
+  return { total: items.length, items: items.slice(0, max) };
 }
 
 /**
@@ -2342,6 +2412,13 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
 async function handleDeleteFinance(db, businessId, payload) {
   const data = mergeFinancePayload(payload);
   console.log("[DELETE_FINANCE] Iniciando:", data);
+  if (data.confirmed !== true) {
+    return {
+      success: false,
+      requiresConfirmation: true,
+      error: "Confirma con confirmed:true para borrar este movimiento.",
+    };
+  }
   const tid =
     typeof data.transactionId === "string"
       ? data.transactionId.trim()
@@ -2713,6 +2790,9 @@ async function mayaFinanceBalanceBlock(db, businessId, period) {
  * @param {Record<string, unknown>} result
  */
 function formatDeleteActionFeedback(kindHint, result) {
+  if (result.requiresConfirmation) {
+    return `[Sistema] ${result.error || "Confirma con confirmed:true para borrar."}`;
+  }
   if (result.success) {
     const what =
       result.deleted != null && String(result.deleted).trim()
@@ -2847,6 +2927,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
             syncClientRecord,
             finalizeOrderDeliveryAndProfit,
             mayaFinanceAddMovement,
+            mayaFinanceSearchMovements,
             FieldValue,
             Timestamp,
           },

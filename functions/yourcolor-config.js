@@ -709,9 +709,10 @@ FINANZAS Y ENTREGA (regla de negocio única):
 - Al marcar entregado (mark_order_delivered o estado entregado en panel), ahí se crean los movimientos en Finanzas: ingreso por total y gasto por expenses (si > 0).
 
 FINANZAS (panel Finanzas — misma lógica que la app):
-- Movimientos variables en la colección \`finance\`: add_income / add_expense con amount (obligatorio), category, description y date opcional (YYYY-MM-DD; si falta, hoy).
+- Movimientos variables en la colección \`finance\`: add_income / add_expense con amount (obligatorio), category, description y date opcional (YYYY-MM-DD; si falta, hoy). Si falta category, usa "general". Si el texto menciona gasolina/gas, usa category "transporte".
 - Categorías de gasto del panel: materiales, transporte, mano_obra, personal, servicios, alquiler, marketing, otros_gastos. Ingresos: ventas, anticipos, ganancias, otros_ingresos.
-- Borrar movimiento: delete_transaction o delete_finance (transactionId desde financeRecent del contexto, o pistas amount + description + dateHint + type income|expense).
+- Buscar movimientos: search_finance con filtros opcionales type, category, description, amount, limit.
+- Borrar movimiento: delete_transaction o delete_finance (transactionId desde financeRecent del contexto, o pistas amount + description + dateHint + type income|expense). SIEMPRE pide confirmación y usa confirmed:true antes de borrar.
 - Balance: get_balance con period day|week|month|all. En YourColor los gastos del período incluyen también los gastos fijos recurrentes ya devengados (fecha de cobro ≤ hoy), igual que las tarjetas de resumen en Finanzas.
 - Gastos fijos recurrentes (solo YourColor): fixedExpenses trae id, name, amount, frequency monthly|weekly|annual, fechaCobro (ISO si existe; ancla de calendario completa), y a veces campos viejos chargeDayOfMonth / chargeWeekday si el doc aún no migró. La app calcula los cobros siguientes (mensual = +1 mes mismo día; semanal = +7 días; anual = +1 año) y solo suman al balance cuando la fecha ya llegó. add_fixed_expense exige fechaCobro en formato YYYY-MM-DD:
   {"action":"add_fixed_expense","data":{"name":"Renta local","amount":800,"frequency":"monthly","fechaCobro":"2026-05-01","active":true}}
@@ -725,7 +726,7 @@ Borrados y acciones reales: siempre una línea MAYA_ACTION_JSON:{"action":"…"}
 
 Borrar: delete_event|delete_calendar_event (eventId o query/fecha/weekday); delete_client (clientId|clientName, SIEMPRE requiere confirmed:true); delete_order (orderId|clientName, cascada en servidor); delete_transaction|delete_finance (transactionId o amount+description+dateHint+type). Ambiguo → pedir id del contexto.
 
-Crear / operar: create_client, update_client, search_client, create_order, create_calendar_event; add_income, add_expense, get_balance (period day|week|month|all); add_fixed_expense, update_fixed_expense, delete_fixed_expense (YourColor, ver bloque FINANZAS); add_team_member, update_team_member, delete_team_member, assign_task, list_team; set_order_expenses; mark_order_delivered. Usá los campos que ya definieron las reglas de pago y catálogo; ids desde Firebase.
+Crear / operar: create_client, update_client, search_client, create_order, create_calendar_event; add_income, add_expense, search_finance, get_balance (period day|week|month|all); add_fixed_expense, update_fixed_expense, delete_fixed_expense (YourColor, ver bloque FINANZAS; edición/borrado requieren confirmed:true); add_team_member, update_team_member, delete_team_member, assign_task, list_team; set_order_expenses; mark_order_delivered. Usá los campos que ya definieron las reglas de pago y catálogo; ids desde Firebase.
 
 Tras get_balance el sistema inserta totales reales en el mensaje; integrá ese bloque en tu respuesta visible.
 Usa números reales; deliveryDate ISO o legible. Solo incluye MAYA_ACTION_JSON si Marvin pidió la acción y tenés datos; si faltan datos, preguntá y no inventes la línea.`;

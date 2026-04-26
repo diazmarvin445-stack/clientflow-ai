@@ -108,13 +108,26 @@ export async function executeMayaAction({
   }
 
   if (action === "add_income") {
-    await handlers.mayaFinanceAddMovement(db, businessId, { data: normalizedPayload }, "income");
-    return { ok: true, result: { kind: "income", amount: Number(normalizedPayload.amount) || 0 }, resolutionMeta };
+    const out = await handlers.mayaFinanceAddMovement(db, businessId, { data: normalizedPayload }, "income");
+    return {
+      ok: true,
+      result: { kind: "income", amount: Number(normalizedPayload.amount) || 0, duplicate: out?.duplicate === true },
+      resolutionMeta,
+    };
   }
 
   if (action === "add_expense") {
-    await handlers.mayaFinanceAddMovement(db, businessId, { data: normalizedPayload }, "expense");
-    return { ok: true, result: { kind: "expense", amount: Number(normalizedPayload.amount) || 0 }, resolutionMeta };
+    const out = await handlers.mayaFinanceAddMovement(db, businessId, { data: normalizedPayload }, "expense");
+    return {
+      ok: true,
+      result: { kind: "expense", amount: Number(normalizedPayload.amount) || 0, duplicate: out?.duplicate === true },
+      resolutionMeta,
+    };
+  }
+
+  if (action === "search_finance") {
+    const result = await handlers.mayaFinanceSearchMovements(db, businessId, { data: normalizedPayload });
+    return { ok: true, result, resolutionMeta };
   }
 
   if (action === "add_fixed_expense") {

@@ -36,11 +36,24 @@ export function buildMayaActionSuccessMessage(action, normalizedPayload, execRes
   }
   if (action === "add_income") {
     const amount = Number(execResult?.amount ?? normalizedPayload.amount) || 0;
+    if (execResult?.duplicate === true) return `Ese ingreso ya estaba registrado (${fmtMoney(amount)}). Evité duplicarlo.`;
     return `Registrado. Ingreso por ${fmtMoney(amount)}.`;
   }
   if (action === "add_expense") {
     const amount = Number(execResult?.amount ?? normalizedPayload.amount) || 0;
+    if (execResult?.duplicate === true) return `Ese gasto ya estaba registrado (${fmtMoney(amount)}). Evité duplicarlo.`;
     return `Registrado. Gasto por ${fmtMoney(amount)}.`;
+  }
+  if (action === "search_finance") {
+    const total = Number(execResult?.total || 0);
+    if (!total) return "No encontré movimientos con esos filtros.";
+    const lines = Array.isArray(execResult?.items)
+      ? execResult.items
+          .slice(0, 4)
+          .map((x, i) => `${i + 1}) ${x.type || "mov"} ${fmtMoney(x.amount)} · ${x.description || "-"}`)
+          .join(" | ")
+      : "";
+    return lines ? `Encontré ${total} movimientos: ${lines}` : `Encontré ${total} movimientos.`;
   }
   if (action === "add_fixed_expense") {
     const name = String(execResult?.name ?? normalizedPayload.name ?? "gasto fijo");

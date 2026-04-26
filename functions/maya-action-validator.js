@@ -131,6 +131,13 @@ export function validateAndNormalizeMayaAction(action, payload) {
       normalized: null,
     };
   }
+  if ((action === "update_fixed_expense" || action === "delete_fixed_expense") && normalized.confirmed !== true) {
+    return {
+      ok: false,
+      error: "Por seguridad confirma la edición/borrado con confirmed:true.",
+      normalized: null,
+    };
+  }
 
   if (action === "set_order_expenses" && !(Number(normalized.expenses) >= 0)) {
     return { ok: false, error: "Monto de gastos inválido.", normalized: null };

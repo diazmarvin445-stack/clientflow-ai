@@ -32,6 +32,9 @@ export const MAYA_ACTION_SCHEMAS = {
   add_expense: {
     required: ["amount"],
   },
+  search_finance: {
+    required: [],
+  },
   add_fixed_expense: {
     required: ["name", "amount", "fechaCobro"],
   },
