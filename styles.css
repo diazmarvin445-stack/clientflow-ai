@@ -7224,6 +7224,10 @@ body.cf-modal-open {
   max-width: 880px;
   margin: 0 auto;
   padding: 1.35rem 1.5rem 2.5rem;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: clip;
 }
 
 .cfg-hero {
@@ -7282,6 +7286,18 @@ body.cf-modal-open {
   flex-direction: column;
   gap: 0.5rem;
   align-items: flex-end;
+}
+
+.cfg-hero-links .cfg-hero-profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .cfg-banner {
@@ -7370,6 +7386,7 @@ body.cf-modal-open {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 0.75rem;
+  max-width: 100%;
 }
 
 .cfg-save-feedback {
@@ -7423,6 +7440,7 @@ body.cf-modal-open {
   width: 100%;
   box-sizing: border-box;
   min-height: 2.65rem;
+  max-width: 100%;
   padding: 0.5rem 0.75rem;
   font-family: inherit;
   font-size: 0.875rem;
@@ -7607,6 +7625,23 @@ body.cf-modal-open {
 }
 
 @media (max-width: 720px) {
+  .cfg-page .dash-main {
+    overflow-x: hidden;
+  }
+
+  .cfg-page .cfg-workspace {
+    max-width: 100%;
+    padding: 1rem 0.85rem 1.4rem;
+  }
+
+  .cfg-main {
+    gap: 0.95rem;
+  }
+
+  .cfg-section {
+    width: 100%;
+  }
+
   .cfg-grid--2 {
     grid-template-columns: 1fr;
   }
@@ -7614,10 +7649,76 @@ body.cf-modal-open {
   .cfg-section-head {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.95rem 0.9rem;
   }
 
   .cfg-section-actions {
-    justify-content: flex-end;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .cfg-section-actions .cfg-save {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cfg-save-feedback {
+    width: 100%;
+    min-height: 0.95rem;
+  }
+
+  .cfg-section-body {
+    padding: 0.9rem;
+  }
+
+  .cfg-hero-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+  }
+
+  .cfg-hero-links {
+    align-items: stretch;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .cfg-hero-links .cfg-hero-profile-link {
+    flex: 1 1 10.5rem;
+    text-align: center;
+  }
+
+  .cfg-brand-row {
+    gap: 0.9rem;
+  }
+
+  .cfg-logo-box {
+    width: 100%;
+  }
+
+  .cfg-logo-preview {
+    max-width: 9rem;
+  }
+
+  .cfg-brand-fields {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .cfg-int-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .cfg-days {
+    gap: 0.45rem 0.55rem;
+  }
+
+  .cfg-day {
+    font-size: 0.78rem;
   }
 }
 
