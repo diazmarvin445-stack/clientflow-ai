@@ -105,7 +105,7 @@ export async function resolveCategoryContextForUser(db, user) {
 }
 
 export async function loadCategoryProfile(db, uid, categoryId) {
-  const ref = doc(db, "users", uid, "categories", normalizeCategory(categoryId), "settings", "businessProfile");
+  const ref = doc(db, "users", uid, "business", normalizeCategory(categoryId), "profile");
   const snap = await getDoc(ref);
   return snap.exists() ? snap.data() || {} : {};
 }

@@ -88,7 +88,7 @@ async function checkExistingBusinessConfigured(user) {
   if (typeof data.businessName === "string" && data.businessName.trim()) return true;
   if (typeof data.businessCategory === "string" && data.businessCategory.trim()) return true;
   try {
-    const profile = await getDocFromServer(doc(db, "businesses", businessDoc.id, "settings", "businessProfile"));
+    const profile = await getDocFromServer(businessProfileRef(user.uid, businessDoc.id));
     return profile.exists();
   } catch (_) {
     return true;
@@ -125,6 +125,10 @@ function normalizeBusinessCategory(raw) {
   if (v === "roofing_construction") return "roofing_construction";
   if (v === "construction") return "construction";
   return "custom_apparel";
+}
+
+function businessProfileRef(uid, category) {
+  return doc(db, "users", uid, "business", category, "profile");
 }
 
 let fileBuffer = [];
@@ -379,18 +383,29 @@ if (form && successEl) {
       const path = `users/${uid}/categories/${normalizedCategory}`;
       console.log("[ClientFlow onboarding] setDoc success:", { path, id: categoryRef.id });
 
-      await setDoc(doc(db, "users", uid, "categories", normalizedCategory, "settings", "businessProfile"), {
-        category: normalizedCategory,
-        businessName: raw.businessName || "",
-        services: raw.mayaServices || "",
-        pricingModel: raw.mayaEstimateMethod || "",
-        depositPolicy: raw.mayaDepositPolicy || "",
-        schedulingPolicy: raw.mayaSchedulingPolicy || "",
-        materialsPolicy: raw.mayaMaterialsPolicy || "",
-        communicationTone: raw.mayaTone || "",
-        noPromises: raw.mayaNoPromises || "",
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(
+        businessProfileRef(uid, normalizedCategory),
+        {
+          category: normalizedCategory,
+          businessName: raw.businessName || "",
+          businessCategory: normalizedCategory,
+          phone: raw.phone || "",
+          email: raw.email || "",
+          commercialAddress: raw.commercialAddress || "",
+          serviceArea: raw.serviceArea || "",
+          services: raw.mayaServices || "",
+          pricingModel: raw.mayaEstimateMethod || "",
+          depositPolicy: raw.mayaDepositPolicy || "",
+          schedulingPolicy: raw.mayaSchedulingPolicy || "",
+          materialsPolicy: raw.mayaMaterialsPolicy || "",
+          communicationTone: raw.mayaTone || "",
+          noPromises: raw.mayaNoPromises || "",
+          source: "onboarding",
+          ownerUid: uid,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       const verifyRef = categoryDocRef(db, uid, normalizedCategory);
       const verified = await getDocFromServer(verifyRef);
@@ -431,12 +446,6 @@ if (form && successEl) {
 
       setSessionPrimaryBusinessId(uid, normalizedCategory);
       setActiveCategoryId(uid, normalizedCategory);
-
-      try {
-        localStorage.setItem("clientflow_onboarding_v1", JSON.stringify(raw));
-      } catch (err) {
-        /* ignore quota */
-      }
 
       window.location.assign("dashboard.html");
     } catch (err) {

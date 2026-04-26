@@ -2,6 +2,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   doc,
+  getDoc,
   serverTimestamp,
   updateDoc,
   setDoc,
@@ -26,6 +27,8 @@ let businessId = null;
 let scopeUid = null;
 /** @type {Record<string, unknown> | null} */
 let businessData = null;
+/** @type {boolean} */
+let hasBusinessProfile = false;
 /** @type {string | null} */
 let pendingLogoDataUrl = null;
 /** @type {string | null} */
@@ -38,6 +41,22 @@ function businessRef() {
   if (!businessId) return null;
   if (scopeUid) return doc(db, "users", scopeUid, "categories", businessId);
   return doc(db, "businesses", businessId);
+}
+
+function businessProfileRef() {
+  if (!businessId || !scopeUid) return null;
+  return doc(db, "users", scopeUid, "business", businessId, "profile");
+}
+
+function mapCategoryToIndustry(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return "";
+  if (raw === "custom_apparel") return "custom-apparel";
+  if (raw === "roofing_construction") return "roofing";
+  if (raw === "construction") return "drywall-construction";
+  return raw.replace(/_/g, "-");
 }
 
 function renderHeader(business) {
@@ -135,7 +154,13 @@ function applyFormFromBusiness(data) {
   pendingLogoDataUrl = null;
 
   setVal("cfg-business-name", data.businessName || "");
-  setVal("cfg-industry", typeof data.industry === "string" ? data.industry : "");
+  const industryValue =
+    typeof data.industry === "string" && data.industry.trim()
+      ? data.industry.trim()
+      : hasBusinessProfile
+        ? mapCategoryToIndustry(data.businessCategory || data.category)
+        : "";
+  setVal("cfg-industry", industryValue);
   setVal("cfg-custom-products", data.customProducts || "");
   setVal(
     "cfg-custom-min-price",
@@ -234,23 +259,36 @@ async function saveSection(section) {
 
   try {
     if (section === "business") {
+      const profileRef = businessProfileRef();
+      if (!profileRef) throw new Error("No se pudo resolver la ruta de perfil para guardar.");
       const rawMinPrice = val("cfg-custom-min-price").trim();
       const rawMinQty = val("cfg-custom-min-qty").trim();
       const minPrice = rawMinPrice === "" ? null : Number(rawMinPrice);
       const minQty = rawMinQty === "" ? null : Number(rawMinQty);
+      await setDoc(
+        profileRef,
+        {
+          ...base,
+          category: businessId,
+          businessCategory: businessId,
+          businessName: val("cfg-business-name").trim(),
+          industry: val("cfg-industry").trim(),
+          customProducts: val("cfg-custom-products").trim(),
+          customMinPrice: Number.isFinite(minPrice) ? minPrice : null,
+          customMinQty: Number.isFinite(minQty) ? Math.round(minQty) : null,
+          customDeliveryTime: val("cfg-custom-delivery-time").trim(),
+          customPaymentMethod: val("cfg-custom-payment-method").trim(),
+          phone: val("cfg-phone").trim(),
+          email: val("cfg-email").trim().toLowerCase(),
+          commercialAddress: val("cfg-address").trim(),
+          serviceArea: val("cfg-service-area").trim(),
+        },
+        { merge: true },
+      );
       await updateDoc(ref, {
         ...base,
         businessName: val("cfg-business-name").trim(),
-        industry: val("cfg-industry").trim(),
-        customProducts: val("cfg-custom-products").trim(),
-        customMinPrice: Number.isFinite(minPrice) ? minPrice : null,
-        customMinQty: Number.isFinite(minQty) ? Math.round(minQty) : null,
-        customDeliveryTime: val("cfg-custom-delivery-time").trim(),
-        customPaymentMethod: val("cfg-custom-payment-method").trim(),
-        phone: val("cfg-phone").trim(),
-        email: val("cfg-email").trim().toLowerCase(),
-        commercialAddress: val("cfg-address").trim(),
-        serviceArea: val("cfg-service-area").trim(),
+        businessCategory: businessId,
       });
       feedback("cfg-feedback-business", "Cambios guardados", true);
     } else if (section === "brand") {
@@ -315,8 +353,18 @@ async function saveSection(section) {
     const business = await resolveBusinessForUser(db, auth.currentUser);
     if (business) {
       businessId = business.id;
-      businessData = business.data;
-      applyFormFromBusiness(business.data);
+      const profileRef = businessProfileRef();
+      let profileData = {};
+      let profileExists = false;
+      if (profileRef) {
+        const profileSnap = await getDoc(profileRef);
+        profileExists = profileSnap.exists();
+        profileData = profileExists ? profileSnap.data() || {} : {};
+      }
+      hasBusinessProfile = profileExists;
+      const mergedData = { ...business.data, ...profileData };
+      businessData = mergedData;
+      applyFormFromBusiness(mergedData);
     }
   } catch (err) {
     console.error(err);
@@ -472,6 +520,7 @@ async function loadPage(user) {
   showError("");
   businessId = null;
   businessData = null;
+  hasBusinessProfile = false;
 
   const noBiz = document.getElementById("cfg-no-business");
   const main = document.getElementById("cfg-main");
@@ -490,7 +539,25 @@ async function loadPage(user) {
     scopeUid = business?.scope?.uid || user.uid;
     const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
     setDiagnosticsLoggerContext({ businessId, ownerUid });
-    applyFormFromBusiness(business.data);
+    const profileRef = businessProfileRef();
+    let profileData = {};
+    let profileExists = false;
+    if (profileRef) {
+      const profileSnap = await getDoc(profileRef);
+      profileExists = profileSnap.exists();
+      profileData = profileExists ? profileSnap.data() || {} : {};
+    }
+    hasBusinessProfile = profileExists;
+    const mergedForForm = { ...business.data, ...profileData };
+    if (!profileExists) {
+      mergedForForm.businessName = "";
+      mergedForForm.industry = "";
+      mergedForForm.phone = "";
+      mergedForForm.email = "";
+      mergedForForm.commercialAddress = "";
+      mergedForForm.serviceArea = "";
+    }
+    applyFormFromBusiness(mergedForForm);
     await refreshReceiptSettingsForm();
     const diagLink = document.getElementById("cfg-diagnostics-link");
     if (diagLink) diagLink.hidden = !(ownerUid && ownerUid === user.uid);
