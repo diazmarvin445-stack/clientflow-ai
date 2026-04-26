@@ -94,24 +94,74 @@
         <div class="profile-workspace">
           <a href="configuracion.html" class="profile-back">← Configuración</a>
           <section class="profile-card dash-panel" aria-labelledby="profile-title">
-            <h2 id="profile-title" class="profile-title">Tu perfil</h2>
-            <p class="profile-lead">Datos de la sesión actual en ClientFlow AI.</p>
-            <dl class="profile-dl">
-              <div>
-                <dt>Correo</dt>
-                <dd id="profile-email">—</dd>
+            <h2 id="profile-title" class="profile-title">Mi perfil</h2>
+            <p class="profile-lead">Gestiona tu cuenta y los datos del negocio desde aquí.</p>
+            <p class="profile-flash" id="profile-flash" hidden></p>
+          </section>
+
+          <section class="profile-card dash-panel" aria-labelledby="profile-user-title">
+            <h3 id="profile-user-title" class="profile-section-title">Perfil</h3>
+            <form id="profile-user-form" class="profile-form">
+              <label class="profile-field">
+                <span class="profile-field-label">Nombre</span>
+                <input type="text" id="profile-name" class="profile-input" maxlength="120" placeholder="Tu nombre" />
+              </label>
+              <label class="profile-field">
+                <span class="profile-field-label">Correo</span>
+                <input type="email" id="profile-email" class="profile-input" readonly />
+              </label>
+              <label class="profile-field">
+                <span class="profile-field-label">ID de usuario</span>
+                <input type="text" id="profile-uid" class="profile-input profile-mono" readonly />
+              </label>
+              <div class="profile-actions">
+                <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="profile-user-save">
+                  Guardar perfil
+                </button>
               </div>
-              <div>
-                <dt>ID de usuario</dt>
-                <dd id="profile-uid" class="profile-mono">—</dd>
-              </div>
-            </dl>
+            </form>
+          </section>
+
+          <section class="profile-card dash-panel" aria-labelledby="profile-security-title">
+            <h3 id="profile-security-title" class="profile-section-title">Seguridad</h3>
+            <p class="profile-lead">Envía un correo de restablecimiento para cambiar tu contraseña.</p>
             <div class="profile-actions">
-              <a href="dashboard.html" class="dash-quick-btn">Ir al dashboard</a>
-              <button type="button" class="dash-quick-btn dash-quick-btn--ghost" id="profile-signout">
-                Cerrar sesión
+              <button type="button" class="dash-quick-btn" id="profile-reset-password">
+                Cambiar contraseña
               </button>
             </div>
+          </section>
+
+          <section class="profile-card dash-panel" aria-labelledby="profile-business-title">
+            <h3 id="profile-business-title" class="profile-section-title">Negocio</h3>
+            <form id="profile-business-form" class="profile-form">
+              <label class="profile-field">
+                <span class="profile-field-label">Nombre del negocio</span>
+                <input type="text" id="business-name" class="profile-input" maxlength="140" placeholder="Ej. YourColor" />
+              </label>
+              <label class="profile-field">
+                <span class="profile-field-label">Teléfono</span>
+                <input type="text" id="business-phone" class="profile-input" maxlength="40" placeholder="+1 555 123 4567" />
+              </label>
+              <label class="profile-field">
+                <span class="profile-field-label">Métodos de pago</span>
+                <textarea
+                  id="business-payment-methods"
+                  class="profile-input profile-textarea"
+                  rows="3"
+                  placeholder="Ej. Zelle, Cash App, efectivo"
+                ></textarea>
+              </label>
+              <div class="profile-actions">
+                <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="profile-business-save">
+                  Guardar negocio
+                </button>
+                <a href="dashboard.html" class="dash-quick-btn">Ir al dashboard</a>
+                <button type="button" class="dash-quick-btn dash-quick-btn--ghost" id="profile-signout">
+                  Cerrar sesión
+                </button>
+              </div>
+            </form>
           </section>
         </div>
       </main>

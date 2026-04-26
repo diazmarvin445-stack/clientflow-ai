@@ -6974,7 +6974,8 @@ body.cf-modal-open {
 }
 
 .profile-card {
-  max-width: 520px;
+  max-width: 960px;
+  margin-bottom: 1rem;
 }
 
 .profile-title {
@@ -7025,6 +7026,74 @@ body.cf-modal-open {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+}
+
+.profile-section-title {
+  margin: 0 0 0.8rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.profile-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.profile-field {
+  display: block;
+}
+
+.profile-field-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.profile-input {
+  width: 100%;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.62rem 0.72rem;
+  font-family: inherit;
+  font-size: 0.92rem;
+}
+
+.profile-input:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.profile-textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.profile-flash {
+  margin: 0.45rem 0 0;
+  border-radius: 0.55rem;
+  padding: 0.52rem 0.65rem;
+  font-size: 0.86rem;
+  border: 1px solid transparent;
+}
+
+.profile-flash.is-ok {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.28);
+  color: #166534;
+}
+
+.profile-flash.is-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #991b1b;
 }
 
 .dash-quick-btn--ghost {
