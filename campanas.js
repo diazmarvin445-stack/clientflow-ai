@@ -30,6 +30,37 @@ const genState = {
   prefillBusinessId: null,
 };
 
+function normalizeBusinessCategory(raw) {
+  const c = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (c === "construction_roofing") return "roofing_construction";
+  return c;
+}
+
+function isRoofingConstructionBusiness(business) {
+  const data = business?.data || {};
+  return (
+    normalizeBusinessCategory(data.businessCategory) === "roofing_construction" ||
+    normalizeBusinessCategory(data.category) === "roofing_construction"
+  );
+}
+
+function applyCampaignsSoonMode(enabled) {
+  const subtitle = document.querySelector(".camp-hub-hero-subtitle");
+  if (subtitle) {
+    subtitle.textContent = enabled
+      ? "Campañas IA para roofing/construction: Muy pronto. El módulo queda visible mientras terminamos la activación."
+      : "Genera propuestas publicitarias con IA, lanza campañas y monitorea resultados en tiempo real.";
+  }
+  ["camp-gen-generate-btn", "camp-gen-regenerate-btn", "camp-gen-save-btn"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !!enabled;
+    el.setAttribute("aria-disabled", enabled ? "true" : "false");
+  });
+}
+
 function formatUsd(n) {
   const v = Number(n) || 0;
   return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -1010,6 +1041,7 @@ async function loadCampanasForUser(user) {
     hideFirestoreError();
     hideCampaignSaveError();
     renderHeader(business, {});
+    applyCampaignsSoonMode(isRoofingConstructionBusiness(business));
     await renderCampaignsPage(business);
   } catch (err) {
     console.error(LOG_PREFIX, "Firestore / render error:", err);

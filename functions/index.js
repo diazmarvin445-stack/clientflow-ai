@@ -8,7 +8,7 @@ import cors from "cors";
 import {
   getYourColorSystemPrompt,
   getMayaWhatsAppSystemPrompt,
-  getMayaInternalChatPrompt,
+  getMayaInternalChatPromptForBusiness,
   computeValidatedMayaOrder,
   computeValidatedMayaCombinedOrder,
   YOURCOLOR_BUSINESS,
@@ -3251,7 +3251,11 @@ export const chatWithAI = onRequest(
           console.error("[chatWithAI] loadFreshFirebaseContextForMaya", e);
         }
 
-        const basePrompt = getMayaInternalChatPrompt();
+        const businessCtx =
+          firebaseContext && firebaseContext.business && typeof firebaseContext.business === "object"
+            ? firebaseContext.business
+            : {};
+        const basePrompt = getMayaInternalChatPromptForBusiness(businessCtx);
         const { system, messages, firebaseContext: reducedFirebaseContext } = prepareMayaAnthropicPayload(
           basePrompt,
           firebaseContext,

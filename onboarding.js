@@ -117,6 +117,15 @@ function stripUndefined(obj) {
   return out;
 }
 
+function normalizeBusinessCategory(raw) {
+  const v = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (v === "construction_roofing") return "roofing_construction";
+  if (v === "roofing_construction") return "roofing_construction";
+  return "custom_apparel";
+}
+
 let fileBuffer = [];
 
 if (otherCheck && otherField) {
@@ -342,8 +351,11 @@ if (form && successEl) {
       }
       const uid = u.uid;
 
+      const normalizedCategory = normalizeBusinessCategory(raw.businessCategory);
       const docData = {
         ...raw,
+        businessCategory: normalizedCategory,
+        category: normalizedCategory,
         ownerUid: uid,
         source: "onboarding",
         createdAt: serverTimestamp(),
@@ -365,7 +377,7 @@ if (form && successEl) {
       console.log("[ClientFlow onboarding] addDoc success:", { path, id: businessRef.id });
 
       await setDoc(doc(db, "businesses", businessRef.id, "settings", "businessProfile"), {
-        category: raw.businessCategory || "custom_apparel",
+        category: normalizedCategory,
         businessName: raw.businessName || "",
         services: raw.mayaServices || "",
         pricingModel: raw.mayaEstimateMethod || "",

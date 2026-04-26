@@ -6,7 +6,8 @@
 /** @typedef {{ id: string, name: string, href: string, icon: string }} CategoryMenuItem */
 
 /** Clave en Firestore para YourColor (Custom Apparel). */
-export const CATEGORY_CUSTOM_APPAREL = "Custom Apparel";
+export const CATEGORY_CUSTOM_APPAREL = "custom_apparel";
+export const CATEGORY_ROOFING_CONSTRUCTION = "roofing_construction";
 
 /**
  * @type {Record<string, { displayName: string, menuItems: CategoryMenuItem[] }>}
@@ -26,6 +27,20 @@ export const CATEGORY_CONFIGS = {
       { id: "configuracion", name: "Configuración", href: "configuracion.html", icon: "gear" },
     ],
   },
+  [CATEGORY_ROOFING_CONSTRUCTION]: {
+    displayName: "Roofing & Construction",
+    menuItems: [
+      { id: "dashboard", name: "Dashboard", href: "dashboard.html", icon: "home" },
+      { id: "chat", name: "Chat IA", href: "chat.html", icon: "chat" },
+      { id: "pedidos", name: "Pedidos", href: "pedidos.html", icon: "orders" },
+      { id: "clientes", name: "Clientes", href: "clientes.html", icon: "team" },
+      { id: "finanzas", name: "Finanzas", href: "finanzas.html", icon: "finance" },
+      { id: "campanas", name: "Campañas IA · Muy pronto", href: "campanas.html", icon: "spark" },
+      { id: "equipo", name: "Equipo", href: "equipo.html", icon: "team" },
+      { id: "diagnostico", name: "Diagnóstico", href: "diagnostico.html", icon: "gear" },
+      { id: "configuracion", name: "Configuración", href: "configuracion.html", icon: "gear" },
+    ],
+  },
   // "Carpentry": { displayName: "…", menuItems: [ … ] },
   // "Landscaping": { displayName: "…", menuItems: [ … ] },
 };
@@ -37,7 +52,9 @@ export const CATEGORY_CONFIGS = {
 export function getMenuItemsForCategory(category) {
   const k = String(category ?? "").trim();
   if (!k) return null;
-  const cfg = CATEGORY_CONFIGS[k];
+  const low = k.toLowerCase();
+  const normalized = low === "construction_roofing" ? CATEGORY_ROOFING_CONSTRUCTION : low;
+  const cfg = CATEGORY_CONFIGS[normalized];
   if (!cfg || !Array.isArray(cfg.menuItems) || cfg.menuItems.length === 0) return null;
   return cfg.menuItems;
 }

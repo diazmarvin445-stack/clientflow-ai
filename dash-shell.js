@@ -2,7 +2,12 @@
  * Shared dashboard chrome: sidebar mobile menu, coming-soon modal, topbar menu.
  */
 import { signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-import { clearStoredPrimaryBusiness, resolveBusinessForUser } from "./dashboard-data.js";
+import {
+  clearStoredPrimaryBusiness,
+  resolveBusinessForUser,
+  fetchBusinessesForOwnerList,
+  setSessionPrimaryBusinessId,
+} from "./dashboard-data.js";
 import { getMenuItemsForCategory } from "./category-config.js";
 import {
   addDoc,
@@ -216,7 +221,7 @@ function initThemeToggle() {
   });
 }
 
-function initUserMenu(auth) {
+function initUserMenu(auth, db) {
   const avatarBtn = document.querySelector(".dash-avatar");
   const notifyBtn = document.querySelector(".dash-notify");
   const topbarActions = document.querySelector(".dash-topbar-actions");
@@ -237,6 +242,10 @@ function initUserMenu(auth) {
     dropdown.hidden = true;
     dropdown.setAttribute("role", "menu");
     dropdown.innerHTML = `
+      <div class="dash-user-business-switch" data-cf-business-switch-wrap hidden>
+        <p class="dash-user-business-switch__title">Negocio activo</p>
+        <div class="dash-user-business-switch__list" data-cf-business-switch-list></div>
+      </div>
       <a href="profile.html" class="dash-user-dropdown-item" role="menuitem">Mi perfil</a>
       <a href="configuracion.html" class="dash-user-dropdown-item" role="menuitem">Configuración</a>
       <a href="onboarding.html" class="dash-user-dropdown-item" role="menuitem">Configuración del negocio</a>
@@ -267,6 +276,43 @@ function initUserMenu(auth) {
   dropdown.addEventListener("click", (e) => e.stopPropagation());
 
   const signOutBtn = dropdown.querySelector("[data-cf-signout]");
+  const switchWrap = dropdown.querySelector("[data-cf-business-switch-wrap]");
+  const switchList = dropdown.querySelector("[data-cf-business-switch-list]");
+
+  if (auth && db && switchWrap && switchList) {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+      try {
+        const [allBusinesses, activeBusiness] = await Promise.all([
+          fetchBusinessesForOwnerList(db, user.uid),
+          resolveBusinessForUser(db, user),
+        ]);
+        if (!Array.isArray(allBusinesses) || allBusinesses.length <= 1) {
+          switchWrap.hidden = true;
+          switchList.innerHTML = "";
+          return;
+        }
+        switchWrap.hidden = false;
+        switchList.innerHTML = "";
+        for (const row of allBusinesses) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "dash-user-business-switch__btn";
+          if (activeBusiness?.id === row.id) btn.classList.add("is-active");
+          const name = String(row.data?.businessName || "Negocio");
+          const cat = String(row.data?.businessCategory || row.data?.category || "").trim();
+          btn.textContent = cat ? `${name} · ${cat}` : name;
+          btn.addEventListener("click", () => {
+            setSessionPrimaryBusinessId(user.uid, row.id);
+            window.location.reload();
+          });
+          switchList.appendChild(btn);
+        }
+      } catch (e) {
+        console.warn("[DashShell] business switcher", e);
+      }
+    });
+  }
   if (signOutBtn && auth) {
     signOutBtn.addEventListener("click", async () => {
       try {
@@ -937,7 +983,7 @@ export function initDashShell(opts = {}) {
   initSidebar();
   bindComingSoonTriggers();
   initThemeToggle();
-  if (auth) initUserMenu(auth);
+  if (auth) initUserMenu(auth, db);
   if (auth && db) {
     onAuthStateChanged(auth, (user) => {
       if (user) {

@@ -217,6 +217,31 @@ export function setSessionPrimaryBusinessId(ownerUid, businessId) {
   }
 }
 
+/**
+ * Lista todos los negocios del dueño (para selector rápido multi-negocio).
+ * @param {*} db
+ * @param {string} ownerUid
+ * @returns {Promise<Array<{ id: string, data: Record<string, unknown> }>>}
+ */
+export async function fetchBusinessesForOwnerList(db, ownerUid) {
+  if (!ownerUid || typeof ownerUid !== "string") return [];
+  const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid));
+  let snap;
+  try {
+    snap = await getDocsFromServer(q);
+  } catch {
+    snap = await getDocs(q);
+  }
+  const rows = snap.docs.map((d) => ({ id: d.id, data: normalizeBusinessDocument(d.data() || {}) }));
+  rows.sort((a, b) => {
+    const ta = toDate(a.data?.createdAt)?.getTime() ?? 0;
+    const tb = toDate(b.data?.createdAt)?.getTime() ?? 0;
+    if (tb !== ta) return tb - ta;
+    return String(a.data?.businessName || "").localeCompare(String(b.data?.businessName || ""), "es");
+  });
+  return rows;
+}
+
 function readSessionPrimaryBusinessId(ownerUid) {
   const uid = typeof ownerUid === "string" ? ownerUid.trim() : "";
   if (!uid) return null;
@@ -288,34 +313,32 @@ async function fetchBusinessForOwnerImpl(db, ownerUid) {
 
   const sessionHint = readSessionPrimaryBusinessId(ownerUid);
   const ids = new Set(rows.map((r) => r.id));
-  if (sessionHint && ids.has(sessionHint) && sessionHint !== best.id) {
-    console.warn(
-      "[ClientFlow] Session had a different business id; using deterministic primary.",
-      { sessionBusinessId: sessionHint, deterministicId: best.id },
-    );
-  }
+  const chosen =
+    sessionHint && ids.has(sessionHint)
+      ? rows.find((r) => r.id === sessionHint) || best
+      : best;
 
   try {
     sessionStorage.setItem(
       PRIMARY_BUSINESS_SESSION_KEY,
-      JSON.stringify({ uid: ownerUid, businessId: best.id }),
+      JSON.stringify({ uid: ownerUid, businessId: chosen.id }),
     );
   } catch (_) {
     /* ignore */
   }
 
-  console.log("Selected primary business:", best.id);
+  console.log("Selected primary business:", chosen.id);
 
   if (rows.length > 1) {
     console.warn(
-      `[ClientFlow] fetchBusinessForOwner: ${rows.length} business(es) for uid; primary rules → id=${best.id}. Public leads link must use solicitar.html?businessId=${best.id}.`,
+      `[ClientFlow] fetchBusinessForOwner: ${rows.length} business(es) for uid; selected id=${chosen.id}. Public leads link should use solicitar.html?businessId=${chosen.id}.`,
     );
   } else {
     console.log(
-      `[ClientFlow] fetchBusinessForOwner: businesses/${best.id} (reads leads/clients from this doc id)`,
+      `[ClientFlow] fetchBusinessForOwner: businesses/${chosen.id} (reads leads/clients from this doc id)`,
     );
   }
-  return { id: best.id, data: normalizeBusinessDocument(best.raw) };
+  return { id: chosen.id, data: normalizeBusinessDocument(chosen.raw) };
 }
 
 export async function fetchBusinessForOwner(db, ownerUid) {

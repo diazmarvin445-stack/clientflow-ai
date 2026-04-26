@@ -6718,6 +6718,46 @@ a.dash-stat-card--soon {
   background: #fef2f2;
 }
 
+.dash-user-business-switch {
+  border-bottom: 1px solid var(--border);
+  margin: 0.15rem 0.2rem 0.35rem;
+  padding: 0.2rem 0.1rem 0.45rem;
+}
+
+.dash-user-business-switch__title {
+  margin: 0 0 0.35rem;
+  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.dash-user-business-switch__list {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.dash-user-business-switch__btn {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.dash-user-business-switch__btn:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.dash-user-business-switch__btn.is-active {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.55);
+}
+
 .cf-modal-host {
   position: fixed;
   inset: 0;
