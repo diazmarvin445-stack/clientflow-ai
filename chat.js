@@ -33,6 +33,7 @@ import { initDashShell } from "./dash-shell.js";
 import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 import { businessCollectionRef, businessDocRef } from "./category-context.js";
+import { ensureContextInUrl, resolveAppContext } from "./appContext.js";
 
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
@@ -56,6 +57,15 @@ let firebaseContextPayload = null;
 
 /** @type {{ id: string, data: Record<string, unknown> } | null} */
 let activeBusiness = null;
+
+function ensureChatAuthContext(user) {
+  const resolved = resolveAppContext(user) || {};
+  const uid = String(user?.uid || "").trim();
+  const workspaceId = String(resolved.workspaceId || "yourcolor").trim() || "yourcolor";
+  const categoryId = String(resolved.categoryId || "custom_apparel").trim() || "custom_apparel";
+  ensureContextInUrl({ workspaceId, categoryId });
+  return { uid, workspaceId, categoryId };
+}
 
 function activeScopeUid() {
   return String(activeBusiness?.scope?.uid || panelChatUserIdCache || "");
@@ -3112,7 +3122,8 @@ function boot() {
 
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      panelChatUserIdCache = user.uid;
+      const ctx = ensureChatAuthContext(user);
+      panelChatUserIdCache = ctx.uid;
       previousAuthUser = user;
       bootWithUser(user).catch((err) => {
         console.error(err);
