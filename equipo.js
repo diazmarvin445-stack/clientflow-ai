@@ -24,6 +24,8 @@ import { initDashShell } from "./dash-shell.js";
 
 /** @type {string | null} */
 let businessId = null;
+/** @type {string | null} */
+let scopeUid = null;
 /** @type {Record<string, unknown>[]} */
 let members = [];
 /** @type {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js").User | null} */
@@ -36,6 +38,18 @@ let unsubSessions = null;
 let unsubPendingOrders = null;
 /** @type {Record<string, unknown>[]} */
 let pendingOrders = [];
+
+function scopedCollection(subcollection) {
+  if (!businessId) return null;
+  if (scopeUid) return collection(db, "users", scopeUid, "categories", businessId, subcollection);
+  return collection(db, "businesses", businessId, subcollection);
+}
+
+function scopedDoc(subcollection, id) {
+  if (!businessId || !id) return null;
+  if (scopeUid) return doc(db, "users", scopeUid, "categories", businessId, subcollection, String(id));
+  return doc(db, "businesses", businessId, subcollection, String(id));
+}
 
 /**
  * Simple client session clock + Firestore session id.
@@ -786,7 +800,8 @@ function findMyOpenSession() {
 
 async function pauseSessionRemote(session, reason = "manual") {
   if (!businessId || !session?.id) return;
-  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(session.id));
+  const sessionRef = scopedDoc("teamSessions", session.id);
+  if (!sessionRef) return;
   const resumedAt = tsToDate(session.resumedAt) || tsToDate(session.startedAt) || tsToDate(session.startTime);
   const tracked = Number(session.totalTrackedMs) || 0;
   const extra = resumedAt ? Math.max(0, Date.now() - resumedAt.getTime()) : 0;
@@ -800,7 +815,9 @@ async function pauseSessionRemote(session, reason = "manual") {
     updatedAt: serverTimestamp(),
   });
   if (session.linkedOrderId) {
-    await updateDoc(doc(db, "businesses", businessId, "orders", String(session.linkedOrderId)), {
+    const ord = scopedDoc("orders", session.linkedOrderId);
+    if (!ord) return;
+    await updateDoc(ord, {
       workStatus: "en_preparacion",
       currentOperatorId: currentUser?.uid || null,
       lastWorkedAt: serverTimestamp(),
@@ -811,7 +828,8 @@ async function pauseSessionRemote(session, reason = "manual") {
 
 async function resumeSessionRemote(session) {
   if (!businessId || !session?.id) return;
-  const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(session.id));
+  const sessionRef = scopedDoc("teamSessions", session.id);
+  if (!sessionRef) return;
   await updateDoc(sessionRef, {
     status: "activa",
     resumedAt: Timestamp.now(),
@@ -820,7 +838,9 @@ async function resumeSessionRemote(session) {
     updatedAt: serverTimestamp(),
   });
   if (session.linkedOrderId) {
-    await updateDoc(doc(db, "businesses", businessId, "orders", String(session.linkedOrderId)), {
+    const ord = scopedDoc("orders", session.linkedOrderId);
+    if (!ord) return;
+    await updateDoc(ord, {
       workStatus: "en_preparacion",
       status: "en_preparacion",
       currentOperatorId: currentUser?.uid || null,
@@ -832,7 +852,8 @@ async function resumeSessionRemote(session) {
 
 async function markPreparationOrderReady(orderId) {
   if (!businessId || !orderId) return;
-  const orderRef = doc(db, "businesses", businessId, "orders", String(orderId));
+  const orderRef = scopedDoc("orders", orderId);
+  if (!orderRef) return;
   await updateDoc(orderRef, {
     workStatus: "listo",
     status: "listo",
@@ -854,7 +875,8 @@ async function removePreparationOrder(orderId) {
   if (!businessId || !orderId) return;
   const confirmed = window.confirm("¿Quitar este pedido de preparación? Esto no lo entrega, solo lo saca del flujo de equipo.");
   if (!confirmed) return;
-  const orderRef = doc(db, "businesses", businessId, "orders", String(orderId));
+  const orderRef = scopedDoc("orders", orderId);
+  if (!orderRef) return;
   const snap = await getDoc(orderRef);
   if (!snap.exists()) return;
   const data = snap.data() || {};
@@ -975,7 +997,9 @@ async function confirmDelete(id, name) {
   );
   if (!ok || !businessId) return;
   try {
-    await deleteDoc(doc(db, "businesses", businessId, "teamMembers", id));
+    const ref = scopedDoc("teamMembers", id);
+    if (!ref) return;
+    await deleteDoc(ref);
     members = await fetchTeamMembersForBusiness(db, businessId);
     renderList(members);
     updateStats(members);
@@ -1023,9 +1047,13 @@ async function submitForm(ev) {
 
   try {
     if (editId) {
-      await updateDoc(doc(db, "businesses", businessId, "teamMembers", editId), payload);
+      const ref = scopedDoc("teamMembers", editId);
+      if (!ref) return;
+      await updateDoc(ref, payload);
     } else {
-      await addDoc(collection(db, "businesses", businessId, "teamMembers"), {
+      const col = scopedCollection("teamMembers");
+      if (!col) return;
+      await addDoc(col, {
         ...payload,
         createdAt: serverTimestamp(),
       });
@@ -1089,7 +1117,9 @@ function logEquipoLayoutMetrics(source = "unknown") {
 
 async function addFinanceExpenseLabor({ amount, operatorName, orderId, endDate }) {
   if (!businessId) return null;
-  const ref = await addDoc(collection(db, "businesses", businessId, "finance"), {
+  const col = scopedCollection("finance");
+  if (!col) return;
+  const ref = await addDoc(col, {
     type: "expense",
     category: "mano_obra",
     description: `Pago por horas - ${operatorName}`,
@@ -1153,7 +1183,8 @@ async function startWork() {
 
     const member = memberForCurrentUser();
     const userName = currentUserDisplayName();
-    const orderRef = doc(db, "businesses", businessId, "orders", linkedOrderId);
+    const orderRef = scopedDoc("orders", linkedOrderId);
+    if (!orderRef) return;
     const statusToWrite = linkedOrderStatus === "nuevo" ? "en_preparacion" : linkedOrderStatus;
     await updateDoc(orderRef, {
       status: statusToWrite || "en_preparacion",
@@ -1163,7 +1194,9 @@ async function startWork() {
     });
 
     const nowTs = Timestamp.now();
-    const sessionRef = await addDoc(collection(db, "businesses", businessId, "teamSessions"), {
+    const sessionsCol = scopedCollection("teamSessions");
+    if (!sessionsCol) return;
+    const sessionRef = await addDoc(sessionsCol, {
       operatorId: currentUser.uid,
       operatorName: userName,
       userId: currentUser.uid,
@@ -1315,7 +1348,8 @@ async function finalizeWork() {
     const orderId = currentWorkSession.orderId;
     const sid = currentWorkSession.firestoreSessionId;
 
-    const sessionRef = doc(db, "businesses", businessId, "teamSessions", String(sid));
+    const sessionRef = scopedDoc("teamSessions", sid);
+    if (!sessionRef) return;
     await updateDoc(sessionRef, {
       status: "finalizada",
       endedAt: Timestamp.fromDate(end),
@@ -1331,7 +1365,8 @@ async function finalizeWork() {
     });
 
     if (orderId) {
-      const orderRef = doc(db, "businesses", businessId, "orders", String(orderId));
+      const orderRef = scopedDoc("orders", orderId);
+      if (!orderRef) return;
       try {
         const snap = await getDoc(orderRef);
         if (snap.exists()) {
@@ -1381,7 +1416,9 @@ function subscribePendingOrders() {
     unsubPendingOrders();
     unsubPendingOrders = null;
   }
-  const qy = query(collection(db, "businesses", businessId, "orders"), orderBy("createdAt", "desc"), limit(250));
+  const colOrders = scopedCollection("orders");
+  if (!colOrders) return;
+  const qy = query(colOrders, orderBy("createdAt", "desc"), limit(250));
   unsubPendingOrders = onSnapshot(
     qy,
     (snap) => {
@@ -1406,7 +1443,9 @@ function subscribeTeamSessions() {
     unsubSessions();
     unsubSessions = null;
   }
-  const qy = query(collection(db, "businesses", businessId, "teamSessions"), limit(500));
+  const colSessions = scopedCollection("teamSessions");
+  if (!colSessions) return;
+  const qy = query(colSessions, limit(500));
   unsubSessions = onSnapshot(
     qy,
     (snap) => {
@@ -1518,6 +1557,7 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     businessId = business.id;
+    scopeUid = business?.scope?.uid || user.uid || null;
     renderHeader(business);
     members = await fetchTeamMembersForBusiness(db, businessId);
     renderList(members);

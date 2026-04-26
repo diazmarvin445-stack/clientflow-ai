@@ -30,6 +30,10 @@ const genState = {
   prefillBusinessId: null,
 };
 
+function activeScopeUidFromBusiness(business) {
+  return typeof business?.scope?.uid === "string" ? business.scope.uid : "";
+}
+
 function normalizeBusinessCategory(raw) {
   const c = String(raw || "")
     .trim()
@@ -312,7 +316,11 @@ function renderLiveCampaigns(campaigns) {
 }
 
 async function refreshCampaignsHub(businessId) {
-  const agg = await fetchCampaignsListAndStats(db, businessId);
+  const agg = await fetchCampaignsListAndStats(
+    db,
+    businessId,
+    activeScopeUidFromBusiness(genState.business) || null,
+  );
   renderHubStats(agg);
   renderLiveCampaigns(agg.campaigns);
   return agg;
@@ -325,7 +333,10 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
   btn.dataset.saving = "1";
   btn.setAttribute("aria-busy", "true");
 
-  const campaignsCol = collection(db, "businesses", businessId, "campaigns");
+  const scopeUid = activeScopeUidFromBusiness(genState.business);
+  const campaignsCol = scopeUid
+    ? collection(db, "users", scopeUid, "categories", businessId, "campaigns")
+    : collection(db, "businesses", businessId, "campaigns");
   const payload = {
     title: c.name,
     platform: c.platform,
@@ -354,7 +365,7 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
         ? err.message
         : "Error desconocido al guardar en Firestore.";
     showCampaignSaveError(
-      `No se pudo guardar la campaña: ${msg}. Revisa reglas de seguridad (escritura en businesses/{id}/campaigns) y la consola.`,
+      `No se pudo guardar la campaña: ${msg}. Revisa reglas de seguridad y la consola.`,
     );
   }
 }
@@ -615,7 +626,11 @@ async function renderCampaignsPage(business) {
 
   let launchedIds = new Set();
   try {
-    launchedIds = await fetchLaunchedRecommendationIds(db, business.id);
+    launchedIds = await fetchLaunchedRecommendationIds(
+      db,
+      business.id,
+      activeScopeUidFromBusiness(business) || null,
+    );
   } catch (e) {
     console.warn(LOG_PREFIX, "Could not read existing campaigns:", e);
   }
@@ -857,7 +872,10 @@ function fillGeneratorOutput(data) {
 
 async function saveGeneratedCampaign(businessId, pack) {
   const { output: data, inputs } = pack;
-  const campaignsCol = collection(db, "businesses", businessId, "campaigns");
+  const scopeUid = activeScopeUidFromBusiness(genState.business);
+  const campaignsCol = scopeUid
+    ? collection(db, "users", scopeUid, "categories", businessId, "campaigns")
+    : collection(db, "businesses", businessId, "campaigns");
   const audienceLine = [inputs.goal, inputs.audience, inputs.location].filter(Boolean).join(" · ") || "—";
   await addDoc(campaignsCol, {
     title: data.headline.slice(0, 120),

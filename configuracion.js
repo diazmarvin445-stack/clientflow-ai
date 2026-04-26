@@ -22,6 +22,8 @@ import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsLis
 
 /** @type {string | null} */
 let businessId = null;
+/** @type {string | null} */
+let scopeUid = null;
 /** @type {Record<string, unknown> | null} */
 let businessData = null;
 /** @type {string | null} */
@@ -31,6 +33,12 @@ let pendingReceiptLogoDataUrl = null;
 /** @type {string} */
 let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
+
+function businessRef() {
+  if (!businessId) return null;
+  if (scopeUid) return doc(db, "users", scopeUid, "categories", businessId);
+  return doc(db, "businesses", businessId);
+}
 
 function renderHeader(business) {
   const nameEl = document.getElementById("dash-business-name");
@@ -220,7 +228,8 @@ async function refreshReceiptSettingsForm() {
 async function saveSection(section) {
   if (!businessId || !businessData) return;
 
-  const ref = doc(db, "businesses", businessId);
+  const ref = businessRef();
+  if (!ref) return;
   const base = { updatedAt: serverTimestamp(), ownerUid: auth.currentUser.uid };
 
   try {
@@ -336,7 +345,8 @@ async function saveSection(section) {
 async function toggleIntegration(key) {
   if (!businessId || !businessData) return;
   const next = !integrationConnected(businessData, key);
-  const ref = doc(db, "businesses", businessId);
+  const ref = businessRef();
+  if (!ref) return;
   const foot = document.getElementById("cfg-feedback-integrations");
   try {
     await updateDoc(ref, {
@@ -477,6 +487,7 @@ async function loadPage(user) {
     }
 
     businessId = business.id;
+    scopeUid = business?.scope?.uid || user.uid;
     const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
     setDiagnosticsLoggerContext({ businessId, ownerUid });
     applyFormFromBusiness(business.data);

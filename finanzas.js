@@ -52,6 +52,8 @@ const ALL_CAT_LABELS = Object.fromEntries([
 let currentPeriod = "month";
 /** @type {string | null} */
 let businessId = null;
+/** @type {string | null} */
+let scopeUid = null;
 /** @type {(() => void) | null} */
 let unsubFinance = null;
 /** @type {(() => void) | null} */
@@ -65,6 +67,18 @@ let fixedExpensesCache = [];
 
 /** YourColor / custom_apparel: gastos fijos (mensual / semanal / anual) en Finanzas. */
 let yourColorFinMode = false;
+
+function scopedCollection(subcollection, bid = businessId) {
+  if (!bid) return null;
+  if (scopeUid) return collection(db, "users", scopeUid, "categories", bid, subcollection);
+  return collection(db, "businesses", bid, subcollection);
+}
+
+function scopedDoc(subcollection, id, bid = businessId) {
+  if (!bid || !id) return null;
+  if (scopeUid) return doc(db, "users", scopeUid, "categories", bid, subcollection, id);
+  return doc(db, "businesses", bid, subcollection, id);
+}
 
 /**
  * @param {typeof fixedExpensesCache[0]} row
@@ -393,7 +407,9 @@ function buildRow(row) {
     if (!confirm("¿Eliminar este movimiento? Esta acción no se puede deshacer.")) return;
     del.disabled = true;
     try {
-      await deleteDoc(doc(db, "businesses", businessId, "finance", row.id));
+      const ref = scopedDoc("finance", row.id);
+      if (!ref) return;
+      await deleteDoc(ref);
     } catch (e) {
       console.error(e);
       alert("No se pudo eliminar. Inténtalo de nuevo.");
@@ -460,7 +476,9 @@ function buildFixedRow(row) {
   cb.addEventListener("change", async () => {
     if (!businessId) return;
     try {
-      await updateDoc(doc(db, "businesses", businessId, "fixedExpenses", row.id), {
+      const ref = scopedDoc("fixedExpenses", row.id);
+      if (!ref) return;
+      await updateDoc(ref, {
         active: cb.checked,
         updatedAt: serverTimestamp(),
       });
@@ -490,7 +508,9 @@ function buildFixedRow(row) {
     if (!confirm("¿Eliminar este gasto fijo?")) return;
     btnDel.disabled = true;
     try {
-      await deleteDoc(doc(db, "businesses", businessId, "fixedExpenses", row.id));
+      const ref = scopedDoc("fixedExpenses", row.id);
+      if (!ref) return;
+      await deleteDoc(ref);
     } catch (e) {
       console.error(e);
       alert("No se pudo eliminar.");
@@ -624,9 +644,13 @@ function wireFixedModal() {
     }
     try {
       if (editId) {
-        await updateDoc(doc(db, "businesses", businessId, "fixedExpenses", editId), payload);
+        const ref = scopedDoc("fixedExpenses", editId);
+        if (!ref) return;
+        await updateDoc(ref, payload);
       } else {
-        await addDoc(collection(db, "businesses", businessId, "fixedExpenses"), {
+        const col = scopedCollection("fixedExpenses");
+        if (!col) return;
+        await addDoc(col, {
           ...payload,
           createdAt: serverTimestamp(),
         });
@@ -650,7 +674,7 @@ function subscribeFixedExpenses(bid) {
     unsubFixedExpenses = null;
   }
   unsubFixedExpenses = onSnapshot(
-    collection(db, "businesses", bid, "fixedExpenses"),
+    /** @type {ReturnType<typeof collection>} */ (scopedCollection("fixedExpenses", bid)),
     (snap) => {
       fixedExpensesCache = [];
       snap.forEach((d) => {
@@ -777,7 +801,9 @@ function wireModal() {
       saveBtn.setAttribute("aria-busy", "true");
     }
     try {
-      await addDoc(collection(db, "businesses", businessId, "finance"), {
+      const col = scopedCollection("finance");
+      if (!col) return;
+      await addDoc(col, {
         type,
         amount: raw,
         category,
@@ -832,7 +858,7 @@ function subscribeFinance(bid) {
   }
   businessId = bid;
   const qy = query(
-    collection(db, "businesses", bid, "finance"),
+    /** @type {ReturnType<typeof collection>} */ (scopedCollection("finance", bid)),
     orderBy("date", "desc"),
     limit(500),
   );
@@ -870,12 +896,14 @@ async function bootUser(user) {
   hideLoadError();
   const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
+  scopeUid = business?.scope?.uid || user.uid || null;
   yourColorFinMode = isYourColorFinanceBusiness(business);
   const fixedPanel = document.getElementById("fin-fixed-panel");
   if (fixedPanel) fixedPanel.hidden = !yourColorFinMode;
 
   if (!business) {
     businessId = null;
+    scopeUid = null;
     rowsCache = [];
     fixedExpensesCache = [];
     yourColorFinMode = false;

@@ -500,8 +500,8 @@ function endOfLocalDay(d = new Date()) {
 /**
  * IDs of AI recommendations already saved as active campaigns (`recommendationId` on campaign docs).
  */
-export async function fetchLaunchedRecommendationIds(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "campaigns"));
+export async function fetchLaunchedRecommendationIds(db, businessId, ownerUid = null) {
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "campaigns"));
   const ids = new Set();
   snap.forEach((docSnap) => {
     const row = docSnap.data();
