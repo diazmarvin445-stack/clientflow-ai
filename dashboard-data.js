@@ -21,7 +21,6 @@ import {
   setActiveCategoryId,
   listUserCategories,
   loadCategoryProfile,
-  getCategoryFromUrl,
 } from "./category-context.js";
 
 function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
@@ -449,17 +448,17 @@ export async function resolveBusinessForUser(db, user) {
   if (!user || typeof user.uid !== "string") return null;
   const categoryCtx = await resolveCategoryContextForUser(db, user).catch(() => null);
   if (categoryCtx) {
-    const profile = await loadCategoryProfile(db, categoryCtx.uid, categoryCtx.categoryId).catch(() => ({}));
+    const profile = await loadCategoryProfile(db, categoryCtx.uid, "yourcolor").catch(() => ({}));
     return {
-      id: categoryCtx.categoryId,
+      id: "yourcolor",
       data: normalizeBusinessDocument({
         ...categoryCtx.data,
         ...profile,
         ownerUid: categoryCtx.uid,
-        businessCategory: categoryCtx.categoryId,
-        category: categoryCtx.categoryId,
+        businessName:
+          (typeof profile.businessName === "string" && profile.businessName.trim()) || "YourColor",
       }),
-      scope: { uid: categoryCtx.uid, categoryId: categoryCtx.categoryId },
+      scope: { uid: categoryCtx.uid, businessPath: categoryCtx.businessPath || `users/${categoryCtx.uid}/yourcolor` },
     };
   }
   const uid = user.uid;
@@ -473,20 +472,14 @@ export async function resolveBusinessForUser(db, user) {
       const claimed = await tryClaimUnownedBusinessByEmail(db, uid, em);
       if (claimed) return claimed;
     }
-    const urlCategory = getCategoryFromUrl();
-    if (urlCategory) {
-      return {
-        id: urlCategory,
-        data: normalizeBusinessDocument({
-          ownerUid: uid,
-          businessCategory: urlCategory,
-          category: urlCategory,
-          businessName: "",
-        }),
-        scope: { uid, categoryId: urlCategory },
-      };
-    }
-    return null;
+    return {
+      id: "yourcolor",
+      data: normalizeBusinessDocument({
+        ownerUid: uid,
+        businessName: "YourColor",
+      }),
+      scope: { uid, businessPath: `users/${uid}/yourcolor` },
+    };
   })();
 
   inflightResolveByUid.set(uid, promise);
@@ -533,9 +526,10 @@ export async function fetchLaunchedRecommendationIds(db, businessId, ownerUid = 
  * @param {string | null} [ownerUidForMergedLeads] If set, merges leads from ALL `businesses` docs with this owner (fixes mismatched solicitar `businessId` vs newest `fetchBusinessForOwner` id).
  */
 export async function fetchDashboardMetrics(db, businessId, ownerUidForMergedLeads = null) {
+  if (!ownerUidForMergedLeads) throw new Error("Ruta bloqueada: falta uid para dashboard metrics.");
   const [jobsSnap, campaignsSnap, recentLeadDocs] = await Promise.all([
-    getDocs(collection(db, "businesses", businessId, "jobs")),
-    getDocs(collection(db, "businesses", businessId, "campaigns")),
+    getDocs(scopedCategoryCollection(db, businessId, ownerUidForMergedLeads, "jobs")),
+    getDocs(scopedCategoryCollection(db, businessId, ownerUidForMergedLeads, "campaigns")),
     fetchLeadsForBusiness(db, businessId, ownerUidForMergedLeads || undefined),
   ]);
 
@@ -681,7 +675,7 @@ export async function fetchLeadsForBusiness(db, businessId, ownerUidMerge) {
  * Jobs / órdenes en `businesses/{businessId}/jobs`, más recientes primero.
  */
 export async function fetchJobsForBusiness(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "jobs"));
+  throw new Error("Ruta bloqueada: fetchJobsForBusiness requiere uid y path YourColor.");
   const rows = [];
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data() });
@@ -1163,7 +1157,7 @@ export function fixedExpenseScheduleUi(row, asOf = new Date()) {
  * @returns {Promise<number>}
  */
 export async function fetchAccruedFixedExpenseTotalForCurrentMonth(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "fixedExpenses"));
+  throw new Error("Ruta bloqueada: accrued fixed expenses requiere uid y path YourColor.");
   const rows = snap.docs.map((d) => d.data());
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);

@@ -1,95 +1,92 @@
 # YourColor Single-Business Cleanup Report
 
-## Decision Applied
+## Final state
 
-This codebase was cleaned to run as a **YourColor-only CRM**.
+This project now runs as **single-business YourColor only**.
 
-- Multi-category behavior was disabled in practice.
-- Roofing/Construction menu branching was removed from category navigation.
-- Runtime data scope was simplified to a single stable Firestore base:
+- No dynamic workspace/category routing is used in runtime context.
+- Runtime debug no longer shows `workspaceId` or `categoryId`.
+- Official base path is now:
+  - `users/{uid}/yourcolor`
 
-`users/{uid}/yourcolor/...`
-
-## Official Firestore Route (single)
-
-All primary modules now target the same base for the same authenticated user:
+## Official paths in use
 
 - `users/{uid}/yourcolor/profile`
 - `users/{uid}/yourcolor/clients`
 - `users/{uid}/yourcolor/orders`
 - `users/{uid}/yourcolor/finances`
-- `users/{uid}/yourcolor/teamMembers` (team data)
+- `users/{uid}/yourcolor/teamMembers`
+- `users/{uid}/yourcolor/publicReceipts`
 - `users/{uid}/yourcolor/settings/*`
 - `users/{uid}/yourcolor/internalChat*`
 
-## What was cleaned/disabled
+## Runtime context simplification
 
-### 1) Category/workspace path dynamics
+`appContext.js` was simplified to use:
 
-- `dataPaths.js` base path changed from workspaces/categories to:
-  - `users/{uid}/yourcolor`
-- `profileDocRef` now points to:
-  - `users/{uid}/yourcolor/profile`
+- `uid`
+- `businessPath` (`users/{uid}/yourcolor`)
 
-### 2) Category context abstraction hardened to YourColor
+Removed from debug/runtime display:
 
-- `category-context.js` now resolves:
-  - `categoryId = custom_apparel`
-  - `workspaceId = yourcolor`
-- `withCategoryInHref` no longer appends dynamic category params.
-- Category list/context resolution returns only `custom_apparel`.
-- `businessCollectionRef` / `businessDocRef` route all writes/reads through the single YourColor base.
+- `workspaceId`
+- `categoryId`
 
-### 3) Category templates/menus cleanup
+## Module normalization (YourColor-only path)
 
-- `category-config.js` now serves only the `custom_apparel` menu.
-- Roofing/construction category menu blocks were removed.
+Normalized modules:
 
-### 4) Critical module consistency kept on one path
+- `dashboard`
+- `pedidos`
+- `clientes`
+- `finanzas`
+- `chat / Maya`
+- `configuracion`
+- `recibos` (`receipt-settings.js`, `receipt-public-sync.js`)
+- `equipo` (via shared scoped path helpers)
+- `diagnostico`
 
-- `chat.js` (Maya writes and logs)
-- `pedidos.js`
-- `clientes.js`
-- `finanzas.js`
-- `configuracion.js`
-- `dashboard-data.js` scoped collection reads
+## Header business name behavior
 
-All now converge to `users/{uid}/yourcolor/...` via shared path helpers.
+Header business name now resolves from:
 
-### 5) Security rules support
+- `users/{uid}/yourcolor/profile`
 
-- `firestore.rules` includes:
-  - `match /users/{uid}/yourcolor/{document=**}`
-  - owner-authenticated read/write
+If profile is missing:
 
-## Delivered order + finance behavior
+- default business name remains `YourColor`
+- Configuración can create profile from empty state.
 
-The existing delivered-order idempotent flow in `pedidos.js` remains active and scoped to the single YourColor path:
+## Maya write behavior
 
-- income creation on delivered
+Maya writes are routed only to `users/{uid}/yourcolor/...`.
+If uid/business context is missing, write actions are blocked with explicit error.
+
+## Delivered order behavior
+
+Delivered flow in `pedidos` remains idempotent under YourColor path:
+
+- income creation in finances
 - expense creation (if applicable)
 - duplicate prevention by `orderId`
 
-## Empty-state readiness
+## Security rules
 
-Configuration and operational modules continue to support empty state startup:
+Firestore rules include:
 
-- load without existing docs
-- create from scratch on first save
+- `match /users/{uid}/yourcolor/{document=**}`
 
-## Not removed (intentionally)
+allowing authenticated owner read/write on the single business tree.
 
-To avoid breaking unrelated surfaces abruptly, legacy files may still exist physically in repo (e.g. old construction modules), but active pathing/menu routing now operates as YourColor-only in this version.
-
-## Final validation checklist
+## Final acceptance checklist
 
 1. Create client.
 2. Create order.
 3. Mark order delivered.
-4. Verify finance income.
-5. Verify finance expense (if applicable).
-6. Verify balance updates.
-7. Open same account on phone and desktop.
-8. Confirm both show same data.
-9. Ask Maya to create an order.
+4. Verify income in Finanzas.
+5. Verify expense (if applicable).
+6. Verify balance.
+7. Login same account on phone + desktop.
+8. Confirm same dataset on both.
+9. Ask Maya to create order.
 10. Confirm order appears in Pedidos and Firestore under `users/{uid}/yourcolor/orders`.

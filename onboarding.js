@@ -1,7 +1,6 @@
 import { db, auth } from "./firebase.js";
 import { setSessionPrimaryBusinessId } from "./dashboard-data.js";
 import { categoryDocRef, ensureUserCategory, setActiveCategoryId } from "./category-context.js";
-import { getUrlContext } from "./appContext.js";
 import { profileDocRef } from "./dataPaths.js";
 import {
   collection,
@@ -129,8 +128,8 @@ function normalizeBusinessCategory(raw) {
 }
 
 function businessProfileRef(uid, category) {
-  const workspaceId = getUrlContext().workspaceId || uid;
-  return profileDocRef(db, { uid, workspaceId, categoryId: category });
+  void category;
+  return profileDocRef(db, { uid, businessPath: `users/${uid}/yourcolor` });
 }
 
 let fileBuffer = [];

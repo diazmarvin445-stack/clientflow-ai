@@ -59,20 +59,20 @@ export function buildPublicReceiptPayload(receiptId, row, biz) {
 }
 
 /**
- * Create/update `businesses/{businessId}/publicReceipts/{receiptId}` and persist `publicReceiptId` on the order once.
+ * Create/update `users/{uid}/yourcolor/publicReceipts/{receiptId}` and persist `publicReceiptId` on the order once.
  * @param {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js").Firestore} db
- * @param {string} businessId
+ * @param {string} uid
  * @param {Record<string, unknown> & { id?: string }} row
  * @param {Record<string, unknown>} biz from getReceiptPdfBusiness
  * @returns {Promise<{ receiptId: string }>}
  */
-export async function ensurePublicReceiptDocument(db, businessId, row, biz) {
-  if (!businessId || !row?.id) throw new Error("Falta negocio o pedido.");
+export async function ensurePublicReceiptDocument(db, uid, row, biz) {
+  if (!uid || !row?.id) throw new Error("Falta uid o pedido.");
   const orderId = String(row.id);
   const existing =
     typeof row.publicReceiptId === "string" && row.publicReceiptId.trim() ? row.publicReceiptId.trim() : "";
   const receiptId = existing || newReceiptId();
-  const ref = doc(db, "businesses", businessId, "publicReceipts", receiptId);
+  const ref = doc(db, "users", uid, "yourcolor", "publicReceipts", receiptId);
   const prev = await getDoc(ref);
   const payload = buildPublicReceiptPayload(receiptId, row, biz);
 
@@ -83,7 +83,7 @@ export async function ensurePublicReceiptDocument(db, businessId, row, biz) {
   }
 
   if (!existing) {
-    await updateDoc(doc(db, "businesses", businessId, "orders", orderId), { publicReceiptId: receiptId });
+    await updateDoc(doc(db, "users", uid, "yourcolor", "orders", orderId), { publicReceiptId: receiptId });
   }
 
   return { receiptId };

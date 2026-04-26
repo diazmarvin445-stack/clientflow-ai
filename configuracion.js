@@ -18,7 +18,7 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
-import { ensureYourColorContext, getUrlContext, renderContextDebugBadge } from "./appContext.js";
+import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 import { profileDocRef } from "./dataPaths.js";
 
 /** @type {string | null} */
@@ -55,8 +55,7 @@ async function saveProfilePatch(patch) {
 
 function businessProfileRef() {
   if (!businessId || !scopeUid) return null;
-  const workspaceId = getUrlContext().workspaceId || scopeUid;
-  return profileDocRef(db, { uid: scopeUid, workspaceId, categoryId: businessId });
+  return profileDocRef(db, { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` });
 }
 
 function mapCategoryToIndustry(value) {
@@ -64,10 +63,7 @@ function mapCategoryToIndustry(value) {
     .trim()
     .toLowerCase();
   if (!raw) return "";
-  if (raw === "custom_apparel") return "custom-apparel";
-  if (raw === "roofing_construction") return "roofing";
-  if (raw === "construction") return "drywall-construction";
-  return raw.replace(/_/g, "-");
+  return "custom-apparel";
 }
 
 function renderHeader(business) {
@@ -234,9 +230,9 @@ function applyFormFromBusiness(data) {
 }
 
 async function refreshReceiptSettingsForm() {
-  if (!businessId) return;
+  if (!scopeUid) return;
   pendingReceiptLogoDataUrl = null;
-  const data = await loadReceiptSettingsForForm(db, businessId);
+  const data = await loadReceiptSettingsForForm(db, scopeUid);
   cachedReceiptLogoUrl = data.logoUrl || "";
   setVal("cfg-receipt-business-name", data.businessName);
   setVal("cfg-receipt-logo-url", cachedReceiptLogoUrl.startsWith("data:") ? "" : cachedReceiptLogoUrl);
@@ -341,7 +337,7 @@ async function saveSection(section) {
       const urlTyped = val("cfg-receipt-logo-url").trim();
       const logoUrl = pendingReceiptLogoDataUrl || (urlTyped ? urlTyped : cachedReceiptLogoUrl);
       await setDoc(
-        receiptSettingsDocRef(db, businessId),
+        receiptSettingsDocRef(db, scopeUid),
         {
           businessName: val("cfg-receipt-business-name").trim(),
           logoUrl,
@@ -604,12 +600,12 @@ function boot() {
     const ycCtx = ensureYourColorContext(user);
     if (ycCtx) {
       scopeUid = ycCtx.uid;
-      businessId = ycCtx.categoryId;
+      businessId = "yourcolor";
       renderContextDebugBadge({
         user,
         moduleName: "configuracion",
         ctx: ycCtx,
-        pathSuffix: "profile/main",
+        pathSuffix: "profile",
       });
     }
     loadPage(user).catch((err) => {

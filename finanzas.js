@@ -67,7 +67,7 @@ let rowsCache = [];
 /** @type {{ id: string, name: string, amount: number, frequency: string, active: boolean, fechaCobro?: Date | null, lastAppliedAt?: Date | null, chargeDayOfMonth?: number, chargeWeekday?: number }[]} */
 let fixedExpensesCache = [];
 
-/** YourColor / custom_apparel: gastos fijos (mensual / semanal / anual) en Finanzas. */
+/** YourColor: gastos fijos (mensual / semanal / anual) en Finanzas. */
 let yourColorFinMode = false;
 
 function scopedCollection(subcollection, bid = businessId) {
@@ -111,7 +111,7 @@ function isYourColorFinanceBusiness(business) {
   const cat = String(business.data.businessCategory || "")
     .trim()
     .toLowerCase();
-  return name === "yourcolor" || cat === "custom_apparel";
+  return name === "yourcolor";
 }
 
 function renderHeader(business) {
@@ -930,11 +930,11 @@ async function bootUser(user) {
     renderFixedList();
     return;
   }
-  const forcedBusinessId = ycCtx?.categoryId || business.id;
+  const forcedBusinessId = "yourcolor";
   renderContextDebugBadge({
     user,
     moduleName: "finanzas",
-    ctx: ycCtx || { uid: scopeUid, workspaceId: "yourcolor", categoryId: forcedBusinessId },
+    ctx: ycCtx || { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` },
     pathSuffix: "finances",
   });
   subscribeFinance(forcedBusinessId);

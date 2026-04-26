@@ -57,17 +57,12 @@ let firebaseContextPayload = null;
 
 /** @type {{ id: string, data: Record<string, unknown> } | null} */
 let activeBusiness = null;
-const YOURCOLOR_WORKSPACE_ID = "yourcolor";
-const YOURCOLOR_CATEGORY_ID = "custom_apparel";
+const YOURCOLOR_BUSINESS_ID = "yourcolor";
 
 function ensureChatAuthContext(user) {
   const forced = ensureYourColorContext(user);
   const uid = String(forced?.uid || user?.uid || "").trim();
-  return {
-    uid,
-    workspaceId: YOURCOLOR_WORKSPACE_ID,
-    categoryId: YOURCOLOR_CATEGORY_ID,
-  };
+  return { uid, businessPath: `users/${uid}/yourcolor` };
 }
 
 function activeScopeUid() {
@@ -75,7 +70,7 @@ function activeScopeUid() {
 }
 
 function activeScopeCategory() {
-  return String(activeBusiness?.scope?.categoryId || activeBusiness?.id || YOURCOLOR_CATEGORY_ID);
+  return String(activeBusiness?.id || YOURCOLOR_BUSINESS_ID);
 }
 
 function scopedCollection(subcollection) {
@@ -1661,10 +1656,10 @@ async function resolveOrderDocRef(businessId, orderId) {
  */
 async function executeMayaActionFromChat(businessId, payload) {
   const uid = activeScopeUid();
-  const categoryId = activeScopeCategory();
-  if (!uid || !categoryId) {
-    console.error("[MayaAction] Missing uid/categoryId, action aborted.", { uid, categoryId, action: payload?.action });
-    throw new Error("No se pudo guardar: falta contexto YourColor (uid/workspace/category).");
+  const businessId = activeScopeCategory();
+  if (!uid || !businessId) {
+    console.error("[MayaAction] Missing uid/business path, action aborted.", { uid, businessId, action: payload?.action });
+    throw new Error("No se pudo guardar: falta contexto YourColor (uid/businessPath).");
   }
   const data = mergeMayaActionData(
     payload && typeof payload === "object" ? /** @type {Record<string, unknown>} */ (payload) : {},
@@ -1706,7 +1701,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       } else if (!prevNormalized && hasValidPhoneDigits(prevPhone)) {
         patch.normalizedPhone = normalizePhoneForMatch(prevPhone);
       }
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${existing.ref.id}`);
+      console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/clients/${existing.ref.id}`);
       await updateDoc(existing.ref, patch);
       return "save_client";
     }
@@ -1721,7 +1716,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${createdRef.id}`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/clients/${createdRef.id}`);
     return "save_client";
   }
 
@@ -1761,7 +1756,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       patch.normalizedPhone = normalizePhoneForMatch(prev.phone);
     }
     if (emailRaw) patch.email = emailRaw;
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
     await updateDoc(resolved.ref, patch);
     return "update_client";
   }
@@ -1783,7 +1778,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/jobs`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/jobs`);
     return "create_order";
   }
 
@@ -1814,7 +1809,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/calendar`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/calendar`);
     return "schedule_delivery";
   }
 
@@ -1828,13 +1823,13 @@ async function executeMayaActionFromChat(businessId, payload) {
       typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
     if (clientId) {
       await deleteDoc(scopedDoc("clients", clientId));
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${clientId}`);
+      console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/clients/${clientId}`);
       return "delete_client";
     }
     const resolved = await resolveClientDocRefByActionData(businessId, data);
     if (!resolved) throw new Error("No encontré el cliente para eliminar.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
     return "delete_client";
   }
 
@@ -1845,7 +1840,7 @@ async function executeMayaActionFromChat(businessId, payload) {
     const resolved = await resolveOrderDocRef(businessId, orderId);
     if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "delete_order";
   }
 
@@ -1862,7 +1857,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       ...changes,
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "update_order";
   }
 
@@ -1888,7 +1883,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/calendar`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/calendar`);
     return "create_calendar_event";
   }
 
@@ -1918,9 +1913,9 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
     return;
   }
   const uid = activeScopeUid();
-  const categoryId = activeScopeCategory();
-  if (!uid || !categoryId) {
-    console.error("[MayaAction] Missing uid/categoryId, convertConversationToOrder aborted.", { uid, categoryId });
+  const businessId = activeScopeCategory();
+  if (!uid || !businessId) {
+    console.error("[MayaAction] Missing uid/business path, convertConversationToOrder aborted.", { uid, businessId });
     showToast("No hay categoría activa para guardar el pedido.", true);
     return;
   }
@@ -1979,7 +1974,7 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
 
   try {
     await addDoc(scopedCollection("jobs"), payload);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/jobs`);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/jobs`);
     showToast("Orden creada como Pendiente. Revisa el calendario para la fecha de entrega.");
     if (activeBusiness) {
       await loadFirebaseContext(activeBusiness);
@@ -2331,7 +2326,7 @@ async function loadFirebaseContext(business, options = {}) {
     typeof business.data.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
   const bc =
     typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
-  const yourColorFin = bn === "yourcolor" || bc === "custom_apparel";
+  const yourColorFin = bn === "yourcolor";
   const scopeUid = String(business?.scope?.uid || "");
   const fixedSnapPromise = yourColorFin
     ? getDocs(
@@ -2624,9 +2619,9 @@ function mayaUpdateStats(conversations, orders) {
  */
 async function mayaComputeAvgResponseMinutes(businessId, phoneIds) {
   const uid = activeScopeUid();
-  const categoryId = activeScopeCategory();
-  if (!uid || !categoryId) {
-    console.error("[MayaAction] Missing uid/categoryId, avg response aborted.", { uid, categoryId });
+  const currentBusinessId = activeScopeCategory();
+  if (!uid || !currentBusinessId) {
+    console.error("[MayaAction] Missing uid/business path, avg response aborted.", { uid, businessId: currentBusinessId });
     return 0;
   }
   const cap = Math.min(phoneIds.length, 40);
@@ -2689,9 +2684,9 @@ function mayaScheduleAvgResponse(businessId, conversations) {
  */
 async function mayaFetchAttentionReason(businessId, phoneDocId) {
   const uid = activeScopeUid();
-  const categoryId = activeScopeCategory();
-  if (!uid || !categoryId) {
-    console.error("[MayaAction] Missing uid/categoryId, attention reason aborted.", { uid, categoryId });
+  const currentBusinessId = activeScopeCategory();
+  if (!uid || !currentBusinessId) {
+    console.error("[MayaAction] Missing uid/business path, attention reason aborted.", { uid, businessId: currentBusinessId });
     return null;
   }
   try {
@@ -2889,9 +2884,9 @@ function mayaSubscribeMessages(businessId, phoneDocId, title) {
   if (!msgsEl) return;
 
   const uid = activeScopeUid();
-  const categoryId = activeScopeCategory();
-  if (!uid || !categoryId) {
-    console.error("[MayaAction] Missing uid/categoryId, subscribe messages aborted.", { uid, categoryId });
+  const currentBusinessId = activeScopeCategory();
+  if (!uid || !currentBusinessId) {
+    console.error("[MayaAction] Missing uid/business path, subscribe messages aborted.", { uid, businessId: currentBusinessId });
     return;
   }
   const ref = conversationMessagesCollection(phoneDocId);
@@ -2988,7 +2983,7 @@ function mayaInitControlCenter(business) {
     mayaScheduleAvgResponse(business.id, convRows);
   };
 
-  const convCol = businessCollectionRef(db, business.scope.uid, business.scope.categoryId, "conversations");
+  const convCol = businessCollectionRef(db, business.scope.uid, business.id, "conversations");
   mayaUnsubConversations = onSnapshot(
     convCol,
     (snap) => {
@@ -3004,7 +2999,7 @@ function mayaInitControlCenter(business) {
     (e) => console.error("[Maya CC] conversations", e),
   );
 
-  const ordCol = businessCollectionRef(db, business.scope.uid, business.scope.categoryId, "orders");
+  const ordCol = businessCollectionRef(db, business.scope.uid, business.id, "orders");
   mayaUnsubOrders = onSnapshot(
     ordCol,
     (snap) => {
@@ -3022,16 +3017,16 @@ async function bootWithUser(user) {
     activeBusiness = business
       ? {
           ...business,
-          id: YOURCOLOR_CATEGORY_ID,
+          id: YOURCOLOR_BUSINESS_ID,
           scope: {
             ...(business.scope || {}),
             uid: String(business?.scope?.uid || user.uid || ""),
-            categoryId: YOURCOLOR_CATEGORY_ID,
+            businessPath: `users/${String(business?.scope?.uid || user.uid || "")}/yourcolor`,
           },
           data: {
             ...(business.data || {}),
-            businessCategory: YOURCOLOR_CATEGORY_ID,
-            category: YOURCOLOR_CATEGORY_ID,
+            businessName:
+              (typeof business?.data?.businessName === "string" && business.data.businessName.trim()) || "YourColor",
           },
         }
       : null;
@@ -3043,7 +3038,7 @@ async function bootWithUser(user) {
     if (body) {
       const businessName = typeof business?.data?.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
       const businessCategory = categoryKeyFromBusiness(business);
-      const isYourColorBusiness = businessName === "yourcolor" || businessCategory === "custom_apparel";
+      const isYourColorBusiness = businessName === "yourcolor";
       const isConstructionBusiness = businessCategory === "roofing_construction";
       body.classList.toggle("yourcolor-chat-page", isYourColorBusiness);
       body.classList.toggle("non-yourcolor-chat-page", !isYourColorBusiness);

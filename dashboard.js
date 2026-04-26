@@ -337,7 +337,7 @@ async function loadDashboardForUser(user) {
 
   const bid = business.id;
   const scopeUid = business?.scope?.uid || user.uid;
-  const scopeCategory = business?.scope?.categoryId || business.id;
+  const scopeCategory = "yourcolor";
   const cat = String(business?.data?.businessCategory || business?.data?.category || "")
     .trim()
     .toLowerCase();

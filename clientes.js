@@ -239,7 +239,7 @@ function applySearch(businessId) {
 
 async function loadClientesForUser(user) {
   hideLoadError();
-  const forcedCategoryId = "custom_apparel";
+  const forcedCategoryId = "yourcolor";
   const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
 
@@ -319,7 +319,7 @@ function boot() {
 
     const ycCtx = ensureYourColorContext(user);
     if (ycCtx) {
-      cachedBusinessId = ycCtx.categoryId;
+      cachedBusinessId = "yourcolor";
       cachedUserId = ycCtx.uid;
       renderContextDebugBadge({
         user,

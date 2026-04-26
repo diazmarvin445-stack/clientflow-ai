@@ -34,7 +34,7 @@ let receiptModalOrder = null;
 
 async function downloadOrderReceiptPdf(row) {
   if (!row || !activeBusinessId) return;
-  const biz = await getReceiptPdfBusiness(db, activeBusinessId);
+  const biz = await getReceiptPdfBusiness(db, activeScopeUid);
   await generateOrderReceiptPdf(row, biz);
 }
 
@@ -128,9 +128,9 @@ async function openDigitalReceipt(row) {
   const modal = document.getElementById("orders-receipt-modal");
   if (!modal) return;
   try {
-    const biz = await getReceiptPdfBusiness(db, activeBusinessId);
+    const biz = await getReceiptPdfBusiness(db, activeScopeUid);
     renderDigitalReceiptSheet(row, biz);
-    await ensurePublicReceiptDocument(db, activeBusinessId, row, biz).catch((err) => {
+    await ensurePublicReceiptDocument(db, activeScopeUid, row, biz).catch((err) => {
       console.warn("[publicReceipts]", err);
     });
     modal.showModal();
@@ -165,8 +165,8 @@ async function shareDigitalReceipt() {
   if (!row || !activeBusinessId) return;
   let receiptId = "";
   try {
-    const biz = await getReceiptPdfBusiness(db, activeBusinessId);
-    const out = await ensurePublicReceiptDocument(db, activeBusinessId, row, biz);
+    const biz = await getReceiptPdfBusiness(db, activeScopeUid);
+    const out = await ensurePublicReceiptDocument(db, activeScopeUid, row, biz);
     receiptId = out.receiptId;
   } catch (e) {
     console.error(e);
@@ -871,7 +871,7 @@ function boot() {
       activeBusinessId = business.id;
       activeScopeUid = business?.scope?.uid || user.uid;
       if (ycCtx) {
-        activeBusinessId = ycCtx.categoryId;
+        activeBusinessId = "yourcolor";
         activeScopeUid = ycCtx.uid;
         renderContextDebugBadge({
           user,

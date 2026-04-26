@@ -15,7 +15,7 @@ import { collectionRef as scopedCollectionRef, docRef as scopedDocRef, profileDo
 const ACTIVE_CATEGORY_SESSION_KEY = "clientflow_active_category_v1";
 
 function normalizeCategory(raw) {
-  return "custom_apparel";
+  return "yourcolor";
 }
 
 export function normalizeCategoryId(raw) {
@@ -23,7 +23,7 @@ export function normalizeCategoryId(raw) {
 }
 
 export function getCategoryFromUrl() {
-  return "custom_apparel";
+  return "yourcolor";
 }
 
 export function getWorkspaceFromUrl() {
@@ -41,7 +41,7 @@ export function withCategoryInHref(href, categoryId) {
 
 export function setActiveCategoryId(uid, categoryId) {
   const u = String(uid || "").trim();
-  const c = "custom_apparel";
+  const c = "yourcolor";
   if (!u || !c) return;
   try {
     sessionStorage.setItem(ACTIVE_CATEGORY_SESSION_KEY, JSON.stringify({ uid: u, categoryId: c }));
@@ -53,7 +53,7 @@ export function setActiveCategoryId(uid, categoryId) {
 export function getActiveCategoryId(uid) {
   const u = String(uid || "").trim();
   if (!u) return null;
-  return "custom_apparel";
+  return "yourcolor";
 }
 
 export function clearActiveCategory() {
@@ -65,11 +65,12 @@ export function clearActiveCategory() {
 }
 
 function buildCtx(uid, categoryId, workspaceId = null) {
+  void categoryId;
+  void workspaceId;
   return assertAppContext(
     {
       uid,
-      workspaceId: "yourcolor",
-      categoryId: "custom_apparel",
+      businessPath: `users/${uid}/yourcolor`,
     },
     "category-context",
   );
@@ -99,11 +100,11 @@ export function businessDocRef(db, uid, categoryId, subcollection, id, workspace
 export async function listUserCategories(db, uid) {
   if (!uid) return [];
   void db;
-  return [{ id: "custom_apparel", data: { category: "custom_apparel", businessCategory: "custom_apparel" } }];
+  return [{ id: "yourcolor", data: { businessName: "YourColor" } }];
 }
 
 export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
-  const cat = "custom_apparel";
+  const cat = "yourcolor";
   const ref = doc(db, "users", uid, "yourcolor", "settings");
   const row = {
     categoryId: cat,
@@ -120,11 +121,11 @@ export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
 export async function resolveCategoryContextForUser(db, user) {
   if (!user?.uid) return null;
   const uid = user.uid;
-  setActiveCategoryId(uid, "custom_apparel");
+  setActiveCategoryId(uid, "yourcolor");
   return {
     uid,
-    categoryId: "custom_apparel",
-    data: { category: "custom_apparel", businessCategory: "custom_apparel", ownerUid: uid },
+    businessPath: `users/${uid}/yourcolor`,
+    data: { ownerUid: uid, businessName: "YourColor" },
   };
 }
 

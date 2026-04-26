@@ -1,7 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
-const ACTIVE_CATEGORY_SESSION_KEY = "clientflow_active_category_v2";
-const ACTIVE_WORKSPACE_SESSION_KEY = "clientflow_active_workspace_v1";
+const YOURCOLOR_CONTEXT_KEY = "clientflow_yourcolor_context_v1";
 
 function normalizeId(raw) {
   const v = String(raw || "").trim().toLowerCase();
@@ -11,68 +10,49 @@ function normalizeId(raw) {
 }
 
 export function getUrlContext() {
-  try {
-    const u = new URL(window.location.href);
-    return {
-      workspaceId: normalizeId(u.searchParams.get("workspace")),
-      categoryId: normalizeId(u.searchParams.get("category")),
-    };
-  } catch {
-    return { workspaceId: "", categoryId: "" };
-  }
+  return {};
 }
 
-function getSessionScoped(key, uid) {
+function getSessionScoped(uid) {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = sessionStorage.getItem(YOURCOLOR_CONTEXT_KEY);
     if (!raw) return "";
     const row = JSON.parse(raw);
     if (!row || row.uid !== uid) return "";
-    return normalizeId(row.value);
+    return "users/" + uid + "/yourcolor";
   } catch {
     return "";
   }
 }
 
-function setSessionScoped(key, uid, value) {
-  if (!uid || !value) return;
+function setSessionScoped(uid) {
+  if (!uid) return;
   try {
-    sessionStorage.setItem(key, JSON.stringify({ uid, value: normalizeId(value) }));
+    sessionStorage.setItem(YOURCOLOR_CONTEXT_KEY, JSON.stringify({ uid, businessPath: `users/${uid}/yourcolor` }));
   } catch {
     /* ignore */
   }
 }
 
-export function ensureContextInUrl({ workspaceId, categoryId }) {
-  try {
-    const u = new URL(window.location.href);
-    if (workspaceId) u.searchParams.set("workspace", workspaceId);
-    if (categoryId) u.searchParams.set("category", categoryId);
-    window.history.replaceState({}, "", u.toString());
-  } catch {
-    /* ignore */
-  }
+export function ensureContextInUrl(_ctx) {
+  return;
 }
 
 export function resolveAppContext(user) {
   const uid = String(user?.uid || "").trim();
   if (!uid) return null;
-  const workspaceId = "yourcolor";
-  const categoryId = "custom_apparel";
-  setSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid, workspaceId);
-  setSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid, categoryId);
-  return { uid, workspaceId, categoryId };
+  setSessionScoped(uid);
+  return { uid, businessPath: `users/${uid}/yourcolor` };
 }
 
 export function assertAppContext(ctx, moduleName = "modulo") {
   const uid = String(ctx?.uid || "").trim();
-  const workspaceId = normalizeId(ctx?.workspaceId);
-  const categoryId = normalizeId(ctx?.categoryId);
-  if (!uid || !workspaceId || !categoryId) {
-    const reason = `Contexto incompleto en ${moduleName}: uid/workspace/category son obligatorios.`;
+  const businessPath = String(ctx?.businessPath || "").trim();
+  if (!uid || !businessPath) {
+    const reason = `Contexto incompleto en ${moduleName}: uid/businessPath son obligatorios.`;
     throw new Error(reason);
   }
-  return { uid, workspaceId, categoryId };
+  return { uid, businessPath };
 }
 
 export async function requireAppContext(auth, moduleName = "modulo") {
@@ -95,15 +75,14 @@ export function onAuthWithAppContext(auth, cb) {
 export function ensureYourColorContext(user) {
   const uid = String(user?.uid || "").trim();
   if (!uid) return null;
-  const ctx = { uid, workspaceId: "yourcolor", categoryId: "custom_apparel" };
-  setSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid, ctx.workspaceId);
-  setSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid, ctx.categoryId);
+  const ctx = { uid, businessPath: `users/${uid}/yourcolor` };
+  setSessionScoped(uid);
   return ctx;
 }
 
 export function buildActiveFirestoreBasePath(ctx) {
   const safe = assertAppContext(ctx, "debug-path");
-  return `users/${safe.uid}/workspaces/${safe.workspaceId}/categories/${safe.categoryId}`;
+  return safe.businessPath;
 }
 
 export function isDevOrAdminUser(user) {
@@ -134,8 +113,6 @@ export function renderContextDebugBadge({ user, moduleName, ctx, pathSuffix = ""
   root.innerHTML = [
     `<div><strong>DEBUG ${moduleName}</strong></div>`,
     `<div>uid: ${ctx.uid}</div>`,
-    `<div>workspaceId: ${ctx.workspaceId}</div>`,
-    `<div>categoryId: ${ctx.categoryId}</div>`,
-    `<div>path: ${active}</div>`,
+    `<div>businessPath: ${active}</div>`,
   ].join("");
 }

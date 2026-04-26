@@ -15,10 +15,10 @@ export const RECEIPT_SETTINGS_DEFAULTS = Object.freeze({
 
 /**
  * @param {import("https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js").Firestore} db
- * @param {string} businessId
+ * @param {string} uid
  */
-export function receiptSettingsDocRef(db, businessId) {
-  return doc(db, "businesses", businessId, "settings", "receipt");
+export function receiptSettingsDocRef(db, uid) {
+  return doc(db, "users", uid, "yourcolor", "settings", "receipt");
 }
 
 /**
