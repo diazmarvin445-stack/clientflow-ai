@@ -9,6 +9,8 @@ import {
   serverTimestamp,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { assertAppContext, getUrlContext } from "./appContext.js";
+import { collectionRef as scopedCollectionRef, docRef as scopedDocRef, profileDocRef } from "./dataPaths.js";
 
 const ACTIVE_CATEGORY_SESSION_KEY = "clientflow_active_category_v1";
 
@@ -26,15 +28,13 @@ export function normalizeCategoryId(raw) {
 }
 
 export function getCategoryFromUrl() {
-  try {
-    const u = new URL(window.location.href);
-    const raw = u.searchParams.get("category");
-    if (!raw) return null;
-    const c = normalizeCategory(raw);
-    return c || null;
-  } catch {
-    return null;
-  }
+  const categoryId = getUrlContext().categoryId;
+  return categoryId || null;
+}
+
+export function getWorkspaceFromUrl() {
+  const workspaceId = getUrlContext().workspaceId;
+  return workspaceId || null;
 }
 
 export function ensureCategoryInUrl(categoryId) {
@@ -96,25 +96,41 @@ export function clearActiveCategory() {
   }
 }
 
-export function categoryDocRef(db, uid, categoryId) {
-  return doc(db, "users", uid, "categories", normalizeCategory(categoryId));
+function buildCtx(uid, categoryId, workspaceId = null) {
+  return assertAppContext(
+    {
+      uid,
+      workspaceId: workspaceId || getWorkspaceFromUrl() || uid,
+      categoryId: normalizeCategory(categoryId),
+    },
+    "category-context",
+  );
 }
 
-export function categoryCollectionRef(db, uid, categoryId, subcollection) {
-  return collection(db, "users", uid, "categories", normalizeCategory(categoryId), subcollection);
+export function categoryDocRef(db, uid, categoryId, workspaceId = null) {
+  const ctx = buildCtx(uid, categoryId, workspaceId);
+  return doc(db, "users", ctx.uid, "workspaces", ctx.workspaceId, "categories", ctx.categoryId);
 }
 
-export function businessCollectionRef(db, uid, categoryId, subcollection) {
-  return collection(db, "users", uid, "business", normalizeCategory(categoryId), subcollection);
+export function categoryCollectionRef(db, uid, categoryId, subcollection, workspaceId = null) {
+  const ctx = buildCtx(uid, categoryId, workspaceId);
+  return scopedCollectionRef(db, ctx, subcollection);
 }
 
-export function businessDocRef(db, uid, categoryId, subcollection, id) {
-  return doc(db, "users", uid, "business", normalizeCategory(categoryId), subcollection, id);
+export function businessCollectionRef(db, uid, categoryId, subcollection, workspaceId = null) {
+  const ctx = buildCtx(uid, categoryId, workspaceId);
+  return scopedCollectionRef(db, ctx, subcollection);
+}
+
+export function businessDocRef(db, uid, categoryId, subcollection, id, workspaceId = null) {
+  const ctx = buildCtx(uid, categoryId, workspaceId);
+  return scopedDocRef(db, ctx, subcollection, id);
 }
 
 export async function listUserCategories(db, uid) {
   if (!uid) return [];
-  const col = collection(db, "users", uid, "categories");
+  const workspaceId = getWorkspaceFromUrl() || uid;
+  const col = collection(db, "users", uid, "workspaces", workspaceId, "categories");
   let snap;
   try {
     snap = await getDocsFromServer(query(col, limit(50)));
@@ -126,7 +142,7 @@ export async function listUserCategories(db, uid) {
 
 export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
   const cat = normalizeCategory(categoryId);
-  const ref = categoryDocRef(db, uid, cat);
+  const ref = categoryDocRef(db, uid, cat, getWorkspaceFromUrl() || uid);
   const row = {
     categoryId: cat,
     displayName: typeof payload.businessName === "string" ? payload.businessName : cat,
@@ -171,7 +187,7 @@ export async function resolveCategoryContextForUser(db, user) {
 }
 
 export async function loadCategoryProfile(db, uid, categoryId) {
-  const ref = doc(db, "users", uid, "business", normalizeCategory(categoryId), "profile");
+  const ref = profileDocRef(db, buildCtx(uid, categoryId));
   const snap = await getDoc(ref);
   return snap.exists() ? snap.data() || {} : {};
 }

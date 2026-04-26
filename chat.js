@@ -85,6 +85,11 @@ function scopedDoc(subcollection, id) {
   return businessDocRef(db, uid, category, subcollection, String(id));
 }
 
+function conversationMessagesCollection(phoneDocId) {
+  const convDoc = scopedDoc("conversations", String(phoneDocId || ""));
+  return collection(convDoc, "messages");
+}
+
 function categoryKeyFromBusiness(business) {
   const c = String(business?.data?.businessCategory || business?.data?.category || "")
     .trim()
@@ -2616,7 +2621,7 @@ async function mayaComputeAvgResponseMinutes(businessId, phoneIds) {
   for (let i = 0; i < cap; i += 1) {
     const pid = phoneIds[i];
     try {
-      const ref = collection(db, "users", uid, "business", categoryId, "conversations", pid, "messages");
+      const ref = conversationMessagesCollection(pid);
       const q = query(ref, orderBy("at", "asc"), limit(120));
       const snap = await getDocs(q);
       /** @type {{ from?: string, at?: unknown }[]} */
@@ -2677,7 +2682,7 @@ async function mayaFetchAttentionReason(businessId, phoneDocId) {
     return null;
   }
   try {
-    const ref = collection(db, "users", uid, "business", categoryId, "conversations", phoneDocId, "messages");
+    const ref = conversationMessagesCollection(phoneDocId);
     const q = query(ref, orderBy("at", "desc"), limit(8));
     const snap = await getDocs(q);
     for (const doc of snap.docs) {
@@ -2876,7 +2881,7 @@ function mayaSubscribeMessages(businessId, phoneDocId, title) {
     console.error("[MayaAction] Missing uid/categoryId, subscribe messages aborted.", { uid, categoryId });
     return;
   }
-  const ref = collection(db, "users", uid, "business", categoryId, "conversations", phoneDocId, "messages");
+  const ref = conversationMessagesCollection(phoneDocId);
   const q = query(ref, orderBy("at", "asc"), limit(200));
 
   mayaUnsubMessages = onSnapshot(

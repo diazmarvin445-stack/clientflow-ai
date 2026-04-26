@@ -23,12 +23,14 @@ import {
   loadCategoryProfile,
   getCategoryFromUrl,
 } from "./category-context.js";
+import { getUrlContext } from "./appContext.js";
 
 function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
-  if (ownerUid && typeof ownerUid === "string") {
-    return collection(db, "users", ownerUid, "business", businessId, subcollection);
+  if (!ownerUid || typeof ownerUid !== "string") {
+    throw new Error(`Ruta bloqueada: falta uid para ${subcollection}.`);
   }
-  return collection(db, "businesses", businessId, subcollection);
+  const workspaceId = getUrlContext().workspaceId || ownerUid;
+  return collection(db, "users", ownerUid, "workspaces", workspaceId, "categories", businessId, subcollection);
 }
 
 /**
@@ -695,9 +697,11 @@ export async function fetchJobsForBusiness(db, businessId) {
 }
 
 export async function fetchClientsForBusiness(db, businessId, ownerUid = null) {
-  const path = ownerUid
-    ? collection(db, "users", ownerUid, "business", businessId, "clients")
-    : collection(db, "businesses", businessId, "clients");
+  if (!ownerUid) {
+    throw new Error("Ruta bloqueada: falta uid para leer clients.");
+  }
+  const workspaceId = getUrlContext().workspaceId || ownerUid;
+  const path = collection(db, "users", ownerUid, "workspaces", workspaceId, "categories", businessId, "clients");
   const snap = await getDocs(path);
   const rows = [];
   snap.forEach((docSnap) => {

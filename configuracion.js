@@ -1,7 +1,6 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
-  doc,
   getDoc,
   serverTimestamp,
   setDoc,
@@ -19,6 +18,8 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
+import { getUrlContext } from "./appContext.js";
+import { profileDocRef } from "./dataPaths.js";
 
 /** @type {string | null} */
 let businessId = null;
@@ -54,7 +55,8 @@ async function saveProfilePatch(patch) {
 
 function businessProfileRef() {
   if (!businessId || !scopeUid) return null;
-  return doc(db, "users", scopeUid, "business", businessId, "profile");
+  const workspaceId = getUrlContext().workspaceId || scopeUid;
+  return profileDocRef(db, { uid: scopeUid, workspaceId, categoryId: businessId });
 }
 
 function mapCategoryToIndustry(value) {

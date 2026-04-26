@@ -2,7 +2,6 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   collection,
-  doc,
   getDoc,
   getDocs,
   limit,
@@ -17,6 +16,8 @@ import {
   wireGlobalDiagnosticsListeners,
 } from "./diagnostics-logger.js";
 import { businessCollectionRef, businessDocRef, getCategoryFromUrl } from "./category-context.js";
+import { getUrlContext } from "./appContext.js";
+import { profileDocRef } from "./dataPaths.js";
 
 const STATUS_OK = "ok";
 const STATUS_WARNING = "warning";
@@ -382,7 +383,8 @@ async function checkFirebaseHealth(scopeUid, categoryId, user, incidentInfo) {
   let status = STATUS_OK;
   let explanation = "Firebase autenticación y Firestore responden.";
   try {
-    const businessDoc = await getDoc(doc(db, "users", scopeUid, "business", categoryId, "profile"));
+    const workspaceId = getUrlContext().workspaceId || scopeUid;
+    const businessDoc = await getDoc(profileDocRef(db, { uid: scopeUid, workspaceId, categoryId }));
     details.push(`Auth user activo: ${user?.uid ? "sí" : "no"}`);
     details.push(`Documento de negocio accesible: ${businessDoc.exists() ? "sí" : "no"}`);
     if (!businessDoc.exists()) {
