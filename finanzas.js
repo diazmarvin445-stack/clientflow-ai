@@ -72,15 +72,21 @@ let yourColorFinMode = false;
 function scopedCollection(subcollection, bid = businessId) {
   if (!bid) return null;
   const scopedName = subcollection === "finance" ? "finances" : subcollection;
-  if (scopeUid) return businessCollectionRef(db, scopeUid, bid, scopedName);
-  return collection(db, "businesses", bid, subcollection);
+  if (!scopeUid) {
+    console.error("[Finanzas] Missing scopeUid for scoped collection", { subcollection: scopedName, bid });
+    return null;
+  }
+  return businessCollectionRef(db, scopeUid, bid, scopedName);
 }
 
 function scopedDoc(subcollection, id, bid = businessId) {
   if (!bid || !id) return null;
   const scopedName = subcollection === "finance" ? "finances" : subcollection;
-  if (scopeUid) return businessDocRef(db, scopeUid, bid, scopedName, id);
-  return doc(db, "businesses", bid, subcollection, id);
+  if (!scopeUid) {
+    console.error("[Finanzas] Missing scopeUid for scoped doc", { subcollection: scopedName, bid, id });
+    return null;
+  }
+  return businessDocRef(db, scopeUid, bid, scopedName, id);
 }
 
 /**

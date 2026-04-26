@@ -14,6 +14,7 @@ import {
   financeIncomeCountsTowardRealized,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { businessCollectionRef } from "./category-context.js";
 
 /** @type {(() => void) | null} */
 let unsubscribeDashboard = null;
@@ -365,7 +366,7 @@ async function loadDashboardForUser(user) {
   unsubs.push(
     onSnapshot(
       query(
-        collection(db, "users", scopeUid, "categories", scopeCategory, jobsCollection),
+        businessCollectionRef(db, scopeUid, scopeCategory, jobsCollection),
         orderBy("createdAt", "desc"),
         limit(400),
       ),
@@ -379,7 +380,7 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      collection(db, "users", scopeUid, "categories", scopeCategory, "clients"),
+      businessCollectionRef(db, scopeUid, scopeCategory, "clients"),
       (snap) => {
         state.clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();
@@ -391,7 +392,7 @@ async function loadDashboardForUser(user) {
   unsubs.push(
     onSnapshot(
       query(
-        collection(db, "users", scopeUid, "categories", scopeCategory, "finance"),
+        businessCollectionRef(db, scopeUid, scopeCategory, "finances"),
         orderBy("date", "desc"),
         limit(500),
       ),
@@ -406,7 +407,7 @@ async function loadDashboardForUser(user) {
   unsubs.push(
     onSnapshot(
       query(
-        collection(db, "users", scopeUid, "categories", scopeCategory, "calendar"),
+        businessCollectionRef(db, scopeUid, scopeCategory, "calendar"),
         orderBy("date", "desc"),
         limit(200),
       ),
@@ -420,7 +421,7 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      collection(db, "users", scopeUid, "categories", scopeCategory, "campaigns"),
+      businessCollectionRef(db, scopeUid, scopeCategory, "campaigns"),
       (snap) => {
         state.campaigns = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();

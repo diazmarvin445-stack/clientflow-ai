@@ -38,9 +38,7 @@ let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
 
 function businessRef() {
-  if (!businessId) return null;
-  if (scopeUid) return doc(db, "users", scopeUid, "categories", businessId);
-  return doc(db, "businesses", businessId);
+  return businessProfileRef();
 }
 
 function businessProfileRef() {

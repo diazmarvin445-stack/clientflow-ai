@@ -32,6 +32,7 @@ import {
 import { initDashShell } from "./dash-shell.js";
 import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
@@ -67,8 +68,21 @@ function activeScopeCategory() {
 function scopedCollection(subcollection) {
   const uid = activeScopeUid();
   const category = activeScopeCategory();
-  if (uid && category) return collection(db, "users", uid, "categories", category, subcollection);
-  return collection(db, "businesses", String(activeBusiness?.id || ""), subcollection);
+  if (!uid || !category) {
+    console.error("[MayaAction] Missing scope for collection", { uid, category, subcollection });
+    throw new Error("Missing active uid/category scope for Maya collection access.");
+  }
+  return businessCollectionRef(db, uid, category, subcollection);
+}
+
+function scopedDoc(subcollection, id) {
+  const uid = activeScopeUid();
+  const category = activeScopeCategory();
+  if (!uid || !category) {
+    console.error("[MayaAction] Missing scope for doc", { uid, category, subcollection, id });
+    throw new Error("Missing active uid/category scope for Maya doc access.");
+  }
+  return businessDocRef(db, uid, category, subcollection, String(id));
 }
 
 function categoryKeyFromBusiness(business) {
@@ -1352,7 +1366,7 @@ async function persistPanelChatHistory(businessId, userId) {
     content: String(m.content || "").slice(0, 12000),
   }));
   await setDoc(
-    doc(db, "businesses", businessId, "internalChatHistory", userId),
+    scopedDoc("internalChatHistory", userId),
     { messages, updatedAt: serverTimestamp() },
     { merge: true },
   );
@@ -1360,7 +1374,7 @@ async function persistPanelChatHistory(businessId, userId) {
 
 async function loadPanelChatHistory(businessId, userId) {
   try {
-    const s = await getDoc(doc(db, "businesses", businessId, "internalChatHistory", userId));
+    const s = await getDoc(scopedDoc("internalChatHistory", userId));
     if (!s.exists()) return false;
     const data = s.data();
     const m = data?.messages;
@@ -1557,7 +1571,7 @@ function hasValidPhoneDigits(raw) {
 async function resolveClientDocRefByActionData(businessId, data) {
   const byId = typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
   if (byId) {
-    const ref = doc(db, "businesses", businessId, "clients", byId);
+    const ref = scopedDoc("clients", byId);
     const snap = await getDoc(ref);
     if (snap.exists) return { ref, snap };
   }
@@ -1572,7 +1586,7 @@ async function resolveClientDocRefByActionData(businessId, data) {
   if (hasValidPhoneDigits(normalizedPhone)) {
     const byNormalized = await getDocs(
       query(
-        collection(db, "businesses", businessId, "clients"),
+        scopedCollection("clients"),
         where("normalizedPhone", "==", normalizedPhone),
         limit(1),
       ),
@@ -1582,7 +1596,7 @@ async function resolveClientDocRefByActionData(businessId, data) {
       return { ref: hit.ref, snap: hit };
     }
     const byPhone = await getDocs(
-      query(collection(db, "businesses", businessId, "clients"), where("phone", "==", normalizedPhone), limit(1)),
+      query(scopedCollection("clients"), where("phone", "==", normalizedPhone), limit(1)),
     );
     if (!byPhone.empty) {
       const hit = byPhone.docs[0];
@@ -1598,7 +1612,7 @@ async function resolveClientDocRefByActionData(businessId, data) {
         : "";
   if (nameRaw) {
     const byName = await getDocs(
-      query(collection(db, "businesses", businessId, "clients"), where("name", "==", nameRaw), limit(1)),
+      query(scopedCollection("clients"), where("name", "==", nameRaw), limit(1)),
     );
     if (!byName.empty) {
       const hit = byName.docs[0];
@@ -1614,8 +1628,8 @@ async function resolveClientDocRefByActionData(businessId, data) {
  * @param {string} orderId
  */
 async function resolveOrderDocRef(businessId, orderId) {
-  const refJobs = doc(db, "businesses", businessId, "jobs", orderId);
-  const refOrders = doc(db, "businesses", businessId, "orders", orderId);
+  const refJobs = scopedDoc("jobs", orderId);
+  const refOrders = scopedDoc("orders", orderId);
   const sj = await getDoc(refJobs);
   if (sj.exists) return { ref: refJobs, kind: "jobs" };
   const so = await getDoc(refOrders);
@@ -1628,6 +1642,12 @@ async function resolveOrderDocRef(businessId, orderId) {
  * @param {{ action: string, data?: Record<string, unknown> }} payload
  */
 async function executeMayaActionFromChat(businessId, payload) {
+  const uid = activeScopeUid();
+  const categoryId = activeScopeCategory();
+  if (!uid || !categoryId) {
+    console.error("[MayaAction] Missing uid/categoryId, action aborted.", { uid, categoryId, action: payload?.action });
+    throw new Error("Missing active uid/categoryId scope.");
+  }
   const data = mergeMayaActionData(
     payload && typeof payload === "object" ? /** @type {Record<string, unknown>} */ (payload) : {},
   );
@@ -1668,12 +1688,12 @@ async function executeMayaActionFromChat(businessId, payload) {
       } else if (!prevNormalized && hasValidPhoneDigits(prevPhone)) {
         patch.normalizedPhone = normalizePhoneForMatch(prevPhone);
       }
-      console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${existing.ref.id}`);
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${existing.ref.id}`);
       await updateDoc(existing.ref, patch);
       return "save_client";
     }
 
-    const createdRef = await addDoc(collection(db, "businesses", businessId, "clients"), {
+    const createdRef = await addDoc(scopedCollection("clients"), {
       fullName: nameRaw || "Cliente",
       name: nameRaw || "Cliente",
       phone: normalizedPhone ? phoneRaw || normalizedPhone : "",
@@ -1683,7 +1703,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${createdRef.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${createdRef.id}`);
     return "save_client";
   }
 
@@ -1723,7 +1743,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       patch.normalizedPhone = normalizePhoneForMatch(prev.phone);
     }
     if (emailRaw) patch.email = emailRaw;
-    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${resolved.ref.id}`);
     await updateDoc(resolved.ref, patch);
     return "update_client";
   }
@@ -1733,7 +1753,7 @@ async function executeMayaActionFromChat(businessId, payload) {
     const total = Number(data.total);
     const clientName = typeof data.clientName === "string" ? data.clientName.trim() : "";
     const product = typeof data.product === "string" ? data.product.trim() : "";
-    await addDoc(collection(db, "businesses", businessId, "jobs"), {
+    await addDoc(scopedCollection("jobs"), {
       status: "Pendiente",
       title: clientName && product ? `${clientName} — ${product}` : "Pedido desde Chat IA",
       clientName,
@@ -1745,6 +1765,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/jobs`);
     return "create_order";
   }
 
@@ -1762,7 +1783,7 @@ async function executeMayaActionFromChat(businessId, payload) {
         dateTs = Timestamp.fromDate(d);
       }
     }
-    await addDoc(collection(db, "businesses", businessId, "calendar"), {
+    await addDoc(scopedCollection("calendar"), {
       title:
         clientName && product
           ? `Entrega: ${clientName} — ${product}`
@@ -1775,6 +1796,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/calendar`);
     return "schedule_delivery";
   }
 
@@ -1787,14 +1809,14 @@ async function executeMayaActionFromChat(businessId, payload) {
     const clientId =
       typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
     if (clientId) {
-      await deleteDoc(doc(db, "businesses", businessId, "clients", clientId));
-      console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${clientId}`);
+      await deleteDoc(scopedDoc("clients", clientId));
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${clientId}`);
       return "delete_client";
     }
     const resolved = await resolveClientDocRefByActionData(businessId, data);
     if (!resolved) throw new Error("No encontré el cliente para eliminar.");
     await deleteDoc(resolved.ref);
-    console.log("[MayaAction] Firestore write path", `businesses/${businessId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${resolved.ref.id}`);
     return "delete_client";
   }
 
@@ -1805,6 +1827,7 @@ async function executeMayaActionFromChat(businessId, payload) {
     const resolved = await resolveOrderDocRef(businessId, orderId);
     if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
     await deleteDoc(resolved.ref);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/${resolved.kind}/${orderId}`);
     return "delete_order";
   }
 
@@ -1821,6 +1844,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       ...changes,
       updatedAt: serverTimestamp(),
     });
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/${resolved.kind}/${orderId}`);
     return "update_order";
   }
 
@@ -1839,13 +1863,14 @@ async function executeMayaActionFromChat(businessId, payload) {
         dateTs = Timestamp.fromDate(d);
       }
     }
-    await addDoc(collection(db, "businesses", businessId, "calendar"), {
+    await addDoc(scopedCollection("calendar"), {
       title,
       date: dateTs,
       deliveryDate: rawDate == null ? "" : typeof rawDate === "string" ? rawDate : String(rawDate),
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/calendar`);
     return "create_calendar_event";
   }
 
@@ -1872,6 +1897,13 @@ function mayaActionCompletedLabel(kind) {
 async function convertConversationToOrder(assistantWrap, assistantText) {
   if (!activeBusiness) {
     showToast("No hay negocio activo.", true);
+    return;
+  }
+  const uid = activeScopeUid();
+  const categoryId = activeScopeCategory();
+  if (!uid || !categoryId) {
+    console.error("[MayaAction] Missing uid/categoryId, convertConversationToOrder aborted.", { uid, categoryId });
+    showToast("No hay categoría activa para guardar el pedido.", true);
     return;
   }
 
@@ -1928,7 +1960,8 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
   }
 
   try {
-    await addDoc(collection(db, "businesses", activeBusiness.id, "jobs"), payload);
+    await addDoc(scopedCollection("jobs"), payload);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/jobs`);
     showToast("Orden creada como Pendiente. Revisa el calendario para la fecha de entrega.");
     if (activeBusiness) {
       await loadFirebaseContext(activeBusiness);
@@ -2143,13 +2176,15 @@ async function clearChatHistory() {
   if (businessId && userId) {
     clearChatSessionStorage(userId, businessId);
     try {
-      await deleteDoc(doc(db, "businesses", businessId, "internalChatHistory", userId));
+      await deleteDoc(scopedDoc("internalChatHistory", userId));
+      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/business/${activeScopeCategory()}/internalChatHistory/${userId}`);
     } catch (e) {
       console.warn("[YourColor Chat] clear internalChatHistory", e);
     }
     try {
-      const internalChatSnap = await getDocs(collection(db, "businesses", businessId, "internalChat"));
+      const internalChatSnap = await getDocs(scopedCollection("internalChat"));
       await Promise.all(internalChatSnap.docs.map((x) => deleteDoc(x.ref)));
+      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/business/${activeScopeCategory()}/internalChat/*`);
     } catch (e) {
       console.warn("[YourColor Chat] clear internalChat", e);
     }
@@ -2282,9 +2317,7 @@ async function loadFirebaseContext(business, options = {}) {
   const scopeUid = String(business?.scope?.uid || "");
   const fixedSnapPromise = yourColorFin
     ? getDocs(
-        scopeUid
-          ? collection(db, "users", scopeUid, "categories", business.id, "fixedExpenses")
-          : collection(db, "businesses", business.id, "fixedExpenses"),
+        businessCollectionRef(db, scopeUid, business.id, "fixedExpenses"),
       )
     : Promise.resolve(null);
 
@@ -2572,12 +2605,18 @@ function mayaUpdateStats(conversations, orders) {
  * @param {string[]} phoneIds
  */
 async function mayaComputeAvgResponseMinutes(businessId, phoneIds) {
+  const uid = activeScopeUid();
+  const categoryId = activeScopeCategory();
+  if (!uid || !categoryId) {
+    console.error("[MayaAction] Missing uid/categoryId, avg response aborted.", { uid, categoryId });
+    return 0;
+  }
   const cap = Math.min(phoneIds.length, 40);
   const deltas = [];
   for (let i = 0; i < cap; i += 1) {
     const pid = phoneIds[i];
     try {
-      const ref = collection(db, "businesses", businessId, "conversations", pid, "messages");
+      const ref = collection(db, "users", uid, "business", categoryId, "conversations", pid, "messages");
       const q = query(ref, orderBy("at", "asc"), limit(120));
       const snap = await getDocs(q);
       /** @type {{ from?: string, at?: unknown }[]} */
@@ -2631,8 +2670,14 @@ function mayaScheduleAvgResponse(businessId, conversations) {
  * @param {Record<string, unknown>[]} convRows
  */
 async function mayaFetchAttentionReason(businessId, phoneDocId) {
+  const uid = activeScopeUid();
+  const categoryId = activeScopeCategory();
+  if (!uid || !categoryId) {
+    console.error("[MayaAction] Missing uid/categoryId, attention reason aborted.", { uid, categoryId });
+    return null;
+  }
   try {
-    const ref = collection(db, "businesses", businessId, "conversations", phoneDocId, "messages");
+    const ref = collection(db, "users", uid, "business", categoryId, "conversations", phoneDocId, "messages");
     const q = query(ref, orderBy("at", "desc"), limit(8));
     const snap = await getDocs(q);
     for (const doc of snap.docs) {
@@ -2825,7 +2870,13 @@ function mayaSubscribeMessages(businessId, phoneDocId, title) {
   const msgsEl = document.getElementById("maya-cc-wa-msgs");
   if (!msgsEl) return;
 
-  const ref = collection(db, "businesses", businessId, "conversations", phoneDocId, "messages");
+  const uid = activeScopeUid();
+  const categoryId = activeScopeCategory();
+  if (!uid || !categoryId) {
+    console.error("[MayaAction] Missing uid/categoryId, subscribe messages aborted.", { uid, categoryId });
+    return;
+  }
+  const ref = collection(db, "users", uid, "business", categoryId, "conversations", phoneDocId, "messages");
   const q = query(ref, orderBy("at", "asc"), limit(200));
 
   mayaUnsubMessages = onSnapshot(
@@ -2919,10 +2970,7 @@ function mayaInitControlCenter(business) {
     mayaScheduleAvgResponse(business.id, convRows);
   };
 
-  const convCol =
-    business?.scope?.uid && business?.scope?.categoryId
-      ? collection(db, "users", business.scope.uid, "categories", business.scope.categoryId, "conversations")
-      : collection(db, "businesses", business.id, "conversations");
+  const convCol = businessCollectionRef(db, business.scope.uid, business.scope.categoryId, "conversations");
   mayaUnsubConversations = onSnapshot(
     convCol,
     (snap) => {
@@ -2938,10 +2986,7 @@ function mayaInitControlCenter(business) {
     (e) => console.error("[Maya CC] conversations", e),
   );
 
-  const ordCol =
-    business?.scope?.uid && business?.scope?.categoryId
-      ? collection(db, "users", business.scope.uid, "categories", business.scope.categoryId, "orders")
-      : collection(db, "businesses", business.id, "orders");
+  const ordCol = businessCollectionRef(db, business.scope.uid, business.scope.categoryId, "orders");
   mayaUnsubOrders = onSnapshot(
     ordCol,
     (snap) => {

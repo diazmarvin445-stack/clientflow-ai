@@ -21,6 +21,7 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 /** @type {string | null} */
 let businessId = null;
@@ -41,13 +42,15 @@ let pendingOrders = [];
 
 function scopedCollection(subcollection) {
   if (!businessId) return null;
-  if (scopeUid) return collection(db, "users", scopeUid, "categories", businessId, subcollection);
+  const scopedName = subcollection === "finance" ? "finances" : subcollection;
+  if (scopeUid) return businessCollectionRef(db, scopeUid, businessId, scopedName);
   return collection(db, "businesses", businessId, subcollection);
 }
 
 function scopedDoc(subcollection, id) {
   if (!businessId || !id) return null;
-  if (scopeUid) return doc(db, "users", scopeUid, "categories", businessId, subcollection, String(id));
+  const scopedName = subcollection === "finance" ? "finances" : subcollection;
+  if (scopeUid) return businessDocRef(db, scopeUid, businessId, scopedName, String(id));
   return doc(db, "businesses", businessId, subcollection, String(id));
 }
 

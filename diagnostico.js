@@ -16,6 +16,7 @@ import {
   setDiagnosticsLoggerContext,
   wireGlobalDiagnosticsListeners,
 } from "./diagnostics-logger.js";
+import { businessCollectionRef, businessDocRef, getCategoryFromUrl } from "./category-context.js";
 
 const STATUS_OK = "ok";
 const STATUS_WARNING = "warning";
@@ -308,13 +309,13 @@ async function checkCollectionRead(pathParts) {
   return snap.size;
 }
 
-async function checkClientesHealth(businessId, incidentInfo) {
+async function checkClientesHealth(scopeUid, categoryId, incidentInfo) {
   const details = [];
   let status = STATUS_OK;
   let explanation = "Clientes responde correctamente.";
   try {
-    const count = await checkCollectionRead(["businesses", businessId, "clients"]);
-    details.push(`Lectura de clients exitosa (muestra: ${count})`);
+    const count = await getDocs(query(businessCollectionRef(db, scopeUid, categoryId, "clients"), limit(1)));
+    details.push(`Lectura de clients exitosa (muestra: ${count.size})`);
   } catch (error) {
     status = STATUS_ERROR;
     explanation = mapDiagnosticFriendlyMessage("client_save_failed", error instanceof Error ? error.message : String(error));
@@ -328,13 +329,13 @@ async function checkClientesHealth(businessId, incidentInfo) {
   return { status, explanation, details, checkedAt: formatNow() };
 }
 
-async function checkPedidosHealth(businessId, incidentInfo) {
+async function checkPedidosHealth(scopeUid, categoryId, incidentInfo) {
   const details = [];
   let status = STATUS_OK;
   let explanation = "Pedidos responde correctamente.";
   try {
-    const count = await checkCollectionRead(["businesses", businessId, "orders"]);
-    details.push(`Lectura de orders exitosa (muestra: ${count})`);
+    const count = await getDocs(query(businessCollectionRef(db, scopeUid, categoryId, "orders"), limit(1)));
+    details.push(`Lectura de orders exitosa (muestra: ${count.size})`);
   } catch (error) {
     status = STATUS_ERROR;
     explanation = mapDiagnosticFriendlyMessage("order_save_failed", error instanceof Error ? error.message : String(error));
@@ -348,15 +349,15 @@ async function checkPedidosHealth(businessId, incidentInfo) {
   return { status, explanation, details, checkedAt: formatNow() };
 }
 
-async function checkRecibosHealth(businessId, incidentInfo) {
+async function checkRecibosHealth(scopeUid, categoryId, incidentInfo) {
   const details = [];
   let status = STATUS_OK;
   let explanation = "Recibos y enlace público disponibles.";
   try {
-    const receiptSettingsRef = doc(db, "businesses", businessId, "settings", "receipt");
+    const receiptSettingsRef = businessDocRef(db, scopeUid, categoryId, "settings", "receipt");
     const receiptSettingsSnap = await getDoc(receiptSettingsRef);
     details.push(`Configuración de recibo: ${receiptSettingsSnap.exists() ? "disponible" : "pendiente de configurar"}`);
-    const publicProbeRef = doc(db, "businesses", businessId, "publicReceipts", "__diag_probe__");
+    const publicProbeRef = businessDocRef(db, scopeUid, categoryId, "publicReceipts", "__diag_probe__");
     await getDoc(publicProbeRef);
     details.push("Regla de acceso get() para publicReceipts: accesible");
     if (!receiptSettingsSnap.exists()) {
@@ -376,12 +377,12 @@ async function checkRecibosHealth(businessId, incidentInfo) {
   return { status, explanation, details, checkedAt: formatNow() };
 }
 
-async function checkFirebaseHealth(businessId, user, incidentInfo) {
+async function checkFirebaseHealth(scopeUid, categoryId, user, incidentInfo) {
   const details = [];
   let status = STATUS_OK;
   let explanation = "Firebase autenticación y Firestore responden.";
   try {
-    const businessDoc = await getDoc(doc(db, "businesses", businessId));
+    const businessDoc = await getDoc(doc(db, "users", scopeUid, "business", categoryId, "profile"));
     details.push(`Auth user activo: ${user?.uid ? "sí" : "no"}`);
     details.push(`Documento de negocio accesible: ${businessDoc.exists() ? "sí" : "no"}`);
     if (!businessDoc.exists()) {
@@ -401,17 +402,17 @@ async function checkFirebaseHealth(businessId, user, incidentInfo) {
   return { status, explanation, details, checkedAt: formatNow() };
 }
 
-async function checkWhatsAppHealth(businessId, businessData, incidentInfo) {
+async function checkWhatsAppHealth(scopeUid, categoryId, businessData, incidentInfo) {
   const details = [];
   let status = STATUS_WARNING;
   let explanation = "WhatsApp pendiente de configurar.";
   try {
-    const convoCount = await checkCollectionRead(["businesses", businessId, "conversations"]);
+    const convoCount = await getDocs(query(businessCollectionRef(db, scopeUid, categoryId, "conversations"), limit(1)));
     const hasConfig =
       Boolean(businessData?.whatsappPhoneNumberId) ||
       Boolean(businessData?.whatsappBusinessAccountId) ||
       Boolean(businessData?.whatsappConfigured);
-    details.push(`Conversaciones detectadas: ${convoCount}`);
+    details.push(`Conversaciones detectadas: ${convoCount.size}`);
     details.push(`Configuración declarada: ${hasConfig ? "sí" : "pendiente"}`);
     if (hasConfig || convoCount > 0) {
       status = STATUS_OK;
@@ -430,13 +431,13 @@ async function checkWhatsAppHealth(businessId, businessData, incidentInfo) {
   return { status, explanation, details, checkedAt: formatNow() };
 }
 
-async function checkEquipoHealth(businessId, incidentInfo) {
+async function checkEquipoHealth(scopeUid, categoryId, incidentInfo) {
   const details = [];
   let status = STATUS_OK;
   let explanation = "Equipo responde correctamente.";
   try {
-    const teamCount = await checkCollectionRead(["businesses", businessId, "teamMembers"]);
-    details.push(`Lectura de teamMembers exitosa (muestra: ${teamCount})`);
+    const teamCount = await getDocs(query(businessCollectionRef(db, scopeUid, categoryId, "teamMembers"), limit(1)));
+    details.push(`Lectura de teamMembers exitosa (muestra: ${teamCount.size})`);
   } catch (error) {
     status = STATUS_ERROR;
     explanation = "No se pudo leer la información de Equipo.";
@@ -446,6 +447,50 @@ async function checkEquipoHealth(businessId, incidentInfo) {
     status = STATUS_WARNING;
     explanation = "Equipo responde, pero hay incidentes recientes.";
     details.push(`Incidentes recientes de Equipo: ${incidentInfo.count}`);
+  }
+  return { status, explanation, details, checkedAt: formatNow() };
+}
+
+async function checkArchitectureIsolation(moduleName, scopeUid, categoryId) {
+  const details = [];
+  let status = STATUS_OK;
+  let explanation = "Arquitectura aislada por uid + categoryId.";
+  const activePath = `users/${scopeUid}/business/${categoryId}/...`;
+  details.push(`uid actual: ${scopeUid}`);
+  details.push(`categoryId actual: ${categoryId}`);
+  details.push(`módulo activo: ${moduleName}`);
+  details.push(`ruta Firestore activa: ${activePath}`);
+
+  try {
+    const filesToAudit = [
+      "dashboard.js",
+      "chat.js",
+      "clientes.js",
+      "pedidos.js",
+      "trabajos.js",
+      "finanzas.js",
+      "equipo.js",
+      "configuracion.js",
+      "diagnostico.js",
+    ];
+    const rawFiles = await Promise.all(
+      filesToAudit.map(async (file) => ({ file, text: await (await fetch(file)).text() })),
+    );
+    const offenders = [];
+    for (const row of rawFiles) {
+      if (/collection\(db,\s*"businesses"|doc\(db,\s*"businesses"|"\s*categories"\s*,/m.test(row.text)) {
+        offenders.push(row.file);
+      }
+    }
+    if (offenders.length) {
+      status = STATUS_ERROR;
+      explanation = "Se detectaron rutas globales/legacy prohibidas.";
+      details.push(`ERROR rutas globales detectadas en: ${offenders.join(", ")}`);
+    }
+  } catch (error) {
+    status = STATUS_WARNING;
+    explanation = "No se pudo completar auditoría de archivos en runtime.";
+    details.push(`Auditoría runtime: ${error instanceof Error ? error.message : String(error)}`);
   }
   return { status, explanation, details, checkedAt: formatNow() };
 }
@@ -511,6 +556,8 @@ async function loadDiagnostics(user) {
   }
   renderHeader(business);
   const data = business.data || {};
+  const scopeUid = business?.scope?.uid || user.uid;
+  const categoryId = business?.scope?.categoryId || getCategoryFromUrl() || business.id;
   const ownerUid = typeof data.ownerUid === "string" ? data.ownerUid.trim() : "";
   if (!ownerUid || ownerUid !== user.uid) {
     window.location.replace("dashboard.html");
@@ -518,7 +565,11 @@ async function loadDiagnostics(user) {
   }
 
   setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
-  const q = query(collection(db, "businesses", business.id, "diagnostics"), orderBy("createdAt", "desc"), limit(80));
+  const q = query(
+    businessCollectionRef(db, scopeUid, categoryId, "diagnostics"),
+    orderBy("createdAt", "desc"),
+    limit(80),
+  );
   const snap = await getDocs(q);
   const rows = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
   const emptyEl = document.getElementById("diag-empty");
@@ -533,12 +584,14 @@ async function loadDiagnostics(user) {
   const equipoIncidents = getIncidentSummary(rows, ["equipo", "team"]);
 
   const maya = await checkChatMayaHealth(business.id, mayaIncidents);
-  const clientes = await checkClientesHealth(business.id, clientIncidents);
-  const pedidos = await checkPedidosHealth(business.id, orderIncidents);
-  const recibos = await checkRecibosHealth(business.id, receiptIncidents);
-  const firebase = await checkFirebaseHealth(business.id, user, firebaseIncidents);
-  const whatsapp = await checkWhatsAppHealth(business.id, data, whatsappIncidents);
-  const equipo = await checkEquipoHealth(business.id, equipoIncidents);
+  const clientes = await checkClientesHealth(scopeUid, categoryId, clientIncidents);
+  const pedidos = await checkPedidosHealth(scopeUid, categoryId, orderIncidents);
+  const recibos = await checkRecibosHealth(scopeUid, categoryId, receiptIncidents);
+  const firebase = await checkFirebaseHealth(scopeUid, categoryId, user, firebaseIncidents);
+  const whatsapp = await checkWhatsAppHealth(scopeUid, categoryId, data, whatsappIncidents);
+  const equipo = await checkEquipoHealth(scopeUid, categoryId, equipoIncidents);
+  const moduleName = (window.location.pathname || "").split("/").pop() || "desconocido";
+  const architecture = await checkArchitectureIsolation(moduleName, scopeUid, categoryId);
 
   renderPanel("diag-maya", maya);
   renderPanel("diag-clientes", clientes);
@@ -547,6 +600,7 @@ async function loadDiagnostics(user) {
   renderPanel("diag-firebase", firebase);
   renderPanel("diag-whatsapp", whatsapp);
   renderPanel("diag-equipo", equipo);
+  renderPanel("diag-architecture", architecture);
 
   const panelResults = [
     { name: "Chat Maya", ...maya },
@@ -556,6 +610,7 @@ async function loadDiagnostics(user) {
     { name: "Firebase", ...firebase },
     { name: "WhatsApp", ...whatsapp },
     { name: "Equipo", ...equipo },
+    { name: "Arquitectura", ...architecture },
   ];
   renderGeneral(panelResults, rows);
   renderRecommendation(rows, panelResults);
