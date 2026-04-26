@@ -18,7 +18,7 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
-import { getUrlContext } from "./appContext.js";
+import { ensureYourColorContext, getUrlContext, renderContextDebugBadge } from "./appContext.js";
 import { profileDocRef } from "./dataPaths.js";
 
 /** @type {string | null} */
@@ -600,6 +600,17 @@ function boot() {
     if (!user) {
       window.location.replace("login.html");
       return;
+    }
+    const ycCtx = ensureYourColorContext(user);
+    if (ycCtx) {
+      scopeUid = ycCtx.uid;
+      businessId = ycCtx.categoryId;
+      renderContextDebugBadge({
+        user,
+        moduleName: "configuracion",
+        ctx: ycCtx,
+        pathSuffix: "profile/main",
+      });
     }
     loadPage(user).catch((err) => {
       console.error(err);

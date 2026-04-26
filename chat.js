@@ -33,7 +33,7 @@ import { initDashShell } from "./dash-shell.js";
 import { YOURCOLOR_BUSINESS, calculateOrderTotal } from "./yourcolor-config.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 import { businessCollectionRef, businessDocRef } from "./category-context.js";
-import { ensureContextInUrl, resolveAppContext } from "./appContext.js";
+import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 
 /** Misma región/proyecto que `generateCampaign`; tras `firebase deploy --only functions` verifica la URL en consola. */
 const CHAT_WITH_AI_URL = "https://chatwithai-5laxqi2i4q-uc.a.run.app";
@@ -57,14 +57,17 @@ let firebaseContextPayload = null;
 
 /** @type {{ id: string, data: Record<string, unknown> } | null} */
 let activeBusiness = null;
+const YOURCOLOR_WORKSPACE_ID = "yourcolor";
+const YOURCOLOR_CATEGORY_ID = "custom_apparel";
 
 function ensureChatAuthContext(user) {
-  const resolved = resolveAppContext(user) || {};
-  const uid = String(user?.uid || "").trim();
-  const workspaceId = String(resolved.workspaceId || "yourcolor").trim() || "yourcolor";
-  const categoryId = String(resolved.categoryId || "custom_apparel").trim() || "custom_apparel";
-  ensureContextInUrl({ workspaceId, categoryId });
-  return { uid, workspaceId, categoryId };
+  const forced = ensureYourColorContext(user);
+  const uid = String(forced?.uid || user?.uid || "").trim();
+  return {
+    uid,
+    workspaceId: YOURCOLOR_WORKSPACE_ID,
+    categoryId: YOURCOLOR_CATEGORY_ID,
+  };
 }
 
 function activeScopeUid() {
@@ -72,7 +75,7 @@ function activeScopeUid() {
 }
 
 function activeScopeCategory() {
-  return String(activeBusiness?.scope?.categoryId || activeBusiness?.id || "");
+  return String(activeBusiness?.scope?.categoryId || activeBusiness?.id || YOURCOLOR_CATEGORY_ID);
 }
 
 function scopedCollection(subcollection) {
@@ -1661,7 +1664,7 @@ async function executeMayaActionFromChat(businessId, payload) {
   const categoryId = activeScopeCategory();
   if (!uid || !categoryId) {
     console.error("[MayaAction] Missing uid/categoryId, action aborted.", { uid, categoryId, action: payload?.action });
-    throw new Error("Missing active uid/categoryId scope.");
+    throw new Error("No se pudo guardar: falta contexto YourColor (uid/workspace/category).");
   }
   const data = mergeMayaActionData(
     payload && typeof payload === "object" ? /** @type {Record<string, unknown>} */ (payload) : {},
@@ -1703,7 +1706,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       } else if (!prevNormalized && hasValidPhoneDigits(prevPhone)) {
         patch.normalizedPhone = normalizePhoneForMatch(prevPhone);
       }
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${existing.ref.id}`);
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${existing.ref.id}`);
       await updateDoc(existing.ref, patch);
       return "save_client";
     }
@@ -1718,7 +1721,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${createdRef.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${createdRef.id}`);
     return "save_client";
   }
 
@@ -1758,7 +1761,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       patch.normalizedPhone = normalizePhoneForMatch(prev.phone);
     }
     if (emailRaw) patch.email = emailRaw;
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${resolved.ref.id}`);
     await updateDoc(resolved.ref, patch);
     return "update_client";
   }
@@ -1780,7 +1783,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/jobs`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/jobs`);
     return "create_order";
   }
 
@@ -1811,7 +1814,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/calendar`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/calendar`);
     return "schedule_delivery";
   }
 
@@ -1825,13 +1828,13 @@ async function executeMayaActionFromChat(businessId, payload) {
       typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
     if (clientId) {
       await deleteDoc(scopedDoc("clients", clientId));
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${clientId}`);
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${clientId}`);
       return "delete_client";
     }
     const resolved = await resolveClientDocRefByActionData(businessId, data);
     if (!resolved) throw new Error("No encontré el cliente para eliminar.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${resolved.ref.id}`);
     return "delete_client";
   }
 
@@ -1842,7 +1845,7 @@ async function executeMayaActionFromChat(businessId, payload) {
     const resolved = await resolveOrderDocRef(businessId, orderId);
     if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/${resolved.kind}/${orderId}`);
     return "delete_order";
   }
 
@@ -1859,7 +1862,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       ...changes,
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/${resolved.kind}/${orderId}`);
     return "update_order";
   }
 
@@ -1885,7 +1888,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/calendar`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/calendar`);
     return "create_calendar_event";
   }
 
@@ -1976,7 +1979,7 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
 
   try {
     await addDoc(scopedCollection("jobs"), payload);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/business/${categoryId}/jobs`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/jobs`);
     showToast("Orden creada como Pendiente. Revisa el calendario para la fecha de entrega.");
     if (activeBusiness) {
       await loadFirebaseContext(activeBusiness);
@@ -3016,7 +3019,22 @@ async function bootWithUser(user) {
   let loading = null;
   try {
     const business = await resolveBusinessForUser(db, user);
-    activeBusiness = business;
+    activeBusiness = business
+      ? {
+          ...business,
+          id: YOURCOLOR_CATEGORY_ID,
+          scope: {
+            ...(business.scope || {}),
+            uid: String(business?.scope?.uid || user.uid || ""),
+            categoryId: YOURCOLOR_CATEGORY_ID,
+          },
+          data: {
+            ...(business.data || {}),
+            businessCategory: YOURCOLOR_CATEGORY_ID,
+            category: YOURCOLOR_CATEGORY_ID,
+          },
+        }
+      : null;
     if (business?.id) {
       const ownerUid = typeof business.data?.ownerUid === "string" ? business.data.ownerUid.trim() : "";
       setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
@@ -3124,6 +3142,12 @@ function boot() {
     if (user) {
       const ctx = ensureChatAuthContext(user);
       panelChatUserIdCache = ctx.uid;
+      renderContextDebugBadge({
+        user,
+        moduleName: "chat_maya",
+        ctx,
+        pathSuffix: "orders|clients|finances",
+      });
       previousAuthUser = user;
       bootWithUser(user).catch((err) => {
         console.error(err);

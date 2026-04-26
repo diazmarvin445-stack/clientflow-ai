@@ -15,6 +15,7 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { businessCollectionRef, businessDocRef } from "./category-context.js";
+import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 
 let allClients = [];
 let cachedBusinessId = null;
@@ -238,6 +239,7 @@ function applySearch(businessId) {
 
 async function loadClientesForUser(user) {
   hideLoadError();
+  const forcedCategoryId = "custom_apparel";
   const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
 
@@ -254,10 +256,10 @@ async function loadClientesForUser(user) {
     return;
   }
 
-  cachedBusinessId = business.id;
+  cachedBusinessId = forcedCategoryId;
   cachedUserId = business?.scope?.uid || user.uid;
   try {
-    const jobsSnap = await getDocs(businessCollectionRef(db, cachedUserId, business.id, "jobs"));
+    const jobsSnap = await getDocs(businessCollectionRef(db, cachedUserId, forcedCategoryId, "jobs"));
     const map = new Map();
     jobsSnap.forEach((d) => {
       const row = d.data() || {};
@@ -272,7 +274,7 @@ async function loadClientesForUser(user) {
 
   let clients;
   try {
-    clients = await fetchClientsForBusiness(db, business.id, cachedUserId);
+    clients = await fetchClientsForBusiness(db, forcedCategoryId, cachedUserId);
   } catch (err) {
     console.error(err);
     cachedBusinessId = null;
@@ -285,7 +287,7 @@ async function loadClientesForUser(user) {
   allClients = clients;
   setMetaLine(clients.length);
   if (search) search.value = "";
-  applySearch(business.id);
+  applySearch(forcedCategoryId);
 }
 
 function boot() {
@@ -315,6 +317,17 @@ function boot() {
       return;
     }
 
+    const ycCtx = ensureYourColorContext(user);
+    if (ycCtx) {
+      cachedBusinessId = ycCtx.categoryId;
+      cachedUserId = ycCtx.uid;
+      renderContextDebugBadge({
+        user,
+        moduleName: "clientes",
+        ctx: ycCtx,
+        pathSuffix: "clients",
+      });
+    }
     loadClientesForUser(user).catch((err) => {
       console.error(err);
       renderHeader(null);

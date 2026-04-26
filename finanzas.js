@@ -23,6 +23,7 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { businessCollectionRef, businessDocRef } from "./category-context.js";
+import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 
 /** @typedef {'today' | 'week' | 'month' | 'all'} FinPeriod */
 
@@ -903,9 +904,10 @@ function subscribeFinance(bid) {
 
 async function bootUser(user) {
   hideLoadError();
+  const ycCtx = ensureYourColorContext(user);
   const business = await resolveBusinessForUser(db, user);
   renderHeader(business);
-  scopeUid = business?.scope?.uid || user.uid || null;
+  scopeUid = ycCtx?.uid || business?.scope?.uid || user.uid || null;
   yourColorFinMode = isYourColorFinanceBusiness(business);
   const fixedPanel = document.getElementById("fin-fixed-panel");
   if (fixedPanel) fixedPanel.hidden = !yourColorFinMode;
@@ -928,7 +930,14 @@ async function bootUser(user) {
     renderFixedList();
     return;
   }
-  subscribeFinance(business.id);
+  const forcedBusinessId = ycCtx?.categoryId || business.id;
+  renderContextDebugBadge({
+    user,
+    moduleName: "finanzas",
+    ctx: ycCtx || { uid: scopeUid, workspaceId: "yourcolor", categoryId: forcedBusinessId },
+    pathSuffix: "finances",
+  });
+  subscribeFinance(forcedBusinessId);
   if (yourColorFinMode) {
     subscribeFixedExpenses(business.id);
   } else {

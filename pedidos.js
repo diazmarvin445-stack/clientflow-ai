@@ -22,6 +22,7 @@ import { receiptStatusLabel, RECEIPT_SHARE_PAGE_BASE_URL } from "./receipt-confi
 import { ensurePublicReceiptDocument } from "./receipt-public-sync.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
 import { businessCollectionRef, businessDocRef } from "./category-context.js";
+import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 
 let activeBusinessId = "";
 let activeScopeUid = "";
@@ -864,10 +865,21 @@ function boot() {
       return;
     }
     try {
+      const ycCtx = ensureYourColorContext(user);
       const business = await resolveBusinessForUser(db, user);
       if (!business) return;
       activeBusinessId = business.id;
       activeScopeUid = business?.scope?.uid || user.uid;
+      if (ycCtx) {
+        activeBusinessId = ycCtx.categoryId;
+        activeScopeUid = ycCtx.uid;
+        renderContextDebugBadge({
+          user,
+          moduleName: "pedidos",
+          ctx: ycCtx,
+          pathSuffix: "orders",
+        });
+      }
       const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
       setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
       renderHeader(business);
