@@ -95,7 +95,7 @@
           <a href="configuracion.html" class="profile-back">← Configuración</a>
           <section class="profile-card dash-panel" aria-labelledby="profile-title">
             <h2 id="profile-title" class="profile-title">Mi perfil</h2>
-            <p class="profile-lead">Gestiona tu cuenta y los datos del negocio desde aquí.</p>
+            <p class="profile-lead">Gestiona solo tu cuenta de usuario.</p>
             <p class="profile-flash" id="profile-flash" hidden></p>
           </section>
 
@@ -118,6 +118,7 @@
                 <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="profile-user-save">
                   Guardar perfil
                 </button>
+                <a href="dashboard.html" class="dash-quick-btn">Ir al dashboard</a>
               </div>
             </form>
           </section>
@@ -129,39 +130,10 @@
               <button type="button" class="dash-quick-btn" id="profile-reset-password">
                 Cambiar contraseña
               </button>
+              <button type="button" class="dash-quick-btn dash-quick-btn--ghost" id="profile-signout">
+                Cerrar sesión
+              </button>
             </div>
-          </section>
-
-          <section class="profile-card dash-panel" aria-labelledby="profile-business-title">
-            <h3 id="profile-business-title" class="profile-section-title">Negocio</h3>
-            <form id="profile-business-form" class="profile-form">
-              <label class="profile-field">
-                <span class="profile-field-label">Nombre del negocio</span>
-                <input type="text" id="business-name" class="profile-input" maxlength="140" placeholder="Ej. YourColor" />
-              </label>
-              <label class="profile-field">
-                <span class="profile-field-label">Teléfono</span>
-                <input type="text" id="business-phone" class="profile-input" maxlength="40" placeholder="+1 555 123 4567" />
-              </label>
-              <label class="profile-field">
-                <span class="profile-field-label">Métodos de pago</span>
-                <textarea
-                  id="business-payment-methods"
-                  class="profile-input profile-textarea"
-                  rows="3"
-                  placeholder="Ej. Zelle, Cash App, efectivo"
-                ></textarea>
-              </label>
-              <div class="profile-actions">
-                <button type="submit" class="dash-quick-btn dash-quick-btn--primary" id="profile-business-save">
-                  Guardar negocio
-                </button>
-                <a href="dashboard.html" class="dash-quick-btn">Ir al dashboard</a>
-                <button type="button" class="dash-quick-btn dash-quick-btn--ghost" id="profile-signout">
-                  Cerrar sesión
-                </button>
-              </div>
-            </form>
           </section>
         </div>
       </main>

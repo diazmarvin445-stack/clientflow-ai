@@ -5,7 +5,6 @@ import {
   signOut,
   updateProfile,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-import { doc, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
   formatBusinessMeta,
@@ -46,14 +45,7 @@ function boot() {
   const userForm = document.getElementById("profile-user-form");
   const userSaveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById("profile-user-save"));
   const resetBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById("profile-reset-password"));
-  const businessForm = document.getElementById("profile-business-form");
-  const businessSaveBtn = /** @type {HTMLButtonElement | null} */ (document.getElementById("profile-business-save"));
-  const businessNameEl = /** @type {HTMLInputElement | null} */ (document.getElementById("business-name"));
-  const businessPhoneEl = /** @type {HTMLInputElement | null} */ (document.getElementById("business-phone"));
-  const businessPayEl = /** @type {HTMLTextAreaElement | null} */ (document.getElementById("business-payment-methods"));
   const signOutBtn = document.getElementById("profile-signout");
-  /** @type {{ id: string, data: Record<string, unknown> } | null} */
-  let currentBusiness = null;
   /** @type {import("firebase/auth").User | null} */
   let currentUser = null;
 
@@ -78,15 +70,10 @@ function boot() {
 
     try {
       const business = await resolveBusinessForUser(db, user);
-      currentBusiness = business;
       renderHeader(business);
-      if (businessNameEl) businessNameEl.value = String(business?.data?.businessName || "");
-      if (businessPhoneEl) businessPhoneEl.value = String(business?.data?.phone || "");
-      if (businessPayEl) businessPayEl.value = String(business?.data?.paymentMethods || "");
     } catch (e) {
       console.error(e);
       renderHeader(null);
-      currentBusiness = null;
     }
   });
 
@@ -132,46 +119,6 @@ function boot() {
     } finally {
       resetBtn.disabled = false;
       resetBtn.removeAttribute("aria-busy");
-    }
-  });
-
-  businessForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!currentBusiness?.id) {
-      showFlash("No encontré un negocio vinculado a tu cuenta.", true);
-      return;
-    }
-    const businessName = String(businessNameEl?.value || "").trim();
-    const phone = String(businessPhoneEl?.value || "").trim();
-    const paymentMethods = String(businessPayEl?.value || "").trim();
-    if (!businessName) {
-      showFlash("El nombre del negocio es obligatorio.", true);
-      return;
-    }
-    try {
-      if (businessSaveBtn) {
-        businessSaveBtn.disabled = true;
-        businessSaveBtn.setAttribute("aria-busy", "true");
-      }
-      await updateDoc(doc(db, "businesses", currentBusiness.id), {
-        businessName,
-        phone,
-        paymentMethods,
-        updatedAt: serverTimestamp(),
-      });
-      currentBusiness.data.businessName = businessName;
-      currentBusiness.data.phone = phone;
-      currentBusiness.data.paymentMethods = paymentMethods;
-      renderHeader(currentBusiness);
-      showFlash("Datos del negocio guardados.");
-    } catch (err) {
-      console.error(err);
-      showFlash("No se pudo guardar la configuración del negocio.", true);
-    } finally {
-      if (businessSaveBtn) {
-        businessSaveBtn.disabled = false;
-        businessSaveBtn.removeAttribute("aria-busy");
-      }
     }
   });
 
