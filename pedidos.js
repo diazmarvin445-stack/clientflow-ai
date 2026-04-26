@@ -21,13 +21,10 @@ import { generateOrderReceiptPdf } from "./receipt-pdf.js";
 import { receiptStatusLabel, RECEIPT_SHARE_PAGE_BASE_URL } from "./receipt-config.js";
 import { ensurePublicReceiptDocument } from "./receipt-public-sync.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
-
-const CREATE_MANUAL_ORDER_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/createManualOrder";
-const UPDATE_ORDER_STATUS_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderStatus";
-const UPDATE_ORDER_AND_SYNC_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/updateOrderAndSync";
-const DELETE_ORDER_CASCADE_URL = "https://us-central1-clientflow-ai-7eb08.cloudfunctions.net/deleteOrderCascade";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 let activeBusinessId = "";
+let activeScopeUid = "";
 let allOrders = [];
 let ordersUnsub = null;
 let selectedOrderId = null;
@@ -342,11 +339,8 @@ function applyFilters(rows) {
 async function deleteOrder(orderId) {
   const ok = window.confirm("¿Eliminar este pedido?");
   if (!ok) return;
-  await fetch(DELETE_ORDER_CASCADE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ businessId: activeBusinessId, orderId }),
-  });
+  if (!activeScopeUid || !activeBusinessId) return;
+  await deleteDoc(businessDocRef(db, activeScopeUid, activeBusinessId, "orders", orderId));
 }
 
 async function saveOrderFromModal(ev) {
@@ -367,38 +361,84 @@ async function saveOrderFromModal(ev) {
     status: document.getElementById("orders-status").value,
   };
 
+  if (!activeScopeUid || !activeBusinessId) throw new Error("No hay categoría activa.");
+  const cleanPayload = {
+    clientName: payload.clientName,
+    clientPhone: payload.clientPhone,
+    product: payload.product,
+    quantity: payload.quantity,
+    amount: payload.amount,
+    total: payload.total,
+    deposit: payload.deposit,
+    expenses: payload.expenses,
+    deliveryDate: payload.deliveryDate ? Timestamp.fromDate(new Date(`${payload.deliveryDate}T12:00:00`)) : null,
+    notes: payload.notes,
+    status: payload.status,
+    source: "manual",
+    balance: Math.max(0, Number(payload.total) - Number(payload.deposit || 0)),
+    updatedAt: serverTimestamp(),
+  };
   if (!orderId) {
-    const res = await fetch(CREATE_MANUAL_ORDER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    await addDoc(businessCollectionRef(db, activeScopeUid, activeBusinessId, "orders"), {
+      ...cleanPayload,
+      createdAt: serverTimestamp(),
     });
-    if (!res.ok) throw new Error("No se pudo crear el pedido manual.");
   } else {
-    await fetch(UPDATE_ORDER_AND_SYNC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        businessId: activeBusinessId,
-        orderId,
-        ...payload,
-      }),
-    });
+    await updateDoc(businessDocRef(db, activeScopeUid, activeBusinessId, "orders", orderId), cleanPayload);
   }
   document.getElementById("orders-modal").close();
 }
 
-async function markOrderDelivered(orderId) {
-  const res = await fetch(UPDATE_ORDER_STATUS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ businessId: activeBusinessId, orderId, status: "entregado" }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof body?.error === "string" ? body.error : "No se pudo marcar como entregado.";
-    throw new Error(msg);
+async function upsertDeliveredOrderFinance(orderId) {
+  if (!activeScopeUid || !activeBusinessId || !orderId) return;
+  const order = allOrders.find((x) => x.id === orderId);
+  if (!order) return;
+  const financesRef = businessCollectionRef(db, activeScopeUid, activeBusinessId, "finances");
+  const deliveredDate = parseOrderDeliveredDate(order.deliveredAt || order.deliveryDate);
+  const totalPaid = Math.max(0, Number(order.totalPaid ?? order.total ?? order.amount) || 0);
+  const expenses = Math.max(0, Number(order.expenses) || 0);
+  const incomeExisting = await getDocs(query(financesRef, where("orderId", "==", orderId), where("type", "==", "income")));
+  const expenseExisting = await getDocs(query(financesRef, where("orderId", "==", orderId), where("type", "==", "expense")));
+  if (incomeExisting.empty && totalPaid > 0) {
+    await addDoc(financesRef, {
+      type: "income",
+      amount: totalPaid,
+      description: `Cobro total pedido entregado: ${order.product || "Pedido"} - ${order.clientName || "Cliente"}`,
+      orderId,
+      linkedOrderId: orderId,
+      category: "ventas",
+      status: "cobrado",
+      date: Timestamp.fromDate(deliveredDate),
+      createdBy: "marvin",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
   }
+  if (expenseExisting.empty && expenses > 0) {
+    await addDoc(financesRef, {
+      type: "expense",
+      amount: expenses,
+      description: `Gastos materiales: ${order.product || "Pedido"} - ${order.clientName || "Cliente"}`,
+      orderId,
+      linkedOrderId: orderId,
+      category: "materiales",
+      status: "cobrado",
+      date: Timestamp.fromDate(deliveredDate),
+      createdBy: "marvin",
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+}
+
+async function markOrderDelivered(orderId) {
+  if (!activeScopeUid || !activeBusinessId) throw new Error("No hay categoría activa.");
+  await updateDoc(businessDocRef(db, activeScopeUid, activeBusinessId, "orders", orderId), {
+    status: "entregado",
+    deliveredAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await upsertDeliveredOrderFinance(orderId);
   console.log("[MARK_DELIVERED]", { orderId, ok: true });
 }
 
@@ -409,8 +449,9 @@ async function repairDeliveredOrders() {
   );
   if (!ok) return;
 
-  const ordersRef = collection(db, "businesses", activeBusinessId, "orders");
-  const financeRef = collection(db, "businesses", activeBusinessId, "finance");
+  if (!activeScopeUid) throw new Error("No hay usuario de alcance para reparar.");
+  const ordersRef = businessCollectionRef(db, activeScopeUid, activeBusinessId, "orders");
+  const financeRef = businessCollectionRef(db, activeScopeUid, activeBusinessId, "finances");
   const allOrdersSnap = await getDocs(ordersRef);
   const orderById = new Map();
   allOrdersSnap.forEach((d) => {
@@ -779,14 +820,10 @@ function wireUi() {
       if (!selectedOrderId) return;
       const input = document.getElementById("od-expenses");
       const expenses = input && "value" in input ? Number(input.value) || 0 : 0;
-      await fetch(UPDATE_ORDER_AND_SYNC_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          businessId: activeBusinessId,
-          orderId: selectedOrderId,
-          expenses,
-        }),
+      if (!activeScopeUid || !activeBusinessId) return;
+      await updateDoc(businessDocRef(db, activeScopeUid, activeBusinessId, "orders", selectedOrderId), {
+        expenses,
+        updatedAt: serverTimestamp(),
       });
     });
   }
@@ -808,7 +845,7 @@ function wireUi() {
 
 function subscribeOrders() {
   if (ordersUnsub) ordersUnsub();
-  const q = query(collection(db, "businesses", activeBusinessId, "orders"), orderBy("createdAt", "desc"));
+  const q = query(businessCollectionRef(db, activeScopeUid, activeBusinessId, "orders"), orderBy("createdAt", "desc"));
   ordersUnsub = onSnapshot(q, (snap) => {
     allOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderSummary(allOrders);
@@ -830,6 +867,7 @@ function boot() {
       const business = await resolveBusinessForUser(db, user);
       if (!business) return;
       activeBusinessId = business.id;
+      activeScopeUid = business?.scope?.uid || user.uid;
       const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
       setDiagnosticsLoggerContext({ businessId: business.id, ownerUid });
       renderHeader(business);

@@ -9,6 +9,7 @@ import {
   setSessionPrimaryBusinessId,
 } from "./dashboard-data.js";
 import { getMenuItemsForCategory } from "./category-config.js";
+import { getCategoryFromUrl, withCategoryInHref } from "./category-context.js";
 import {
   addDoc,
   collection,
@@ -294,6 +295,11 @@ function initUserMenu(auth, db) {
         }
         switchWrap.hidden = false;
         switchList.innerHTML = "";
+        const activeCategory = activeBusiness?.id || getCategoryFromUrl() || "";
+        dropdown.querySelectorAll('a[href]').forEach((link) => {
+          const href = link.getAttribute("href") || "";
+          link.setAttribute("href", withCategoryInHref(href, activeCategory));
+        });
         for (const row of allBusinesses) {
           const btn = document.createElement("button");
           btn.type = "button";
@@ -790,7 +796,7 @@ async function initFloatingCalendar(auth, db) {
  * @param {string} currentFile
  */
 function pathMatchesFile(hrefFile, currentFile) {
-  const f = hrefFile.replace(/^\.\//, "").split("#")[0].trim();
+  const f = hrefFile.replace(/^\.\//, "").split("#")[0].split("?")[0].trim();
   return currentFile === f || currentFile.endsWith(f);
 }
 
@@ -839,9 +845,10 @@ function renderCategoryNav(items) {
   const path = (window.location.pathname || "").split("/").pop() || "";
   const hash = window.location.hash || "";
 
+  const currentCategory = getCategoryFromUrl();
   for (const item of items) {
     const a = document.createElement("a");
-    a.href = item.href;
+    a.href = withCategoryInHref(item.href, currentCategory || "");
     a.className = "dash-nav-link";
     if (item.id === "chat") a.id = "dash-nav-chat-link";
     a.innerHTML = `<span class="dash-nav-ico dash-nav-ico--${item.icon}" aria-hidden="true"></span>
@@ -887,15 +894,16 @@ export async function hydrateSidebarCategoryNav(db, user) {
 export function ensureChatNavLink() {
   const nav = document.querySelector("#dash-sidebar .dash-nav");
   if (!nav) return;
-  let chatLink = nav.querySelector('a[href="chat.html"]');
+  const currentCategory = getCategoryFromUrl();
+  let chatLink = nav.querySelector('a[href^="chat.html"]');
   if (!chatLink) {
     chatLink = document.createElement("a");
     chatLink.id = "dash-nav-chat-link";
-    chatLink.href = "chat.html";
+    chatLink.href = withCategoryInHref("chat.html", currentCategory || "");
     chatLink.className = "dash-nav-link";
     chatLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--chat" aria-hidden="true"></span>
         Chat IA`;
-    const dash = nav.querySelector('a[href="dashboard.html"]');
+    const dash = nav.querySelector('a[href^="dashboard.html"]');
     if (dash && dash.nextSibling) {
       dash.parentNode.insertBefore(chatLink, dash.nextSibling);
     } else if (dash) {
@@ -914,16 +922,17 @@ export function ensureChatNavLink() {
 export function ensureClientesNavLink() {
   const nav = document.querySelector("#dash-sidebar .dash-nav");
   if (!nav) return;
-  let clientesLink = nav.querySelector('a[href="clientes.html"]');
+  const currentCategory = getCategoryFromUrl();
+  let clientesLink = nav.querySelector('a[href^="clientes.html"]');
   if (!clientesLink) {
     clientesLink = document.createElement("a");
-    clientesLink.href = "clientes.html";
+    clientesLink.href = withCategoryInHref("clientes.html", currentCategory || "");
     clientesLink.className = "dash-nav-link";
     clientesLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--team" aria-hidden="true"></span>
         Clientes`;
   }
-  const trabajosLink = nav.querySelector('a[href="trabajos.html"]');
-  const pedidosLink = nav.querySelector('a[href="pedidos.html"]');
+  const trabajosLink = nav.querySelector('a[href^="trabajos.html"]');
+  const pedidosLink = nav.querySelector('a[href^="pedidos.html"]');
   const anchor = trabajosLink || pedidosLink;
   const afterAnchor = anchor?.nextElementSibling;
   if (anchor) {
@@ -943,7 +952,8 @@ export function ensureClientesNavLink() {
 export function ensureDiagnosticsNavLink(canAccess) {
   const nav = document.querySelector("#dash-sidebar .dash-nav");
   if (!nav) return;
-  let diagLink = nav.querySelector('a[href="diagnostico.html"]');
+  const currentCategory = getCategoryFromUrl();
+  let diagLink = nav.querySelector('a[href^="diagnostico.html"]');
 
   if (!canAccess) {
     if (diagLink) diagLink.remove();
@@ -953,12 +963,12 @@ export function ensureDiagnosticsNavLink(canAccess) {
 
   if (!diagLink) {
     diagLink = document.createElement("a");
-    diagLink.href = "diagnostico.html";
+    diagLink.href = withCategoryInHref("diagnostico.html", currentCategory || "");
     diagLink.className = "dash-nav-link";
     diagLink.innerHTML = `<span class="dash-nav-ico dash-nav-ico--gear" aria-hidden="true"></span>
         Diagnóstico`;
   }
-  const configLink = nav.querySelector('a[href="configuracion.html"]');
+  const configLink = nav.querySelector('a[href^="configuracion.html"]');
   if (configLink) {
     nav.insertBefore(diagLink, configLink);
   } else if (!diagLink.parentElement) {
@@ -990,6 +1000,14 @@ export function initDashShell(opts = {}) {
     onAuthStateChanged(auth, (user) => {
       if (user) {
         void hydrateSidebarCategoryNav(db, user).then(async () => {
+          const nav = document.querySelector("#dash-sidebar .dash-nav");
+          const currentCategory = getCategoryFromUrl();
+          if (nav && currentCategory) {
+            nav.querySelectorAll("a[href]").forEach((a) => {
+              const href = a.getAttribute("href") || "";
+              a.setAttribute("href", withCategoryInHref(href, currentCategory));
+            });
+          }
           try {
             const business = await resolveBusinessForUser(db, user);
             const ownerUid =

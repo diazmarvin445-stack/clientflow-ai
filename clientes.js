@@ -2,9 +2,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   getDocs,
   serverTimestamp,
   updateDoc,
@@ -16,6 +14,7 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 let allClients = [];
 let cachedBusinessId = null;
@@ -174,7 +173,7 @@ function renderClientList(root, businessId, list) {
       if (!ok) return;
       btn.disabled = true;
       try {
-        await deleteDoc(doc(db, "users", cachedUserId, "categories", cachedBusinessId, "clients", id));
+        await deleteDoc(businessDocRef(db, cachedUserId, cachedBusinessId, "clients", id));
         allClients = allClients.filter((x) => x.id !== id);
         setMetaLine(allClients.length);
         if (cachedBusinessId) applySearch(cachedBusinessId);
@@ -204,14 +203,14 @@ async function saveClient(ev) {
     updatedAt: serverTimestamp(),
   };
   if (!id) {
-    await addDoc(collection(db, "users", cachedUserId, "categories", cachedBusinessId, "clients"), {
+    await addDoc(businessCollectionRef(db, cachedUserId, cachedBusinessId, "clients"), {
       ...payload,
       source: "manual",
       status: "active",
       createdAt: serverTimestamp(),
     });
   } else {
-    await updateDoc(doc(db, "users", cachedUserId, "categories", cachedBusinessId, "clients", id), payload);
+    await updateDoc(businessDocRef(db, cachedUserId, cachedBusinessId, "clients", id), payload);
   }
   document.getElementById("cli-modal")?.close();
   const fresh = await fetchClientsForBusiness(db, cachedBusinessId, cachedUserId);
@@ -258,7 +257,7 @@ async function loadClientesForUser(user) {
   cachedBusinessId = business.id;
   cachedUserId = business?.scope?.uid || user.uid;
   try {
-    const jobsSnap = await getDocs(collection(db, "users", cachedUserId, "categories", business.id, "jobs"));
+    const jobsSnap = await getDocs(businessCollectionRef(db, cachedUserId, business.id, "jobs"));
     const map = new Map();
     jobsSnap.forEach((d) => {
       const row = d.data() || {};

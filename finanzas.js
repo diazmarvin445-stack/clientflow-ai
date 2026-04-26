@@ -22,6 +22,7 @@ import {
   fixedExpenseNextDueOnOrAfter,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 /** @typedef {'today' | 'week' | 'month' | 'all'} FinPeriod */
 
@@ -70,13 +71,15 @@ let yourColorFinMode = false;
 
 function scopedCollection(subcollection, bid = businessId) {
   if (!bid) return null;
-  if (scopeUid) return collection(db, "users", scopeUid, "categories", bid, subcollection);
+  const scopedName = subcollection === "finance" ? "finances" : subcollection;
+  if (scopeUid) return businessCollectionRef(db, scopeUid, bid, scopedName);
   return collection(db, "businesses", bid, subcollection);
 }
 
 function scopedDoc(subcollection, id, bid = businessId) {
   if (!bid || !id) return null;
-  if (scopeUid) return doc(db, "users", scopeUid, "categories", bid, subcollection, id);
+  const scopedName = subcollection === "finance" ? "finances" : subcollection;
+  if (scopeUid) return businessDocRef(db, scopeUid, bid, scopedName, id);
   return doc(db, "businesses", bid, subcollection, id);
 }
 

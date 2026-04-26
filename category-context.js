@@ -21,6 +21,48 @@ function normalizeCategory(raw) {
   return c;
 }
 
+export function normalizeCategoryId(raw) {
+  return normalizeCategory(raw);
+}
+
+export function getCategoryFromUrl() {
+  try {
+    const u = new URL(window.location.href);
+    const raw = u.searchParams.get("category");
+    if (!raw) return null;
+    const c = normalizeCategory(raw);
+    return c || null;
+  } catch {
+    return null;
+  }
+}
+
+export function ensureCategoryInUrl(categoryId) {
+  const c = normalizeCategory(categoryId);
+  if (!c) return;
+  try {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get("category") === c) return;
+    u.searchParams.set("category", c);
+    window.history.replaceState({}, "", u.toString());
+  } catch {
+    /* ignore */
+  }
+}
+
+export function withCategoryInHref(href, categoryId) {
+  const c = normalizeCategory(categoryId);
+  if (!c || !href || /^https?:\/\//i.test(href) || href.startsWith("mailto:") || href.startsWith("tel:")) {
+    return href;
+  }
+  const [baseAndQuery, hashPart] = String(href).split("#");
+  const [basePath, queryPart] = baseAndQuery.split("?");
+  const params = new URLSearchParams(queryPart || "");
+  params.set("category", c);
+  const q = params.toString();
+  return `${basePath}${q ? `?${q}` : ""}${hashPart ? `#${hashPart}` : ""}`;
+}
+
 export function setActiveCategoryId(uid, categoryId) {
   const u = String(uid || "").trim();
   const c = normalizeCategory(categoryId);
@@ -62,6 +104,14 @@ export function categoryCollectionRef(db, uid, categoryId, subcollection) {
   return collection(db, "users", uid, "categories", normalizeCategory(categoryId), subcollection);
 }
 
+export function businessCollectionRef(db, uid, categoryId, subcollection) {
+  return collection(db, "users", uid, "business", normalizeCategory(categoryId), subcollection);
+}
+
+export function businessDocRef(db, uid, categoryId, subcollection, id) {
+  return doc(db, "users", uid, "business", normalizeCategory(categoryId), subcollection, id);
+}
+
 export async function listUserCategories(db, uid) {
   if (!uid) return [];
   const col = collection(db, "users", uid, "categories");
@@ -94,9 +144,11 @@ export async function resolveCategoryContextForUser(db, user) {
   const uid = user.uid;
   const all = await listUserCategories(db, uid);
   if (!all.length) return null;
+  const urlCat = getCategoryFromUrl();
   const sessionCat = getActiveCategoryId(uid);
-  const chosen = sessionCat ? all.find((x) => x.id === sessionCat) || all[0] : all[0];
+  const chosen = (urlCat && all.find((x) => x.id === urlCat)) || (sessionCat ? all.find((x) => x.id === sessionCat) : null) || all[0];
   setActiveCategoryId(uid, chosen.id);
+  ensureCategoryInUrl(chosen.id);
   return {
     uid,
     categoryId: chosen.id,

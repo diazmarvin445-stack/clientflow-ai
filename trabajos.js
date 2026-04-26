@@ -2,9 +2,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -14,6 +12,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
+import { businessCollectionRef, businessDocRef } from "./category-context.js";
 
 let businessId = "";
 let userId = "";
@@ -114,7 +113,7 @@ function closeModal() {
 
 async function addFinanceExpenseForMaterials(uid, bid, jobId, amount, jobType) {
   if (amount <= 0) return;
-  await addDoc(collection(db, "users", uid, "categories", bid, "finance"), {
+  await addDoc(businessCollectionRef(db, uid, bid, "finances"), {
     type: "expense",
     amount,
     category: "materiales",
@@ -129,7 +128,7 @@ async function addFinanceExpenseForMaterials(uid, bid, jobId, amount, jobType) {
 
 async function addFinanceIncomeForCompletedJob(uid, bid, jobId, amount, jobType) {
   if (amount <= 0) return;
-  await addDoc(collection(db, "users", uid, "categories", bid, "finance"), {
+  await addDoc(businessCollectionRef(db, uid, bid, "finances"), {
     type: "income",
     amount,
     category: "ventas",
@@ -178,7 +177,7 @@ async function saveJob(ev) {
   };
 
   if (!id) {
-    const ref = await addDoc(collection(db, "users", userId, "categories", businessId, "jobs"), {
+    const ref = await addDoc(businessCollectionRef(db, userId, businessId, "jobs"), {
       ...payload,
       createdAt: serverTimestamp(),
     });
@@ -188,7 +187,7 @@ async function saveJob(ev) {
     }
   } else {
     const prev = allJobs.find((j) => j.id === id) || {};
-    await updateDoc(doc(db, "users", userId, "categories", businessId, "jobs", id), payload);
+    await updateDoc(businessDocRef(db, userId, businessId, "jobs", id), payload);
     const deltaCost = totalCost - (Number(prev.totalCost) || 0);
     if (deltaCost > 0) await addFinanceExpenseForMaterials(userId, businessId, id, deltaCost, payload.jobType);
     const wasCompleted = prev.status === "completed" || prev.status === "paid";
@@ -203,7 +202,7 @@ async function saveJob(ev) {
 async function removeJob(id) {
   if (!businessId || !id) return;
   if (!window.confirm("¿Eliminar este trabajo?")) return;
-  await deleteDoc(doc(db, "users", userId, "categories", businessId, "jobs", id));
+  await deleteDoc(businessDocRef(db, userId, businessId, "jobs", id));
 }
 
 function renderRows(rows) {
@@ -247,7 +246,7 @@ function fillClientSelect() {
 }
 
 async function loadClients() {
-  const snap = await getDocs(collection(db, "users", userId, "categories", businessId, "clients"));
+  const snap = await getDocs(businessCollectionRef(db, userId, businessId, "clients"));
   clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   fillClientSelect();
 }
@@ -260,7 +259,7 @@ async function loadPage(user) {
   renderHeader(business);
   await loadClients();
   onSnapshot(
-    query(collection(db, "users", userId, "categories", businessId, "jobs"), orderBy("createdAt", "desc")),
+    query(businessCollectionRef(db, userId, businessId, "jobs"), orderBy("createdAt", "desc")),
     (snap) => {
     allJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     applyFilters();
