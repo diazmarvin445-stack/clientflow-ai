@@ -56,6 +56,29 @@ let firebaseContextPayload = null;
 /** @type {{ id: string, data: Record<string, unknown> } | null} */
 let activeBusiness = null;
 
+function activeScopeUid() {
+  return String(activeBusiness?.scope?.uid || panelChatUserIdCache || "");
+}
+
+function activeScopeCategory() {
+  return String(activeBusiness?.scope?.categoryId || activeBusiness?.id || "");
+}
+
+function scopedCollection(subcollection) {
+  const uid = activeScopeUid();
+  const category = activeScopeCategory();
+  if (uid && category) return collection(db, "users", uid, "categories", category, subcollection);
+  return collection(db, "businesses", String(activeBusiness?.id || ""), subcollection);
+}
+
+function categoryKeyFromBusiness(business) {
+  const c = String(business?.data?.businessCategory || business?.data?.category || "")
+    .trim()
+    .toLowerCase();
+  if (c === "construction") return "roofing_construction";
+  return c;
+}
+
 /** Centro de Control Maya: listeners en tiempo real. */
 /** @type {(() => void) | null} */
 let mayaUnsubConversations = null;
@@ -2256,17 +2279,36 @@ async function loadFirebaseContext(business, options = {}) {
   const bc =
     typeof business.data.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
   const yourColorFin = bn === "yourcolor" || bc === "custom_apparel";
+  const scopeUid = String(business?.scope?.uid || "");
   const fixedSnapPromise = yourColorFin
-    ? getDocs(collection(db, "businesses", business.id, "fixedExpenses"))
+    ? getDocs(
+        scopeUid
+          ? collection(db, "users", scopeUid, "categories", business.id, "fixedExpenses")
+          : collection(db, "businesses", business.id, "fixedExpenses"),
+      )
     : Promise.resolve(null);
 
   const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext, fixedSnapMaybe] = await Promise.all([
-    fetchJobsSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
-    fetchOrdersSplitForChat(db, business.id, bootstrap ? 90 : 150, bootstrap ? 35 : 50, bootstrap ? 8 : 10),
-    fetchClientsForChatContext(db, business.id, clientLimit),
-    fetchCampaignsListAndStats(db, business.id),
-    fetchFinanceTransactionsCurrentMonth(db, business.id, financeReadCap),
-    fetchCalendarEventsForChat(db, business.id, calendarDays),
+    fetchJobsSplitForChat(
+      db,
+      business.id,
+      bootstrap ? 90 : 150,
+      bootstrap ? 35 : 50,
+      bootstrap ? 8 : 10,
+      scopeUid || null,
+    ),
+    fetchOrdersSplitForChat(
+      db,
+      business.id,
+      bootstrap ? 90 : 150,
+      bootstrap ? 35 : 50,
+      bootstrap ? 8 : 10,
+      scopeUid || null,
+    ),
+    fetchClientsForChatContext(db, business.id, clientLimit, scopeUid || null),
+    fetchCampaignsListAndStats(db, business.id, scopeUid || null),
+    fetchFinanceTransactionsCurrentMonth(db, business.id, financeReadCap, scopeUid || null),
+    fetchCalendarEventsForChat(db, business.id, calendarDays, 120, scopeUid || null),
     fixedSnapPromise,
   ]);
 
@@ -2877,7 +2919,10 @@ function mayaInitControlCenter(business) {
     mayaScheduleAvgResponse(business.id, convRows);
   };
 
-  const convCol = collection(db, "businesses", business.id, "conversations");
+  const convCol =
+    business?.scope?.uid && business?.scope?.categoryId
+      ? collection(db, "users", business.scope.uid, "categories", business.scope.categoryId, "conversations")
+      : collection(db, "businesses", business.id, "conversations");
   mayaUnsubConversations = onSnapshot(
     convCol,
     (snap) => {
@@ -2893,7 +2938,10 @@ function mayaInitControlCenter(business) {
     (e) => console.error("[Maya CC] conversations", e),
   );
 
-  const ordCol = collection(db, "businesses", business.id, "orders");
+  const ordCol =
+    business?.scope?.uid && business?.scope?.categoryId
+      ? collection(db, "users", business.scope.uid, "categories", business.scope.categoryId, "orders")
+      : collection(db, "businesses", business.id, "orders");
   mayaUnsubOrders = onSnapshot(
     ordCol,
     (snap) => {
@@ -2916,11 +2964,13 @@ async function bootWithUser(user) {
     const body = document.body;
     if (body) {
       const businessName = typeof business?.data?.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
-      const businessCategory =
-        typeof business?.data?.businessCategory === "string" ? business.data.businessCategory.trim().toLowerCase() : "";
+      const businessCategory = categoryKeyFromBusiness(business);
       const isYourColorBusiness = businessName === "yourcolor" || businessCategory === "custom_apparel";
+      const isConstructionBusiness = businessCategory === "roofing_construction";
       body.classList.toggle("yourcolor-chat-page", isYourColorBusiness);
       body.classList.toggle("non-yourcolor-chat-page", !isYourColorBusiness);
+      body.classList.toggle("construction-chat-page", isConstructionBusiness);
+      body.classList.toggle("custom-apparel-chat-page", isYourColorBusiness);
       if (isYourColorBusiness) {
         ensureIsolatedMayaChatLayer();
       }

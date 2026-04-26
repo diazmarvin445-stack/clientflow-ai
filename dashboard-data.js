@@ -23,6 +23,13 @@ import {
   loadCategoryProfile,
 } from "./category-context.js";
 
+function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
+  if (ownerUid && typeof ownerUid === "string") {
+    return collection(db, "users", ownerUid, "categories", businessId, subcollection);
+  }
+  return collection(db, "businesses", businessId, subcollection);
+}
+
 /**
  * Align Firestore shapes with onboarding (`onboarding.js`): businessName, services[], serviceArea, etc.
  * Handles occasional map/string variants so UI modules never throw on missing arrays.
@@ -741,9 +748,10 @@ export async function fetchJobsSplitForChat(
   maxFetch = 150,
   maxActive = 50,
   maxDelivered = 10,
+  ownerUid = null,
 ) {
   const qy = query(
-    collection(db, "businesses", businessId, "jobs"),
+    scopedCategoryCollection(db, businessId, ownerUid, "jobs"),
     orderBy("createdAt", "desc"),
     limit(maxFetch),
   );
@@ -770,9 +778,10 @@ export async function fetchOrdersSplitForChat(
   maxFetch = 150,
   maxActive = 50,
   maxDelivered = 10,
+  ownerUid = null,
 ) {
   const qy = query(
-    collection(db, "businesses", businessId, "orders"),
+    scopedCategoryCollection(db, businessId, ownerUid, "orders"),
     orderBy("createdAt", "desc"),
     limit(maxFetch),
   );
@@ -792,9 +801,9 @@ export async function fetchOrdersSplitForChat(
 /**
  * Últimos N clientes (más recientes primero) para contexto Chat Maya.
  */
-export async function fetchClientsForChatContext(db, businessId, limitN = 30) {
+export async function fetchClientsForChatContext(db, businessId, limitN = 30, ownerUid = null) {
   const qy = query(
-    collection(db, "businesses", businessId, "clients"),
+    scopedCategoryCollection(db, businessId, ownerUid, "clients"),
     orderBy("createdAt", "desc"),
     limit(limitN),
   );
@@ -809,8 +818,8 @@ export async function fetchClientsForChatContext(db, businessId, limitN = 30) {
 /**
  * Movimientos de finanzas del mes calendario actual (lee hasta `maxRead` docs recientes y filtra).
  */
-export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRead = 250) {
-  const rows = await fetchFinanceTransactionsForBusiness(db, businessId, maxRead);
+export async function fetchFinanceTransactionsCurrentMonth(db, businessId, maxRead = 250, ownerUid = null) {
+  const rows = await fetchFinanceTransactionsForBusiness(db, businessId, maxRead, ownerUid);
   const now = new Date();
   const startM = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const endM = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -1147,7 +1156,13 @@ export async function fetchAccruedFixedExpenseTotalForCurrentMonth(db, businessI
 /**
  * Eventos de calendario desde hoy hasta `daysAhead` días (p. ej. 28 = 4 semanas).
  */
-export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28, maxResults = 120) {
+export async function fetchCalendarEventsForChat(
+  db,
+  businessId,
+  daysAhead = 28,
+  maxResults = 120,
+  ownerUid = null,
+) {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   const limitEnd = new Date(dayStart);
@@ -1157,7 +1172,7 @@ export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28,
   let snap;
   try {
     const qy = query(
-      collection(db, "businesses", businessId, "calendar"),
+      scopedCategoryCollection(db, businessId, ownerUid, "calendar"),
       where("date", ">=", Timestamp.fromDate(dayStart)),
       orderBy("date", "asc"),
       limit(maxResults),
@@ -1166,7 +1181,7 @@ export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28,
   } catch (e) {
     console.warn("[ClientFlow] fetchCalendarEventsForChat: query ascendente falló, usando escaneo acotado", e);
     const qy = query(
-      collection(db, "businesses", businessId, "calendar"),
+      scopedCategoryCollection(db, businessId, ownerUid, "calendar"),
       orderBy("date", "desc"),
       limit(150),
     );
@@ -1192,9 +1207,9 @@ export async function fetchCalendarEventsForChat(db, businessId, daysAhead = 28,
 /**
  * Movimientos en `businesses/{businessId}/finance`, más recientes por `date` primero.
  */
-export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDocs = 200) {
+export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDocs = 200, ownerUid = null) {
   const qy = query(
-    collection(db, "businesses", businessId, "finance"),
+    scopedCategoryCollection(db, businessId, ownerUid, "finance"),
     orderBy("date", "desc"),
     limit(maxDocs),
   );
@@ -1240,8 +1255,8 @@ export function campaignPlatformDisplayName(raw) {
 /**
  * All campaigns under `businesses/{businessId}/campaigns` plus aggregate KPIs for the hub.
  */
-export async function fetchCampaignsListAndStats(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "campaigns"));
+export async function fetchCampaignsListAndStats(db, businessId, ownerUid = null) {
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "campaigns"));
   const list = [];
   snap.forEach((d) => {
     list.push({ id: d.id, ...d.data() });
