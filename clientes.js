@@ -73,8 +73,8 @@ function renderEmpty(root) {
   wrap.className = "cli-empty";
   wrap.innerHTML =
     '<div class="dash-leads-empty-icon" aria-hidden="true"></div>' +
-    '<p class="dash-leads-empty-title">Aún no tienes clientes registrados.</p>' +
-    '<p class="dash-leads-empty-text">Cuando conviertas solicitudes en clientes aparecerán aquí.</p>';
+    '<p class="dash-leads-empty-title">No hay clientes todavía.</p>' +
+    '<p class="dash-leads-empty-text">Cuando agregues clientes aparecerán aquí.</p>';
   root.appendChild(wrap);
 }
 

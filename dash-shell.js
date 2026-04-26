@@ -9,12 +9,10 @@ import {
   setSessionPrimaryBusinessId,
 } from "./dashboard-data.js";
 import { getMenuItemsForCategory } from "./category-config.js";
-import { getCategoryFromUrl, withCategoryInHref } from "./category-context.js";
+import { businessCollectionRef, businessDocRef, getCategoryFromUrl, withCategoryInHref } from "./category-context.js";
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   limit,
   onSnapshot,
   orderBy,
@@ -453,6 +451,7 @@ async function initFloatingCalendar(auth, db) {
   if (!user) return;
   const business = await resolveBusinessForUser(db, user);
   const businessId = business?.id;
+  const scopeUid = business?.scope?.uid || user.uid;
   if (!businessId) return;
 
   let monthCursor = new Date();
@@ -661,7 +660,7 @@ async function initFloatingCalendar(auth, db) {
             e.stopPropagation();
             const id = b.getAttribute("data-cal-pop-done");
             if (!id) return;
-            await updateDoc(doc(db, "businesses", businessId, "calendar", id), {
+            await updateDoc(businessDocRef(db, scopeUid, businessId, "calendar", id), {
               status: "completed",
               completedAt: serverTimestamp(),
             });
@@ -673,7 +672,7 @@ async function initFloatingCalendar(auth, db) {
             e.stopPropagation();
             const id = b.getAttribute("data-cal-pop-del");
             if (!id) return;
-            await deleteDoc(doc(db, "businesses", businessId, "calendar", id));
+            await deleteDoc(businessDocRef(db, scopeUid, businessId, "calendar", id));
             closeDayPop();
           });
         });
@@ -681,7 +680,11 @@ async function initFloatingCalendar(auth, db) {
     });
   }
 
-  const calQuery = query(collection(db, "businesses", businessId, "calendar"), orderBy("date", "asc"), limit(400));
+  const calQuery = query(
+    businessCollectionRef(db, scopeUid, businessId, "calendar"),
+    orderBy("date", "asc"),
+    limit(400),
+  );
   onSnapshot(
     calQuery,
     (snap) => {
@@ -759,7 +762,7 @@ async function initFloatingCalendar(auth, db) {
     const dt = new Date(`${date}T${time || "12:00"}:00`);
     const editId = editIdInput.value?.trim();
     if (editId) {
-      await updateDoc(doc(db, "businesses", businessId, "calendar", editId), {
+      await updateDoc(businessDocRef(db, scopeUid, businessId, "calendar", editId), {
         title,
         date: Timestamp.fromDate(dt),
         time: time || "",
@@ -769,7 +772,7 @@ async function initFloatingCalendar(auth, db) {
         notes,
       });
     } else {
-      await addDoc(collection(db, "businesses", businessId, "calendar"), {
+      await addDoc(businessCollectionRef(db, scopeUid, businessId, "calendar"), {
         title,
         date: Timestamp.fromDate(dt),
         time: time || "",

@@ -598,14 +598,14 @@ function renderRows() {
     const td = document.createElement("td");
     td.colSpan = 9;
     td.className = "dash-table-muted";
-    td.textContent = "No hay pedidos para este filtro.";
+    td.textContent = "No hay pedidos todavía.";
     tr.appendChild(td);
     tbody.appendChild(tr);
     if (mobileRoot) {
       mobileRoot.hidden = false;
       const empty = document.createElement("p");
       empty.className = "dash-table-muted";
-      empty.textContent = "No hay pedidos para este filtro.";
+      empty.textContent = "No hay pedidos todavía.";
       mobileRoot.appendChild(empty);
     }
     return;

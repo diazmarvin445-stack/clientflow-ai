@@ -4,7 +4,6 @@ import {
   doc,
   getDoc,
   serverTimestamp,
-  updateDoc,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
@@ -37,8 +36,20 @@ let pendingReceiptLogoDataUrl = null;
 let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
 
-function businessRef() {
-  return businessProfileRef();
+async function saveProfilePatch(patch) {
+  const ref = businessProfileRef();
+  if (!ref) throw new Error("No se pudo resolver la ruta de perfil.");
+  await setDoc(
+    ref,
+    {
+      ownerUid: auth.currentUser.uid,
+      category: businessId,
+      businessCategory: businessId,
+      updatedAt: serverTimestamp(),
+      ...patch,
+    },
+    { merge: true },
+  );
 }
 
 function businessProfileRef() {
@@ -251,8 +262,6 @@ async function refreshReceiptSettingsForm() {
 async function saveSection(section) {
   if (!businessId || !businessData) return;
 
-  const ref = businessRef();
-  if (!ref) return;
   const base = { updatedAt: serverTimestamp(), ownerUid: auth.currentUser.uid };
 
   try {
@@ -283,7 +292,7 @@ async function saveSection(section) {
         },
         { merge: true },
       );
-      await updateDoc(ref, {
+      await saveProfilePatch({
         ...base,
         businessName: val("cfg-business-name").trim(),
         businessCategory: businessId,
@@ -300,12 +309,12 @@ async function saveSection(section) {
       if (pendingLogoDataUrl) {
         payload.brandLogoDataUrl = pendingLogoDataUrl;
       }
-      await updateDoc(ref, payload);
+      await saveProfilePatch(payload);
       feedback("cfg-feedback-brand", "Cambios guardados", true);
     } else if (section === "marketing") {
       const rawB = val("cfg-mkt-budget").trim();
       const budget = rawB === "" ? null : Number(rawB);
-      await updateDoc(ref, {
+      await saveProfilePatch({
         ...base,
         marketingMonthlyBudget: Number.isFinite(budget) ? budget : null,
         marketingGoal: val("cfg-mkt-goal").trim() || "leads",
@@ -317,7 +326,7 @@ async function saveSection(section) {
       const days = Array.from(document.querySelectorAll('input[name="cfg-day"]:checked')).map(
         (el) => el.value,
       );
-      await updateDoc(ref, {
+      await saveProfilePatch({
         ...base,
         hoursFrom: val("cfg-hours-from").trim(),
         hoursTo: val("cfg-hours-to").trim(),
@@ -391,11 +400,9 @@ async function saveSection(section) {
 async function toggleIntegration(key) {
   if (!businessId || !businessData) return;
   const next = !integrationConnected(businessData, key);
-  const ref = businessRef();
-  if (!ref) return;
   const foot = document.getElementById("cfg-feedback-integrations");
   try {
-    await updateDoc(ref, {
+    await saveProfilePatch({
       [`integrations.${key}`]: { connected: next },
       updatedAt: serverTimestamp(),
       ownerUid: auth.currentUser.uid,

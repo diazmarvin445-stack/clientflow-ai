@@ -208,6 +208,12 @@ async function removeJob(id) {
 function renderRows(rows) {
   if (!els.tbody) return;
   els.tbody.innerHTML = "";
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="8" class="dash-table-muted">No hay trabajos todavía.</td>';
+    els.tbody.appendChild(tr);
+    return;
+  }
   rows.forEach((job) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `

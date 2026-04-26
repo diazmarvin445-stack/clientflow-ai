@@ -21,6 +21,7 @@ import {
   setActiveCategoryId,
   listUserCategories,
   loadCategoryProfile,
+  getCategoryFromUrl,
 } from "./category-context.js";
 
 function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
@@ -468,8 +469,24 @@ export async function resolveBusinessForUser(db, user) {
     const primary = await fetchBusinessForOwner(db, uid);
     if (primary) return primary;
     const em = typeof user.email === "string" ? user.email.trim() : "";
-    if (!em) return null;
-    return tryClaimUnownedBusinessByEmail(db, uid, em);
+    if (em) {
+      const claimed = await tryClaimUnownedBusinessByEmail(db, uid, em);
+      if (claimed) return claimed;
+    }
+    const urlCategory = getCategoryFromUrl();
+    if (urlCategory) {
+      return {
+        id: urlCategory,
+        data: normalizeBusinessDocument({
+          ownerUid: uid,
+          businessCategory: urlCategory,
+          category: urlCategory,
+          businessName: "",
+        }),
+        scope: { uid, categoryId: urlCategory },
+      };
+    }
+    return null;
   })();
 
   inflightResolveByUid.set(uid, promise);
@@ -1222,11 +1239,11 @@ export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDoc
 }
 
 /**
- * Staff / team members in `businesses/{businessId}/teamMembers`, newest `createdAt` first.
+ * Staff / team members in `users/{uid}/business/{categoryId}/teamMembers`, newest `createdAt` first.
  * Operational fields: fullName, roleTitle, staffCategory, phone, email, active, workDays[], hoursFrom, hoursTo.
  */
-export async function fetchTeamMembersForBusiness(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "teamMembers"));
+export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = null) {
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "teamMembers"));
   const rows = [];
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data() });
@@ -1237,7 +1254,7 @@ export async function fetchTeamMembersForBusiness(db, businessId) {
     return tb - ta;
   });
   console.log(
-    `[ClientFlow] fetchTeamMembersForBusiness: businesses/${businessId}/teamMembers → ${rows.length} document(s)`,
+    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/business/${businessId}/teamMembers → ${rows.length} document(s)`,
   );
   return rows;
 }

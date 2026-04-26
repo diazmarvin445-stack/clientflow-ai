@@ -2,9 +2,7 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   addDoc,
-  collection,
   deleteDoc,
-  doc,
   getDoc,
   limit,
   onSnapshot,
@@ -41,17 +39,15 @@ let unsubPendingOrders = null;
 let pendingOrders = [];
 
 function scopedCollection(subcollection) {
-  if (!businessId) return null;
+  if (!businessId || !scopeUid) return null;
   const scopedName = subcollection === "finance" ? "finances" : subcollection;
-  if (scopeUid) return businessCollectionRef(db, scopeUid, businessId, scopedName);
-  return collection(db, "businesses", businessId, subcollection);
+  return businessCollectionRef(db, scopeUid, businessId, scopedName);
 }
 
 function scopedDoc(subcollection, id) {
-  if (!businessId || !id) return null;
+  if (!businessId || !scopeUid || !id) return null;
   const scopedName = subcollection === "finance" ? "finances" : subcollection;
-  if (scopeUid) return businessDocRef(db, scopeUid, businessId, scopedName, String(id));
-  return doc(db, "businesses", businessId, subcollection, String(id));
+  return businessDocRef(db, scopeUid, businessId, scopedName, String(id));
 }
 
 /**
@@ -1003,7 +999,7 @@ async function confirmDelete(id, name) {
     const ref = scopedDoc("teamMembers", id);
     if (!ref) return;
     await deleteDoc(ref);
-    members = await fetchTeamMembersForBusiness(db, businessId);
+    members = await fetchTeamMembersForBusiness(db, businessId, scopeUid);
     renderList(members);
     updateStats(members);
   } catch (e) {
@@ -1062,7 +1058,7 @@ async function submitForm(ev) {
       });
     }
     closeModal();
-    members = await fetchTeamMembersForBusiness(db, businessId);
+    members = await fetchTeamMembersForBusiness(db, businessId, scopeUid);
     renderList(members);
     updateStats(members);
     prefillWorkHourlyRate();
@@ -1562,7 +1558,7 @@ onAuthStateChanged(auth, async (user) => {
     businessId = business.id;
     scopeUid = business?.scope?.uid || user.uid || null;
     renderHeader(business);
-    members = await fetchTeamMembersForBusiness(db, businessId);
+    members = await fetchTeamMembersForBusiness(db, businessId, scopeUid);
     renderList(members);
     updateStats(members);
     updateTimePanelHeader();

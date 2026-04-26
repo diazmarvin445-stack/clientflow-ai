@@ -336,8 +336,8 @@ function renderList() {
     const empty = document.createElement("div");
     empty.className = "fin-empty";
     empty.innerHTML =
-      '<p class="fin-empty-title">No hay movimientos en este período.</p>' +
-      '<p class="fin-empty-text">Usa el botón inferior o registra desde el Chat IA con Maya.</p>';
+      '<p class="fin-empty-title">No hay movimientos todavía.</p>' +
+      '<p class="fin-empty-text">Cuando registres ingresos o gastos aparecerán aquí.</p>';
     root.appendChild(empty);
     return;
   }

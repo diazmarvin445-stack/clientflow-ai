@@ -16,7 +16,7 @@ function normalizeCategory(raw) {
   const c = String(raw || "")
     .trim()
     .toLowerCase();
-  if (c === "construction_roofing") return "construction";
+  if (c === "construction_roofing") return "roofing_construction";
   if (!c) return "ecommerce";
   return c;
 }
@@ -143,8 +143,22 @@ export async function resolveCategoryContextForUser(db, user) {
   if (!user?.uid) return null;
   const uid = user.uid;
   const all = await listUserCategories(db, uid);
-  if (!all.length) return null;
   const urlCat = getCategoryFromUrl();
+  if (!all.length) {
+    if (!urlCat) return null;
+    setActiveCategoryId(uid, urlCat);
+    ensureCategoryInUrl(urlCat);
+    return {
+      uid,
+      categoryId: urlCat,
+      data: {
+        categoryId: urlCat,
+        businessCategory: urlCat,
+        category: urlCat,
+        ownerUid: uid,
+      },
+    };
+  }
   const sessionCat = getActiveCategoryId(uid);
   const chosen = (urlCat && all.find((x) => x.id === urlCat)) || (sessionCat ? all.find((x) => x.id === sessionCat) : null) || all[0];
   setActiveCategoryId(uid, chosen.id);
