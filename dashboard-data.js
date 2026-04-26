@@ -23,14 +23,12 @@ import {
   loadCategoryProfile,
   getCategoryFromUrl,
 } from "./category-context.js";
-import { getUrlContext } from "./appContext.js";
 
 function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
   if (!ownerUid || typeof ownerUid !== "string") {
     throw new Error(`Ruta bloqueada: falta uid para ${subcollection}.`);
   }
-  const workspaceId = getUrlContext().workspaceId || ownerUid;
-  return collection(db, "users", ownerUid, "workspaces", workspaceId, "categories", businessId, subcollection);
+  return collection(db, "users", ownerUid, "yourcolor", subcollection);
 }
 
 /**
@@ -700,8 +698,7 @@ export async function fetchClientsForBusiness(db, businessId, ownerUid = null) {
   if (!ownerUid) {
     throw new Error("Ruta bloqueada: falta uid para leer clients.");
   }
-  const workspaceId = getUrlContext().workspaceId || ownerUid;
-  const path = collection(db, "users", ownerUid, "workspaces", workspaceId, "categories", businessId, "clients");
+  const path = collection(db, "users", ownerUid, "yourcolor", "clients");
   const snap = await getDocs(path);
   const rows = [];
   snap.forEach((docSnap) => {
@@ -1243,7 +1240,7 @@ export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDoc
 }
 
 /**
- * Staff / team members in `users/{uid}/business/{categoryId}/teamMembers`, newest `createdAt` first.
+ * Staff / team members in `users/{uid}/yourcolor/teamMembers`, newest `createdAt` first.
  * Operational fields: fullName, roleTitle, staffCategory, phone, email, active, workDays[], hoursFrom, hoursTo.
  */
 export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = null) {
@@ -1258,7 +1255,7 @@ export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = nul
     return tb - ta;
   });
   console.log(
-    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/business/${businessId}/teamMembers → ${rows.length} document(s)`,
+    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/yourcolor/teamMembers → ${rows.length} document(s)`,
   );
   return rows;
 }

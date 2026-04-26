@@ -1706,7 +1706,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       } else if (!prevNormalized && hasValidPhoneDigits(prevPhone)) {
         patch.normalizedPhone = normalizePhoneForMatch(prevPhone);
       }
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${existing.ref.id}`);
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${existing.ref.id}`);
       await updateDoc(existing.ref, patch);
       return "save_client";
     }
@@ -1721,7 +1721,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${createdRef.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${createdRef.id}`);
     return "save_client";
   }
 
@@ -1761,7 +1761,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       patch.normalizedPhone = normalizePhoneForMatch(prev.phone);
     }
     if (emailRaw) patch.email = emailRaw;
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
     await updateDoc(resolved.ref, patch);
     return "update_client";
   }
@@ -1783,7 +1783,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/jobs`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/jobs`);
     return "create_order";
   }
 
@@ -1814,7 +1814,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/calendar`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/calendar`);
     return "schedule_delivery";
   }
 
@@ -1828,13 +1828,13 @@ async function executeMayaActionFromChat(businessId, payload) {
       typeof data.clientId === "string" ? data.clientId.trim() : String(data.clientId ?? "").trim();
     if (clientId) {
       await deleteDoc(scopedDoc("clients", clientId));
-      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${clientId}`);
+      console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${clientId}`);
       return "delete_client";
     }
     const resolved = await resolveClientDocRefByActionData(businessId, data);
     if (!resolved) throw new Error("No encontré el cliente para eliminar.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/clients/${resolved.ref.id}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/clients/${resolved.ref.id}`);
     return "delete_client";
   }
 
@@ -1845,7 +1845,7 @@ async function executeMayaActionFromChat(businessId, payload) {
     const resolved = await resolveOrderDocRef(businessId, orderId);
     if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "delete_order";
   }
 
@@ -1862,7 +1862,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       ...changes,
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "update_order";
   }
 
@@ -1888,7 +1888,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       source: "chat-maya",
       createdAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/calendar`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/calendar`);
     return "create_calendar_event";
   }
 
@@ -1979,7 +1979,7 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
 
   try {
     await addDoc(scopedCollection("jobs"), payload);
-    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/workspaces/yourcolor/categories/${categoryId}/jobs`);
+    console.log("MAYA WRITE:", uid, categoryId, `users/${uid}/yourcolor/jobs`);
     showToast("Orden creada como Pendiente. Revisa el calendario para la fecha de entrega.");
     if (activeBusiness) {
       await loadFirebaseContext(activeBusiness);
@@ -2195,14 +2195,14 @@ async function clearChatHistory() {
     clearChatSessionStorage(userId, businessId);
     try {
       await deleteDoc(scopedDoc("internalChatHistory", userId));
-      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/business/${activeScopeCategory()}/internalChatHistory/${userId}`);
+      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/yourcolor/internalChatHistory/${userId}`);
     } catch (e) {
       console.warn("[YourColor Chat] clear internalChatHistory", e);
     }
     try {
       const internalChatSnap = await getDocs(scopedCollection("internalChat"));
       await Promise.all(internalChatSnap.docs.map((x) => deleteDoc(x.ref)));
-      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/business/${activeScopeCategory()}/internalChat/*`);
+      console.log("MAYA WRITE:", activeScopeUid(), activeScopeCategory(), `users/${activeScopeUid()}/yourcolor/internalChat/*`);
     } catch (e) {
       console.warn("[YourColor Chat] clear internalChat", e);
     }

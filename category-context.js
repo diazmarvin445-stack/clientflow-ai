@@ -15,12 +15,7 @@ import { collectionRef as scopedCollectionRef, docRef as scopedDocRef, profileDo
 const ACTIVE_CATEGORY_SESSION_KEY = "clientflow_active_category_v1";
 
 function normalizeCategory(raw) {
-  const c = String(raw || "")
-    .trim()
-    .toLowerCase();
-  if (c === "construction_roofing") return "roofing_construction";
-  if (!c) return "ecommerce";
-  return c;
+  return "custom_apparel";
 }
 
 export function normalizeCategoryId(raw) {
@@ -28,44 +23,25 @@ export function normalizeCategoryId(raw) {
 }
 
 export function getCategoryFromUrl() {
-  const categoryId = getUrlContext().categoryId;
-  return categoryId || null;
+  return "custom_apparel";
 }
 
 export function getWorkspaceFromUrl() {
-  const workspaceId = getUrlContext().workspaceId;
-  return workspaceId || null;
+  return "yourcolor";
 }
 
 export function ensureCategoryInUrl(categoryId) {
-  const c = normalizeCategory(categoryId);
-  if (!c) return;
-  try {
-    const u = new URL(window.location.href);
-    if (u.searchParams.get("category") === c) return;
-    u.searchParams.set("category", c);
-    window.history.replaceState({}, "", u.toString());
-  } catch {
-    /* ignore */
-  }
+  void categoryId;
 }
 
 export function withCategoryInHref(href, categoryId) {
-  const c = normalizeCategory(categoryId);
-  if (!c || !href || /^https?:\/\//i.test(href) || href.startsWith("mailto:") || href.startsWith("tel:")) {
-    return href;
-  }
-  const [baseAndQuery, hashPart] = String(href).split("#");
-  const [basePath, queryPart] = baseAndQuery.split("?");
-  const params = new URLSearchParams(queryPart || "");
-  params.set("category", c);
-  const q = params.toString();
-  return `${basePath}${q ? `?${q}` : ""}${hashPart ? `#${hashPart}` : ""}`;
+  void categoryId;
+  return href;
 }
 
 export function setActiveCategoryId(uid, categoryId) {
   const u = String(uid || "").trim();
-  const c = normalizeCategory(categoryId);
+  const c = "custom_apparel";
   if (!u || !c) return;
   try {
     sessionStorage.setItem(ACTIVE_CATEGORY_SESSION_KEY, JSON.stringify({ uid: u, categoryId: c }));
@@ -77,15 +53,7 @@ export function setActiveCategoryId(uid, categoryId) {
 export function getActiveCategoryId(uid) {
   const u = String(uid || "").trim();
   if (!u) return null;
-  try {
-    const raw = sessionStorage.getItem(ACTIVE_CATEGORY_SESSION_KEY);
-    if (!raw) return null;
-    const row = JSON.parse(raw);
-    if (!row || row.uid !== u) return null;
-    return normalizeCategory(row.categoryId);
-  } catch {
-    return null;
-  }
+  return "custom_apparel";
 }
 
 export function clearActiveCategory() {
@@ -100,16 +68,17 @@ function buildCtx(uid, categoryId, workspaceId = null) {
   return assertAppContext(
     {
       uid,
-      workspaceId: workspaceId || getWorkspaceFromUrl() || uid,
-      categoryId: normalizeCategory(categoryId),
+      workspaceId: "yourcolor",
+      categoryId: "custom_apparel",
     },
     "category-context",
   );
 }
 
 export function categoryDocRef(db, uid, categoryId, workspaceId = null) {
-  const ctx = buildCtx(uid, categoryId, workspaceId);
-  return doc(db, "users", ctx.uid, "workspaces", ctx.workspaceId, "categories", ctx.categoryId);
+  void categoryId;
+  void workspaceId;
+  return doc(db, "users", uid, "yourcolor", "category");
 }
 
 export function categoryCollectionRef(db, uid, categoryId, subcollection, workspaceId = null) {
@@ -129,20 +98,13 @@ export function businessDocRef(db, uid, categoryId, subcollection, id, workspace
 
 export async function listUserCategories(db, uid) {
   if (!uid) return [];
-  const workspaceId = getWorkspaceFromUrl() || uid;
-  const col = collection(db, "users", uid, "workspaces", workspaceId, "categories");
-  let snap;
-  try {
-    snap = await getDocsFromServer(query(col, limit(50)));
-  } catch {
-    snap = await getDocs(query(col, limit(50)));
-  }
-  return snap.docs.map((d) => ({ id: d.id, data: d.data() || {} }));
+  void db;
+  return [{ id: "custom_apparel", data: { category: "custom_apparel", businessCategory: "custom_apparel" } }];
 }
 
 export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
-  const cat = normalizeCategory(categoryId);
-  const ref = categoryDocRef(db, uid, cat, getWorkspaceFromUrl() || uid);
+  const cat = "custom_apparel";
+  const ref = doc(db, "users", uid, "yourcolor", "settings");
   const row = {
     categoryId: cat,
     displayName: typeof payload.businessName === "string" ? payload.businessName : cat,
@@ -158,31 +120,11 @@ export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
 export async function resolveCategoryContextForUser(db, user) {
   if (!user?.uid) return null;
   const uid = user.uid;
-  const all = await listUserCategories(db, uid);
-  const urlCat = getCategoryFromUrl();
-  if (!all.length) {
-    if (!urlCat) return null;
-    setActiveCategoryId(uid, urlCat);
-    ensureCategoryInUrl(urlCat);
-    return {
-      uid,
-      categoryId: urlCat,
-      data: {
-        categoryId: urlCat,
-        businessCategory: urlCat,
-        category: urlCat,
-        ownerUid: uid,
-      },
-    };
-  }
-  const sessionCat = getActiveCategoryId(uid);
-  const chosen = (urlCat && all.find((x) => x.id === urlCat)) || (sessionCat ? all.find((x) => x.id === sessionCat) : null) || all[0];
-  setActiveCategoryId(uid, chosen.id);
-  ensureCategoryInUrl(chosen.id);
+  setActiveCategoryId(uid, "custom_apparel");
   return {
     uid,
-    categoryId: chosen.id,
-    data: chosen.data || {},
+    categoryId: "custom_apparel",
+    data: { category: "custom_apparel", businessCategory: "custom_apparel", ownerUid: uid },
   };
 }
 

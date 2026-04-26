@@ -57,18 +57,10 @@ export function ensureContextInUrl({ workspaceId, categoryId }) {
 export function resolveAppContext(user) {
   const uid = String(user?.uid || "").trim();
   if (!uid) return null;
-
-  const urlCtx = getUrlContext();
-  const sessionWorkspaceId = getSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid);
-  const sessionCategoryId = getSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid);
-
-  const workspaceId = urlCtx.workspaceId || sessionWorkspaceId || uid;
-  const categoryId = urlCtx.categoryId || sessionCategoryId;
-
-  if (workspaceId) setSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid, workspaceId);
-  if (categoryId) setSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid, categoryId);
-  ensureContextInUrl({ workspaceId, categoryId });
-
+  const workspaceId = "yourcolor";
+  const categoryId = "custom_apparel";
+  setSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid, workspaceId);
+  setSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid, categoryId);
   return { uid, workspaceId, categoryId };
 }
 
@@ -106,7 +98,6 @@ export function ensureYourColorContext(user) {
   const ctx = { uid, workspaceId: "yourcolor", categoryId: "custom_apparel" };
   setSessionScoped(ACTIVE_WORKSPACE_SESSION_KEY, uid, ctx.workspaceId);
   setSessionScoped(ACTIVE_CATEGORY_SESSION_KEY, uid, ctx.categoryId);
-  ensureContextInUrl(ctx);
   return ctx;
 }
 

@@ -3,7 +3,7 @@ import { assertAppContext } from "./appContext.js";
 
 function baseSegments(ctx) {
   const safe = assertAppContext(ctx, "dataPaths");
-  return ["users", safe.uid, "workspaces", safe.workspaceId, "categories", safe.categoryId];
+  return ["users", safe.uid, "yourcolor"];
 }
 
 export function categoryRootDocRef(db, ctx) {
@@ -12,7 +12,7 @@ export function categoryRootDocRef(db, ctx) {
 }
 
 export function profileDocRef(db, ctx) {
-  return doc(db, ...baseSegments(ctx), "profile", "main");
+  return doc(db, ...baseSegments(ctx), "profile");
 }
 
 export function settingsDocRef(db, ctx, id = "main") {
