@@ -16,6 +16,7 @@ import { resolveBusinessForUser, formatBusinessMeta, initialsFromName } from "./
 import { initDashShell } from "./dash-shell.js";
 
 let businessId = "";
+let userId = "";
 let allJobs = [];
 let clients = [];
 
@@ -111,9 +112,9 @@ function closeModal() {
   els.modal?.close();
 }
 
-async function addFinanceExpenseForMaterials(bid, jobId, amount, jobType) {
+async function addFinanceExpenseForMaterials(uid, bid, jobId, amount, jobType) {
   if (amount <= 0) return;
-  await addDoc(collection(db, "businesses", bid, "finance"), {
+  await addDoc(collection(db, "users", uid, "categories", bid, "finance"), {
     type: "expense",
     amount,
     category: "materiales",
@@ -126,9 +127,9 @@ async function addFinanceExpenseForMaterials(bid, jobId, amount, jobType) {
   });
 }
 
-async function addFinanceIncomeForCompletedJob(bid, jobId, amount, jobType) {
+async function addFinanceIncomeForCompletedJob(uid, bid, jobId, amount, jobType) {
   if (amount <= 0) return;
-  await addDoc(collection(db, "businesses", bid, "finance"), {
+  await addDoc(collection(db, "users", uid, "categories", bid, "finance"), {
     type: "income",
     amount,
     category: "ventas",
@@ -177,23 +178,23 @@ async function saveJob(ev) {
   };
 
   if (!id) {
-    const ref = await addDoc(collection(db, "businesses", businessId, "jobs"), {
+    const ref = await addDoc(collection(db, "users", userId, "categories", businessId, "jobs"), {
       ...payload,
       createdAt: serverTimestamp(),
     });
-    if (totalCost > 0) await addFinanceExpenseForMaterials(businessId, ref.id, totalCost, payload.jobType);
+    if (totalCost > 0) await addFinanceExpenseForMaterials(userId, businessId, ref.id, totalCost, payload.jobType);
     if (status === "completed" || status === "paid") {
-      await addFinanceIncomeForCompletedJob(businessId, ref.id, totalCharged, payload.jobType);
+      await addFinanceIncomeForCompletedJob(userId, businessId, ref.id, totalCharged, payload.jobType);
     }
   } else {
     const prev = allJobs.find((j) => j.id === id) || {};
-    await updateDoc(doc(db, "businesses", businessId, "jobs", id), payload);
+    await updateDoc(doc(db, "users", userId, "categories", businessId, "jobs", id), payload);
     const deltaCost = totalCost - (Number(prev.totalCost) || 0);
-    if (deltaCost > 0) await addFinanceExpenseForMaterials(businessId, id, deltaCost, payload.jobType);
+    if (deltaCost > 0) await addFinanceExpenseForMaterials(userId, businessId, id, deltaCost, payload.jobType);
     const wasCompleted = prev.status === "completed" || prev.status === "paid";
     const nowCompleted = status === "completed" || status === "paid";
     if (!wasCompleted && nowCompleted) {
-      await addFinanceIncomeForCompletedJob(businessId, id, totalCharged, payload.jobType);
+      await addFinanceIncomeForCompletedJob(userId, businessId, id, totalCharged, payload.jobType);
     }
   }
   closeModal();
@@ -202,7 +203,7 @@ async function saveJob(ev) {
 async function removeJob(id) {
   if (!businessId || !id) return;
   if (!window.confirm("¿Eliminar este trabajo?")) return;
-  await deleteDoc(doc(db, "businesses", businessId, "jobs", id));
+  await deleteDoc(doc(db, "users", userId, "categories", businessId, "jobs", id));
 }
 
 function renderRows(rows) {
@@ -246,7 +247,7 @@ function fillClientSelect() {
 }
 
 async function loadClients() {
-  const snap = await getDocs(collection(db, "businesses", businessId, "clients"));
+  const snap = await getDocs(collection(db, "users", userId, "categories", businessId, "clients"));
   clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   fillClientSelect();
 }
@@ -255,12 +256,16 @@ async function loadPage(user) {
   const business = await resolveBusinessForUser(db, user);
   if (!business) return;
   businessId = business.id;
+  userId = business?.scope?.uid || user.uid;
   renderHeader(business);
   await loadClients();
-  onSnapshot(query(collection(db, "businesses", businessId, "jobs"), orderBy("createdAt", "desc")), (snap) => {
+  onSnapshot(
+    query(collection(db, "users", userId, "categories", businessId, "jobs"), orderBy("createdAt", "desc")),
+    (snap) => {
     allJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     applyFilters();
-  });
+    },
+  );
 }
 
 function boot() {

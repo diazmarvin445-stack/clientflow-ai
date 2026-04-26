@@ -15,6 +15,13 @@ import {
   updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import {
+  clearActiveCategory,
+  resolveCategoryContextForUser,
+  setActiveCategoryId,
+  listUserCategories,
+  loadCategoryProfile,
+} from "./category-context.js";
 
 /**
  * Align Firestore shapes with onboarding (`onboarding.js`): businessName, services[], serviceArea, etc.
@@ -197,6 +204,7 @@ export function clearStoredPrimaryBusiness() {
   } catch (_) {
     /* ignore */
   }
+  clearActiveCategory();
 }
 
 /**
@@ -210,6 +218,7 @@ export function setSessionPrimaryBusinessId(ownerUid, businessId) {
   const uid = typeof ownerUid === "string" ? ownerUid.trim() : "";
   const bid = typeof businessId === "string" ? businessId.trim() : "";
   if (!uid || !bid) return;
+  setActiveCategoryId(uid, bid);
   try {
     sessionStorage.setItem(PRIMARY_BUSINESS_SESSION_KEY, JSON.stringify({ uid, businessId: bid }));
   } catch (_) {
@@ -225,6 +234,19 @@ export function setSessionPrimaryBusinessId(ownerUid, businessId) {
  */
 export async function fetchBusinessesForOwnerList(db, ownerUid) {
   if (!ownerUid || typeof ownerUid !== "string") return [];
+  const categoryRows = await listUserCategories(db, ownerUid).catch(() => []);
+  if (categoryRows.length) {
+    return categoryRows.map((r) => ({
+      id: r.id,
+      data: normalizeBusinessDocument({
+        ...r.data,
+        businessCategory: r.id,
+        category: r.id,
+        ownerUid,
+        businessName: r.data?.businessName || r.data?.displayName || r.id,
+      }),
+    }));
+  }
   const q = query(collection(db, "businesses"), where("ownerUid", "==", ownerUid));
   let snap;
   try {
@@ -417,6 +439,21 @@ async function tryClaimUnownedBusinessByEmail(db, uid, authEmail) {
  */
 export async function resolveBusinessForUser(db, user) {
   if (!user || typeof user.uid !== "string") return null;
+  const categoryCtx = await resolveCategoryContextForUser(db, user).catch(() => null);
+  if (categoryCtx) {
+    const profile = await loadCategoryProfile(db, categoryCtx.uid, categoryCtx.categoryId).catch(() => ({}));
+    return {
+      id: categoryCtx.categoryId,
+      data: normalizeBusinessDocument({
+        ...categoryCtx.data,
+        ...profile,
+        ownerUid: categoryCtx.uid,
+        businessCategory: categoryCtx.categoryId,
+        category: categoryCtx.categoryId,
+      }),
+      scope: { uid: categoryCtx.uid, categoryId: categoryCtx.categoryId },
+    };
+  }
   const uid = user.uid;
   if (inflightResolveByUid.has(uid)) return inflightResolveByUid.get(uid);
 
@@ -633,8 +670,11 @@ export async function fetchJobsForBusiness(db, businessId) {
   return rows;
 }
 
-export async function fetchClientsForBusiness(db, businessId) {
-  const snap = await getDocs(collection(db, "businesses", businessId, "clients"));
+export async function fetchClientsForBusiness(db, businessId, ownerUid = null) {
+  const path = ownerUid
+    ? collection(db, "users", ownerUid, "categories", businessId, "clients")
+    : collection(db, "businesses", businessId, "clients");
+  const snap = await getDocs(path);
   const rows = [];
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data() });

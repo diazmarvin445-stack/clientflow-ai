@@ -1,8 +1,8 @@
 import { db, auth } from "./firebase.js";
 import { setSessionPrimaryBusinessId } from "./dashboard-data.js";
+import { categoryDocRef, ensureUserCategory, setActiveCategoryId } from "./category-context.js";
 import {
   collection,
-  addDoc,
   doc,
   setDoc,
   getDocs,
@@ -80,7 +80,7 @@ function wireNavigationActions() {
 
 async function checkExistingBusinessConfigured(user) {
   if (!user || user.isAnonymous) return false;
-  const q = query(collection(db, "businesses"), where("ownerUid", "==", user.uid), limit(1));
+  const q = query(collection(db, "users", user.uid, "categories"), limit(1));
   const snap = await getDocs(q);
   if (snap.empty) return false;
   const businessDoc = snap.docs[0];
@@ -359,7 +359,6 @@ if (form && successEl) {
         category: normalizedCategory,
         ownerUid: uid,
         source: "onboarding",
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
@@ -370,14 +369,17 @@ if (form && successEl) {
         createdAt: "[serverTimestamp]",
         updatedAt: "[serverTimestamp]",
       };
-      console.log("[ClientFlow onboarding] target write: collection=businesses (auto id)");
+      console.log("[ClientFlow onboarding] target write: users/{uid}/categories/{category}");
       console.log("[ClientFlow onboarding] payload (serializable):", payloadForLog);
 
-      const businessRef = await addDoc(collection(db, "businesses"), docData);
-      const path = `businesses/${businessRef.id}`;
-      console.log("[ClientFlow onboarding] addDoc success:", { path, id: businessRef.id });
+      const categoryRef = await ensureUserCategory(db, uid, normalizedCategory, {
+        ...docData,
+        createdAt: serverTimestamp(),
+      });
+      const path = `users/${uid}/categories/${normalizedCategory}`;
+      console.log("[ClientFlow onboarding] setDoc success:", { path, id: categoryRef.id });
 
-      await setDoc(doc(db, "businesses", businessRef.id, "settings", "businessProfile"), {
+      await setDoc(doc(db, "users", uid, "categories", normalizedCategory, "settings", "businessProfile"), {
         category: normalizedCategory,
         businessName: raw.businessName || "",
         services: raw.mayaServices || "",
@@ -390,7 +392,7 @@ if (form && successEl) {
         updatedAt: serverTimestamp(),
       });
 
-      const verifyRef = doc(db, "businesses", businessRef.id);
+      const verifyRef = categoryDocRef(db, uid, normalizedCategory);
       const verified = await getDocFromServer(verifyRef);
       if (!verified.exists) {
         const msg = "El documento se creó pero no se pudo leer desde el servidor. Revisa reglas de Firestore y vuelve a intentar.";
@@ -418,16 +420,17 @@ if (form && successEl) {
       }
 
       console.log("[ClientFlow onboarding] Negocio creado y verificado.", {
-        businessId: businessRef.id,
+        businessId: normalizedCategory,
         ownerUid: uid,
         path,
       });
       console.log(
         "[ClientFlow onboarding] Enlace público de solicitudes:",
-        `solicitar.html?businessId=${businessRef.id}`,
+        `dashboard.html`,
       );
 
-      setSessionPrimaryBusinessId(uid, businessRef.id);
+      setSessionPrimaryBusinessId(uid, normalizedCategory);
+      setActiveCategoryId(uid, normalizedCategory);
 
       try {
         localStorage.setItem("clientflow_onboarding_v1", JSON.stringify(raw));

@@ -157,5 +157,18 @@ service cloud.firestore {
         allow read, write: if isBusinessOwner(businessId);
       }
     }
+
+    /* Nuevo modelo multi-category por usuario: users/{uid}/categories/{categoryId}/... */
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /categories/{categoryId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        match /{document=**} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+    }
   }
 }

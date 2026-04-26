@@ -335,6 +335,8 @@ async function loadDashboardForUser(user) {
   }
 
   const bid = business.id;
+  const scopeUid = business?.scope?.uid || user.uid;
+  const scopeCategory = business?.scope?.categoryId || business.id;
   const cat = String(business?.data?.businessCategory || business?.data?.category || "")
     .trim()
     .toLowerCase();
@@ -362,7 +364,11 @@ async function loadDashboardForUser(user) {
   const unsubs = [];
   unsubs.push(
     onSnapshot(
-      query(collection(db, "businesses", bid, jobsCollection), orderBy("createdAt", "desc"), limit(400)),
+      query(
+        collection(db, "users", scopeUid, "categories", scopeCategory, jobsCollection),
+        orderBy("createdAt", "desc"),
+        limit(400),
+      ),
       (snap) => {
         state.orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();
@@ -373,7 +379,7 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      collection(db, "businesses", bid, "clients"),
+      collection(db, "users", scopeUid, "categories", scopeCategory, "clients"),
       (snap) => {
         state.clients = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();
@@ -384,7 +390,11 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      query(collection(db, "businesses", bid, "finance"), orderBy("date", "desc"), limit(500)),
+      query(
+        collection(db, "users", scopeUid, "categories", scopeCategory, "finance"),
+        orderBy("date", "desc"),
+        limit(500),
+      ),
       (snap) => {
         state.finance = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();
@@ -395,7 +405,11 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      query(collection(db, "businesses", bid, "calendar"), orderBy("date", "desc"), limit(200)),
+      query(
+        collection(db, "users", scopeUid, "categories", scopeCategory, "calendar"),
+        orderBy("date", "desc"),
+        limit(200),
+      ),
       (snap) => {
         state.calendar = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();
@@ -406,7 +420,7 @@ async function loadDashboardForUser(user) {
 
   unsubs.push(
     onSnapshot(
-      collection(db, "businesses", bid, "campaigns"),
+      collection(db, "users", scopeUid, "categories", scopeCategory, "campaigns"),
       (snap) => {
         state.campaigns = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         rerender();

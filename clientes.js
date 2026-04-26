@@ -19,6 +19,7 @@ import { initDashShell } from "./dash-shell.js";
 
 let allClients = [];
 let cachedBusinessId = null;
+let cachedUserId = null;
 let jobsByClientId = new Map();
 
 function renderHeader(business) {
@@ -173,7 +174,7 @@ function renderClientList(root, businessId, list) {
       if (!ok) return;
       btn.disabled = true;
       try {
-        await deleteDoc(doc(db, "businesses", cachedBusinessId, "clients", id));
+        await deleteDoc(doc(db, "users", cachedUserId, "categories", cachedBusinessId, "clients", id));
         allClients = allClients.filter((x) => x.id !== id);
         setMetaLine(allClients.length);
         if (cachedBusinessId) applySearch(cachedBusinessId);
@@ -203,17 +204,17 @@ async function saveClient(ev) {
     updatedAt: serverTimestamp(),
   };
   if (!id) {
-    await addDoc(collection(db, "businesses", cachedBusinessId, "clients"), {
+    await addDoc(collection(db, "users", cachedUserId, "categories", cachedBusinessId, "clients"), {
       ...payload,
       source: "manual",
       status: "active",
       createdAt: serverTimestamp(),
     });
   } else {
-    await updateDoc(doc(db, "businesses", cachedBusinessId, "clients", id), payload);
+    await updateDoc(doc(db, "users", cachedUserId, "categories", cachedBusinessId, "clients", id), payload);
   }
   document.getElementById("cli-modal")?.close();
-  const fresh = await fetchClientsForBusiness(db, cachedBusinessId);
+  const fresh = await fetchClientsForBusiness(db, cachedBusinessId, cachedUserId);
   allClients = fresh;
   setMetaLine(allClients.length);
   applySearch(cachedBusinessId);
@@ -247,6 +248,7 @@ async function loadClientesForUser(user) {
 
   if (!business) {
     cachedBusinessId = null;
+    cachedUserId = null;
     allClients = [];
     setMetaLine(0);
     renderEmpty(root);
@@ -254,8 +256,9 @@ async function loadClientesForUser(user) {
   }
 
   cachedBusinessId = business.id;
+  cachedUserId = business?.scope?.uid || user.uid;
   try {
-    const jobsSnap = await getDocs(collection(db, "businesses", business.id, "jobs"));
+    const jobsSnap = await getDocs(collection(db, "users", cachedUserId, "categories", business.id, "jobs"));
     const map = new Map();
     jobsSnap.forEach((d) => {
       const row = d.data() || {};
@@ -270,7 +273,7 @@ async function loadClientesForUser(user) {
 
   let clients;
   try {
-    clients = await fetchClientsForBusiness(db, business.id);
+    clients = await fetchClientsForBusiness(db, business.id, cachedUserId);
   } catch (err) {
     console.error(err);
     cachedBusinessId = null;
