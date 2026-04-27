@@ -19,6 +19,7 @@ import { resolveMayaActionEntities } from "./maya-entity-resolver.js";
 import { executeMayaAction } from "./maya-action-executor.js";
 import { buildMayaActionSuccessMessage } from "./maya-response-builder.js";
 import { buildMayaContextSnapshot } from "./maya-context-snapshot.js";
+import { businessCollection, businessDoc, scopedBusinessIdFromContext } from "./firestore-paths.js";
 
 /** Chat interno (Marvin ↔ Maya) y generateCampaign: mismo modelo Haiku. */
 const MODEL_INTERNAL_CHAT = "claude-haiku-4-5-20251001";
@@ -217,7 +218,7 @@ async function recordWhatsAppCustomerInbound(db, businessId, from, text) {
   } catch (e) {
     console.warn("[whatsappWebhook] syncClientRecord inbound", e);
   }
-  const convRef = db.collection("businesses").doc(businessId).collection("conversations").doc(docId);
+  const convRef = businessCollection(db, businessId, "conversations").doc(docId);
   const snap = await convRef.get();
   const now = FieldValue.serverTimestamp();
   /** @type {Record<string, unknown>} */
@@ -251,7 +252,7 @@ async function recordWhatsAppCustomerInbound(db, businessId, from, text) {
  */
 async function recordWhatsAppMayaOutbound(db, businessId, from, text, opts) {
   const docId = conversationDocIdFromWhatsAppFrom(from);
-  const convRef = db.collection("businesses").doc(businessId).collection("conversations").doc(docId);
+  const convRef = businessCollection(db, businessId, "conversations").doc(docId);
   const now = FieldValue.serverTimestamp();
   const snap = await convRef.get();
   /** @type {Record<string, unknown>} */
@@ -357,7 +358,7 @@ function computeClientLifecycleStatus(lastContactAt, lastOrderAt, now = new Date
 }
 
 async function syncClientRecord(db, businessId, payload) {
-  const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
+  const clientsCol = businessCollection(db, businessId, "clients");
   const name = asText(payload.clientName, "Cliente");
   const phone = normalizePhoneDigits(payload.clientPhone);
   const normalizedPhone = phone;
@@ -489,7 +490,7 @@ async function processNewOrder(db, businessId, rawOrder) {
 
   const expensesInit = Math.max(0, Number(rawOrder.expenses) || 0);
 
-  const orderRef = await db.collection("businesses").doc(businessId).collection("orders").add({
+  const orderRef = await businessCollection(db, businessId, "orders").add({
     clientId: client.id,
     clientName,
     clientPhone,
@@ -514,7 +515,7 @@ async function processNewOrder(db, businessId, rawOrder) {
   });
 
   let linkedCalendarId = "";
-  const calRef = await db.collection("businesses").doc(businessId).collection("calendar").add({
+  const calRef = await businessCollection(db, businessId, "calendar").add({
     title: `Entrega: ${product} - ${clientName}`,
     date: Timestamp.fromDate(deliveryDate),
     type: "delivery",
@@ -967,7 +968,7 @@ async function mayaFetchCalendarForChatServer(db, businessId, daysAhead, maxResu
   const limitEnd = new Date(dayStart);
   limitEnd.setDate(limitEnd.getDate() + daysAhead);
   limitEnd.setHours(23, 59, 59, 999);
-  const col = db.collection("businesses").doc(businessId).collection("calendar");
+  const col = businessCollection(db, businessId, "calendar");
   let snap;
   try {
     snap = await col
@@ -998,23 +999,23 @@ async function mayaFetchCalendarForChatServer(db, businessId, daysAhead, maxResu
  */
 async function loadFreshFirebaseContextForMaya(db, incomingRaw) {
   const incoming = incomingRaw && typeof incomingRaw === "object" ? cloneJsonSafe(incomingRaw) : {};
-  const businessId = typeof incoming.businessId === "string" ? incoming.businessId.trim() : "";
+  const businessId = scopedBusinessIdFromContext(incoming);
   if (!businessId) return incoming;
 
-  const bizSnap = await db.collection("businesses").doc(businessId).get();
+  const bizSnap = await businessDoc(db, businessId).get();
   const bizData = bizSnap.exists ? bizSnap.data() || {} : {};
   const yourColorFin = isYourColorFinanceBusinessFromData(bizData);
   const fixedSnapPromise = yourColorFin
-    ? db.collection("businesses").doc(businessId).collection("fixedExpenses").get()
+    ? businessCollection(db, businessId, "fixedExpenses").get()
     : Promise.resolve(null);
 
   const [jobsSnap, ordersSnap, clientsSnap, financeSnap, calendarRows, campSnap, fixedSnapMaybe] = await Promise.all([
-    db.collection("businesses").doc(businessId).collection("jobs").orderBy("createdAt", "desc").limit(150).get(),
-    db.collection("businesses").doc(businessId).collection("orders").orderBy("createdAt", "desc").limit(150).get(),
-    db.collection("businesses").doc(businessId).collection("clients").orderBy("createdAt", "desc").limit(35).get(),
-    db.collection("businesses").doc(businessId).collection("finance").orderBy("date", "desc").limit(300).get(),
+    businessCollection(db, businessId, "jobs").orderBy("createdAt", "desc").limit(150).get(),
+    businessCollection(db, businessId, "orders").orderBy("createdAt", "desc").limit(150).get(),
+    businessCollection(db, businessId, "clients").orderBy("createdAt", "desc").limit(35).get(),
+    businessCollection(db, businessId, "finance").orderBy("date", "desc").limit(300).get(),
     mayaFetchCalendarForChatServer(db, businessId, 28, 120),
-    db.collection("businesses").doc(businessId).collection("campaigns").limit(40).get(),
+    businessCollection(db, businessId, "campaigns").limit(40).get(),
     fixedSnapPromise,
   ]);
 
@@ -1483,22 +1484,16 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
       ? order.linkedCalendarId.trim()
       : "";
   if (linkedCalendarId) {
-    await db.collection("businesses").doc(businessId).collection("calendar").doc(linkedCalendarId).delete();
+    await businessCollection(db, businessId, "calendar").doc(linkedCalendarId).delete();
   }
 
   if (typeof order.linkedFinanceId === "string" && order.linkedFinanceId.trim()) {
-    await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("finance")
+    await businessCollection(db, businessId, "finance")
       .doc(order.linkedFinanceId.trim())
       .delete();
   }
 
-  const financeSnap = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("finance")
+  const financeSnap = await businessCollection(db, businessId, "finance")
     .where("orderId", "==", orderId)
     .get();
   for (const d of financeSnap.docs) {
@@ -1508,7 +1503,7 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
   const pubRid = asText(order.publicReceiptId);
   if (pubRid) {
     try {
-      await db.collection("businesses").doc(businessId).collection("publicReceipts").doc(pubRid).delete();
+      await businessCollection(db, businessId, "publicReceipts").doc(pubRid).delete();
     } catch {
       /* doc puede no existir */
     }
@@ -1521,13 +1516,10 @@ async function mayaDeleteOrderCascade(db, businessId, payload) {
 async function recomputeClientAfterOrderDelete(db, businessId, clientId) {
   const cleanClientId = asText(clientId);
   if (!cleanClientId) return { touched: false };
-  const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(cleanClientId);
+  const clientRef = businessCollection(db, businessId, "clients").doc(cleanClientId);
   const clientSnap = await clientRef.get();
   if (!clientSnap.exists) return { touched: false };
-  const ordersSnap = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("orders")
+  const ordersSnap = await businessCollection(db, businessId, "orders")
     .where("linkedClientId", "==", cleanClientId)
     .get();
   if (ordersSnap.empty) {
@@ -1594,10 +1586,7 @@ async function handleDeleteOrder(db, businessId, payload) {
       return r;
     }
     const needle = clientName.toLowerCase();
-    const qs = await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("orders")
+    const qs = await businessCollection(db, businessId, "orders")
       .orderBy("createdAt", "desc")
       .limit(120)
       .get();
@@ -1672,7 +1661,7 @@ async function handleDeleteClient(db, businessId, payload) {
       ? data.clientId.trim()
       : String(data.clientId ?? "").trim();
   if (clientId) {
-    const ref = db.collection("businesses").doc(businessId).collection("clients").doc(clientId);
+    const ref = businessCollection(db, businessId, "clients").doc(clientId);
     const snap = await ref.get();
     if (!snap.exists) {
       const r = { success: false, error: "Cliente no encontrado con ese id." };
@@ -1681,10 +1670,7 @@ async function handleDeleteClient(db, businessId, payload) {
     }
     const x = snap.data() || {};
     const display = typeof x.name === "string" && x.name.trim() ? x.name.trim() : "Cliente";
-    const ordersWithClient = await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("orders")
+    const ordersWithClient = await businessCollection(db, businessId, "orders")
       .where("linkedClientId", "==", clientId)
       .limit(1)
       .get();
@@ -1714,7 +1700,7 @@ async function handleDeleteClient(db, businessId, payload) {
     console.log("[DELETE_CLIENT] Resultado:", r);
     return r;
   }
-  const snap = await db.collection("businesses").doc(businessId).collection("clients").limit(400).get();
+  const snap = await businessCollection(db, businessId, "clients").limit(400).get();
   /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; full: string; row: Record<string, unknown> }[]} */
   const matches = [];
   snap.forEach((d) => {
@@ -1739,10 +1725,7 @@ async function handleDeleteClient(db, businessId, payload) {
           : typeof exact.row.fullName === "string" && exact.row.fullName.trim()
             ? exact.row.fullName.trim()
             : nameRaw;
-      const ordersWithClient = await db
-        .collection("businesses")
-        .doc(businessId)
-        .collection("orders")
+      const ordersWithClient = await businessCollection(db, businessId, "orders")
         .where("linkedClientId", "==", exact.doc.id)
         .limit(1)
         .get();
@@ -1778,10 +1761,7 @@ async function handleDeleteClient(db, businessId, payload) {
       : typeof matches[0].row.fullName === "string" && matches[0].row.fullName.trim()
         ? matches[0].row.fullName.trim()
         : nameRaw;
-  const ordersWithClient = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("orders")
+  const ordersWithClient = await businessCollection(db, businessId, "orders")
     .where("linkedClientId", "==", matches[0].doc.id)
     .limit(1)
     .get();
@@ -1842,7 +1822,7 @@ async function handleDeleteEvent(db, businessId, payload) {
   console.log("[DELETE_EVENT] Iniciando:", data);
   const eventId = typeof data.eventId === "string" ? data.eventId.trim() : "";
   if (eventId) {
-    const ref = db.collection("businesses").doc(businessId).collection("calendar").doc(eventId);
+    const ref = businessCollection(db, businessId, "calendar").doc(eventId);
     const snap = await ref.get();
     if (!snap.exists) {
       const r = { success: false, error: "Evento de calendario no encontrado." };
@@ -1881,7 +1861,7 @@ async function handleDeleteEvent(db, businessId, payload) {
     return r;
   }
 
-  const snap = await db.collection("businesses").doc(businessId).collection("calendar").limit(500).get();
+  const snap = await businessCollection(db, businessId, "calendar").limit(500).get();
   /** @type {{ doc: import("firebase-admin/firestore").QueryDocumentSnapshot; dt: Date | null; row: Record<string, unknown> }[]} */
   const candidates = [];
   snap.forEach((doc) => {
@@ -2007,7 +1987,7 @@ async function mayaTeamAddMember(db, businessId, payload) {
   const phone = typeof data.phone === "string" ? data.phone.trim() : "";
   const email = typeof data.email === "string" ? data.email.trim() : "";
   const permissions = Array.isArray(data.permissions) ? data.permissions.filter((x) => typeof x === "string") : [];
-  await db.collection("businesses").doc(businessId).collection("team").add({
+  await businessCollection(db, businessId, "team").add({
     name,
     phone,
     email,
@@ -2024,7 +2004,7 @@ async function mayaResolveTeamMemberId(db, businessId, data) {
   if (memberId) return memberId;
   const name = typeof data.name === "string" ? data.name.trim().toLowerCase() : "";
   if (!name) throw new Error("Falta memberId o nombre del miembro.");
-  const snap = await db.collection("businesses").doc(businessId).collection("team").limit(200).get();
+  const snap = await businessCollection(db, businessId, "team").limit(200).get();
   let found = "";
   snap.forEach((d) => {
     if (found) return;
@@ -2056,13 +2036,13 @@ async function mayaTeamUpdateMember(db, businessId, payload) {
   if (!Object.keys(out).length) throw new Error("No hay cambios válidos para actualizar miembro.");
   out.updatedAt = FieldValue.serverTimestamp();
   out.updatedBy = "maya";
-  await db.collection("businesses").doc(businessId).collection("team").doc(memberId).update(out);
+  await businessCollection(db, businessId, "team").doc(memberId).update(out);
 }
 
 async function mayaTeamDeleteMember(db, businessId, payload) {
   const data = mergeMayaActionData(payload);
   const memberId = await mayaResolveTeamMemberId(db, businessId, data);
-  await db.collection("businesses").doc(businessId).collection("team").doc(memberId).delete();
+  await businessCollection(db, businessId, "team").doc(memberId).delete();
 }
 
 async function mayaTeamAssignTask(db, businessId, payload) {
@@ -2076,10 +2056,7 @@ async function mayaTeamAssignTask(db, businessId, payload) {
     assignedAt: new Date().toISOString(),
     assignedBy: "maya",
   };
-  await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("team")
+  await businessCollection(db, businessId, "team")
     .doc(memberId)
     .set(
       {
@@ -2091,7 +2068,7 @@ async function mayaTeamAssignTask(db, businessId, payload) {
 }
 
 async function mayaTeamListBlock(db, businessId) {
-  const snap = await db.collection("businesses").doc(businessId).collection("team").limit(100).get();
+  const snap = await businessCollection(db, businessId, "team").limit(100).get();
   if (snap.empty) return "Equipo: no hay miembros registrados todavía.";
   const lines = [];
   snap.forEach((d) => {
@@ -2223,7 +2200,7 @@ function financeBoundsForPeriod(period) {
 async function aggregateFinanceTotals(db, businessId, period) {
   const { contains } = financeBoundsForPeriod(period);
 
-  const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(3000).get();
+  const snap = await businessCollection(db, businessId, "finance").limit(3000).get();
   let income = 0;
   let expense = 0;
   snap.forEach((docSnap) => {
@@ -2331,10 +2308,7 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
   const orderId = typeof data.orderId === "string" && data.orderId.trim() ? data.orderId.trim() : null;
   const dedupeKey = mayaFinanceMovementDedupeKey(kind, amt, category, description, movementDate);
 
-  const recent = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("finance")
+  const recent = await businessCollection(db, businessId, "finance")
     .where("createdBy", "==", "maya")
     .limit(60)
     .get();
@@ -2346,7 +2320,7 @@ async function mayaFinanceAddMovement(db, businessId, payload, kind) {
     }
   }
 
-  await db.collection("businesses").doc(businessId).collection("finance").add({
+  await businessCollection(db, businessId, "finance").add({
     type: kind,
     status: "cobrado",
     amount: amt,
@@ -2372,7 +2346,7 @@ async function mayaFinanceSearchMovements(db, businessId, payload) {
   const amountHint = Number(data.amount);
   const max = Math.min(20, Math.max(3, Number(data.limit) || 8));
 
-  const snap = await db.collection("businesses").doc(businessId).collection("finance").orderBy("date", "desc").limit(300).get();
+  const snap = await businessCollection(db, businessId, "finance").orderBy("date", "desc").limit(300).get();
   const items = [];
   snap.forEach((docSnap) => {
     const row = docSnap.data() || {};
@@ -2424,7 +2398,7 @@ async function handleDeleteFinance(db, businessId, payload) {
       ? data.transactionId.trim()
       : String(data.transactionId ?? "").trim();
   if (tid) {
-    const ref = db.collection("businesses").doc(businessId).collection("finance").doc(tid);
+    const ref = businessCollection(db, businessId, "finance").doc(tid);
     const snap = await ref.get();
     if (!snap.exists) {
       const r = { success: false, error: "Movimiento financiero no encontrado." };
@@ -2450,7 +2424,7 @@ async function handleDeleteFinance(db, businessId, payload) {
   const descHint = typeof data.description === "string" ? data.description.trim().toLowerCase() : "";
   const typeRaw = typeof data.type === "string" ? data.type.trim().toLowerCase() : "";
 
-  const snap = await db.collection("businesses").doc(businessId).collection("finance").limit(800).get();
+  const snap = await businessCollection(db, businessId, "finance").limit(800).get();
   /** @type {import("firebase-admin/firestore").QueryDocumentSnapshot[]} */
   const candidates = [];
 
@@ -2589,7 +2563,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
 
   const linkedFinanceDeposit = asText(order.linkedFinanceId);
   if (linkedFinanceDeposit) {
-    const depRef = db.collection("businesses").doc(businessId).collection("finance").doc(linkedFinanceDeposit);
+    const depRef = businessCollection(db, businessId, "finance").doc(linkedFinanceDeposit);
     const depSnap = await depRef.get();
     if (depSnap.exists) {
       await depRef.set(
@@ -2604,7 +2578,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   }
 
   if (amount > 0) {
-    const finRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+    const finRef = await businessCollection(db, businessId, "finance").add({
       type: "income",
       status: "cobrado",
       amount,
@@ -2621,7 +2595,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   }
 
   if (expenses > 0) {
-    const finExpenseRef = await db.collection("businesses").doc(businessId).collection("finance").add({
+    const finExpenseRef = await businessCollection(db, businessId, "finance").add({
       type: "expense",
       status: "cobrado",
       amount: expenses,
@@ -2639,10 +2613,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
 
   const linkedCalendarId = asText(order.linkedCalendarId);
   if (linkedCalendarId) {
-    await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("calendar")
+    await businessCollection(db, businessId, "calendar")
       .doc(linkedCalendarId)
       .set(
         {
@@ -2658,7 +2629,7 @@ async function finalizeOrderDeliveryAndProfit(db, businessId, orderRef, order) {
   const clientRefId = asText(order.linkedClientId || order.clientId);
   if (clientRefId && amount > 0) {
     try {
-      const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(clientRefId);
+      const clientRef = businessCollection(db, businessId, "clients").doc(clientRefId);
       const clientSnap = await clientRef.get();
       if (clientSnap.exists) {
         const data = clientSnap.data() || {};
@@ -2700,16 +2671,13 @@ async function mayaResolveOrderRef(db, businessId, payload) {
   const data = mergeMayaActionData(payload);
   let orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
   if (orderId) {
-    const ref = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+    const ref = businessCollection(db, businessId, "orders").doc(orderId);
     const snap = await ref.get();
     if (snap.exists) return { ref, snap };
   }
   const name = typeof data.clientName === "string" ? data.clientName.trim().toLowerCase() : "";
   if (!name) throw new Error("Falta orderId o clientName para identificar el pedido.");
-  const qs = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("orders")
+  const qs = await businessCollection(db, businessId, "orders")
     .orderBy("createdAt", "desc")
     .limit(80)
     .get();
@@ -2850,8 +2818,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
   const payloads = extracted.payloads;
   if (!payloads.length) return rawReply;
 
-  const businessId =
-    typeof firebaseContext.businessId === "string" ? firebaseContext.businessId.trim() : "";
+  const businessId = scopedBusinessIdFromContext(firebaseContext);
   if (!businessId) {
     return (
       (visibleText || rawReply) +
@@ -2875,7 +2842,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
       });
 
       if (action === "add_fixed_expense" || action === "update_fixed_expense" || action === "delete_fixed_expense") {
-        const bizSnap0 = await db.collection("businesses").doc(businessId).get();
+        const bizSnap0 = await businessDoc(db, businessId).get();
         const bd = bizSnap0.exists ? bizSnap0.data() || {} : {};
         if (!isYourColorFinanceBusinessFromData(bd)) {
           throw new Error("Los gastos fijos recurrentes solo están habilitados para YourColor.");
@@ -3054,7 +3021,7 @@ async function applyMayaActionsFromPanelReply(db, firebaseContext, rawReply) {
         } else {
           date.setHours(12, 0, 0, 0);
         }
-        await db.collection("businesses").doc(businessId).collection("calendar").add({
+        await businessCollection(db, businessId, "calendar").add({
           title,
           date: Timestamp.fromDate(date),
           time,
@@ -3448,7 +3415,7 @@ export const updateOrderStatus = onRequest(
         }
 
         const db = getAdminDb();
-        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const orderRef = businessCollection(db, businessId, "orders").doc(orderId);
         const snap = await orderRef.get();
         if (!snap.exists) {
           res.status(404).json({ error: "Pedido no encontrado." });
@@ -3491,7 +3458,7 @@ export const updateOrderAndSync = onRequest(
           return;
         }
         const db = getAdminDb();
-        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const orderRef = businessCollection(db, businessId, "orders").doc(orderId);
         const snap = await orderRef.get();
         if (!snap.exists) {
           res.status(404).json({ error: "Pedido no encontrado." });
@@ -3537,10 +3504,7 @@ export const updateOrderAndSync = onRequest(
 
         const clientId = asText(old.linkedClientId);
         if (clientId) {
-          await db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("clients")
+          await businessCollection(db, businessId, "clients")
             .doc(clientId)
             .set(
               {
@@ -3555,10 +3519,7 @@ export const updateOrderAndSync = onRequest(
 
         const linkedCalendarId = asText(old.linkedCalendarId);
         if (linkedCalendarId) {
-          await db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("calendar")
+          await businessCollection(db, businessId, "calendar")
             .doc(linkedCalendarId)
             .set(
               {
@@ -3573,7 +3534,7 @@ export const updateOrderAndSync = onRequest(
 
         const oldAmount = Math.max(0, Number(old.amount) || 0);
         if (nextAmount !== oldAmount && nextDeposit > 0) {
-          await db.collection("businesses").doc(businessId).collection("finance").add({
+          await businessCollection(db, businessId, "finance").add({
             type: "income",
             status: "cobrado",
             amount: nextDeposit,
@@ -3617,7 +3578,7 @@ export const deleteOrderCascade = onRequest(
           return;
         }
         const db = getAdminDb();
-        const orderRef = db.collection("businesses").doc(businessId).collection("orders").doc(orderId);
+        const orderRef = businessCollection(db, businessId, "orders").doc(orderId);
         const snap = await orderRef.get();
         if (!snap.exists) {
           res.status(404).json({ error: "Pedido no encontrado." });
@@ -3627,13 +3588,10 @@ export const deleteOrderCascade = onRequest(
         const linkedClientId = asText(row.linkedClientId || row.clientId);
         const linkedCalendarId = asText(row.linkedCalendarId);
         if (linkedCalendarId) {
-          await db.collection("businesses").doc(businessId).collection("calendar").doc(linkedCalendarId).delete();
+          await businessCollection(db, businessId, "calendar").doc(linkedCalendarId).delete();
         }
 
-        const finSnap = await db
-          .collection("businesses")
-          .doc(businessId)
-          .collection("finance")
+        const finSnap = await businessCollection(db, businessId, "finance")
           .where("orderId", "==", orderId)
           .get();
         for (const d of finSnap.docs) {
@@ -3643,7 +3601,7 @@ export const deleteOrderCascade = onRequest(
         const pubRid = asText(row.publicReceiptId);
         if (pubRid) {
           try {
-            await db.collection("businesses").doc(businessId).collection("publicReceipts").doc(pubRid).delete();
+            await businessCollection(db, businessId, "publicReceipts").doc(pubRid).delete();
           } catch {
             /* doc puede no existir */
           }
@@ -3681,16 +3639,13 @@ export const deleteClientSafe = onRequest(
           return;
         }
         const db = getAdminDb();
-        const clientRef = db.collection("businesses").doc(businessId).collection("clients").doc(clientId);
+        const clientRef = businessCollection(db, businessId, "clients").doc(clientId);
         const clientSnap = await clientRef.get();
         if (!clientSnap.exists) {
           res.status(404).json({ error: "Cliente no encontrado." });
           return;
         }
-        const ordersSnap = await db
-          .collection("businesses")
-          .doc(businessId)
-          .collection("orders")
+        const ordersSnap = await businessCollection(db, businessId, "orders")
           .where("linkedClientId", "==", clientId)
           .limit(1)
           .get();
@@ -3732,7 +3687,7 @@ export const cleanupJunkClients = onRequest(
           return;
         }
         const db = getAdminDb();
-        const clientsSnap = await db.collection("businesses").doc(businessId).collection("clients").get();
+        const clientsSnap = await businessCollection(db, businessId, "clients").get();
         /** @type {Array<{id:string,name:string,phone:string}>} */
         const junkCandidates = [];
         for (const doc of clientsSnap.docs) {
@@ -3744,10 +3699,7 @@ export const cleanupJunkClients = onRequest(
           if (row.lastOrderAt || row.lastContactAt) continue;
           const orderCount = Number(row.totalOrders || 0);
           if (orderCount > 0) continue;
-          const hasOrder = await db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("orders")
+          const hasOrder = await businessCollection(db, businessId, "orders")
             .where("linkedClientId", "==", doc.id)
             .limit(1)
             .get();
@@ -3756,7 +3708,7 @@ export const cleanupJunkClients = onRequest(
         }
         if (applyDelete) {
           for (const candidate of junkCandidates) {
-            await db.collection("businesses").doc(businessId).collection("clients").doc(candidate.id).delete();
+            await businessCollection(db, businessId, "clients").doc(candidate.id).delete();
           }
         }
         res.status(200).json({
@@ -3896,10 +3848,7 @@ export const whatsappWebhook = onRequest(
     let confirmedOrderSaved = false;
 
     const sessionId = createHash("sha256").update(from).digest("hex").slice(0, 40);
-    const sessionRef = db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("mayaWhatsAppSessions")
+    const sessionRef = businessCollection(db, businessId, "mayaWhatsAppSessions")
       .doc(sessionId);
 
     let priorMessages = [];
@@ -4129,13 +4078,10 @@ export const whatsappWebhook = onRequest(
 
       if (calc) {
         try {
-          const leadDocRef = await db.collection("businesses").doc(businessId).collection("leads").add(leadPayload);
+          const leadDocRef = await businessCollection(db, businessId, "leads").add(leadPayload);
           sessionLastLeadId = leadDocRef.id;
 
-          const convNameRef = db
-            .collection("businesses")
-            .doc(businessId)
-            .collection("conversations")
+          const convNameRef = businessCollection(db, businessId, "conversations")
             .doc(conversationDocIdFromWhatsAppFrom(from));
           await convNameRef.set(
             { customerName, updatedAt: FieldValue.serverTimestamp() },
@@ -4180,7 +4126,7 @@ export const whatsappWebhook = onRequest(
     ) {
       const leadId = sessionLastLeadId.trim();
       try {
-        const leadRef = db.collection("businesses").doc(businessId).collection("leads").doc(leadId);
+        const leadRef = businessCollection(db, businessId, "leads").doc(leadId);
         const leadSnap = await leadRef.get();
         if (leadSnap.exists) {
           const leadData = leadSnap.data() || {};
@@ -4214,7 +4160,7 @@ export const whatsappWebhook = onRequest(
               updatedAt: FieldValue.serverTimestamp(),
             });
 
-            const calCol = db.collection("businesses").doc(businessId).collection("calendar");
+            const calCol = businessCollection(db, businessId, "calendar");
             await syncClientRecord(db, businessId, {
               clientName: customerName,
               clientPhone: phoneClean,
@@ -4258,7 +4204,7 @@ export const whatsappWebhook = onRequest(
 
       if (city && preferredTime) {
         try {
-          await db.collection("businesses").doc(businessId).collection("meetingRequests").add({
+          await businessCollection(db, businessId, "meetingRequests").add({
             clientName,
             phone: phoneClean,
             city,
@@ -4279,7 +4225,7 @@ export const whatsappWebhook = onRequest(
       asText(specialRequestPayload.description)
     ) {
       try {
-        await db.collection("businesses").doc(businessId).collection("specialRequests").add({
+        await businessCollection(db, businessId, "specialRequests").add({
           description: asText(specialRequestPayload.description),
           whatsappFrom: from,
           source: "whatsapp-maya",
@@ -4460,10 +4406,7 @@ async function processFixedRecurringForBusiness(db, businessId, now) {
   let applied = 0;
   let advanced = 0;
 
-  const fixedSnap = await db
-    .collection("businesses")
-    .doc(businessId)
-    .collection("fixedExpenses")
+  const fixedSnap = await businessCollection(db, businessId, "fixedExpenses")
     .where("active", "==", true)
     .get();
 
@@ -4477,10 +4420,7 @@ async function processFixedRecurringForBusiness(db, businessId, now) {
     due.setHours(12, 0, 0, 0);
 
     const existingPeriods = new Set();
-    const existingSnap = await db
-      .collection("businesses")
-      .doc(businessId)
-      .collection("finance")
+    const existingSnap = await businessCollection(db, businessId, "finance")
       .where("fixedExpenseId", "==", docSnap.id)
       .limit(250)
       .get();
@@ -4507,10 +4447,7 @@ async function processFixedRecurringForBusiness(db, businessId, now) {
           typeof row.name === "string" && row.name.trim()
             ? `${row.name.trim()} (Gasto fijo automático)`
             : "Gasto fijo automático";
-        await db
-          .collection("businesses")
-          .doc(businessId)
-          .collection("finance")
+        await businessCollection(db, businessId, "finance")
           .add({
             type: "expense",
             status: "cobrado",

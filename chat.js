@@ -2392,6 +2392,9 @@ async function loadFirebaseContext(business, options = {}) {
   const profile = slimBusinessProfileForChat(business.data) || {};
   firebaseContextPayload = {
     businessId: business.id,
+    ownerUid: scopeUid,
+    uid: scopeUid,
+    businessPath: scopeUid ? `users/${scopeUid}/yourcolor/main` : "",
     profile,
     dataFocus: priority,
     dataFocusHint: flags.finance

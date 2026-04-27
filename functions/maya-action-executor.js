@@ -1,3 +1,5 @@
+import { businessCollection } from "./firestore-paths.js";
+
 export async function executeMayaAction({
   db,
   businessId,
@@ -156,14 +158,14 @@ export async function executeMayaAction({
       createdAt: handlers.FieldValue.serverTimestamp(),
       updatedAt: handlers.FieldValue.serverTimestamp(),
     };
-    const ref = await db.collection("businesses").doc(businessId).collection("fixedExpenses").add(row);
+    const ref = await businessCollection(db, businessId, "fixedExpenses").add(row);
     return { ok: true, result: { expenseId: ref.id, name }, resolutionMeta };
   }
 
   if (action === "update_fixed_expense") {
     const id = String(normalizedPayload.expenseId || "").trim();
     if (!id) throw new Error("Falta expenseId.");
-    const ref = db.collection("businesses").doc(businessId).collection("fixedExpenses").doc(id);
+    const ref = businessCollection(db, businessId, "fixedExpenses").doc(id);
     const snap = await ref.get();
     if (!snap.exists) throw new Error("Gasto fijo no encontrado.");
     const patch = { updatedAt: handlers.FieldValue.serverTimestamp() };
@@ -195,7 +197,7 @@ export async function executeMayaAction({
   if (action === "delete_fixed_expense") {
     const id = String(normalizedPayload.expenseId || "").trim();
     if (!id) throw new Error("Falta expenseId.");
-    const ref = db.collection("businesses").doc(businessId).collection("fixedExpenses").doc(id);
+    const ref = businessCollection(db, businessId, "fixedExpenses").doc(id);
     const snap = await ref.get();
     if (!snap.exists) throw new Error("Gasto fijo no encontrado.");
     await ref.delete();

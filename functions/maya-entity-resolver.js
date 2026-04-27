@@ -1,3 +1,5 @@
+import { businessCollection } from "./firestore-paths.js";
+
 const OPEN_ORDER_STATUSES = new Set(["nuevo", "produccion", "listo"]);
 
 function normalizePhone(raw) {
@@ -38,7 +40,7 @@ export async function resolveMayaActionEntities(db, businessId, action, normaliz
   const needsClient =
     action === "update_client" || action === "delete_client" || action === "search_client";
   if (needsClient) {
-    const clientsCol = db.collection("businesses").doc(businessId).collection("clients");
+    const clientsCol = businessCollection(db, businessId, "clients");
     const clientId = typeof normalizedPayload.clientId === "string" ? normalizedPayload.clientId.trim() : "";
     if (clientId) {
       const ref = clientsCol.doc(clientId);
@@ -150,7 +152,7 @@ export async function resolveMayaActionEntities(db, businessId, action, normaliz
     return { ok: true, error: "", resolved: {}, meta: { matchType: "none", confidence: "high", ambiguityStatus: "none" } };
   }
 
-  const ordersCol = db.collection("businesses").doc(businessId).collection("orders");
+  const ordersCol = businessCollection(db, businessId, "orders");
   const orderId = typeof normalizedPayload.orderId === "string" ? normalizedPayload.orderId.trim() : "";
   if (orderId) {
     const ref = ordersCol.doc(orderId);
