@@ -996,7 +996,7 @@ async function confirmDelete(id, name) {
   );
   if (!ok || !businessId) return;
   try {
-    const ref = scopedDoc("teamMembers", id);
+    const ref = scopedDoc("team", id);
     if (!ref) return;
     await deleteDoc(ref);
     members = await fetchTeamMembersForBusiness(db, businessId, scopeUid);
@@ -1046,11 +1046,11 @@ async function submitForm(ev) {
 
   try {
     if (editId) {
-      const ref = scopedDoc("teamMembers", editId);
+      const ref = scopedDoc("team", editId);
       if (!ref) return;
       await updateDoc(ref, payload);
     } else {
-      const col = scopedCollection("teamMembers");
+      const col = scopedCollection("team");
       if (!col) return;
       await addDoc(col, {
         ...payload,
@@ -1555,10 +1555,10 @@ onAuthStateChanged(auth, async (user) => {
       return;
     }
 
-    businessId = business.id;
+    businessId = "yourcolor";
     scopeUid = business?.scope?.uid || user.uid || null;
     renderHeader(business);
-    members = await fetchTeamMembersForBusiness(db, businessId, scopeUid);
+    members = await fetchTeamMembersForBusiness(db, "yourcolor", scopeUid);
     renderList(members);
     updateStats(members);
     updateTimePanelHeader();

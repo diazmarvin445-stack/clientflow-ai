@@ -104,14 +104,7 @@ function describeFixedFrequency(row) {
  * @param {{ data: Record<string, unknown> } | null | undefined} business
  */
 function isYourColorFinanceBusiness(business) {
-  if (!business?.data) return false;
-  const name = String(business.data.businessName || "")
-    .trim()
-    .toLowerCase();
-  const cat = String(business.data.businessCategory || "")
-    .trim()
-    .toLowerCase();
-  return name === "yourcolor";
+  return Boolean(business);
 }
 
 function renderHeader(business) {
@@ -128,7 +121,7 @@ function renderHeader(business) {
 
   const { data } = business;
   const displayName =
-    (typeof data.businessName === "string" && data.businessName.trim()) || "Tu negocio";
+    (typeof data.businessName === "string" && data.businessName.trim()) || "YourColor";
   const { metaLine } = formatBusinessMeta(data);
 
   if (nameEl) nameEl.textContent = displayName;

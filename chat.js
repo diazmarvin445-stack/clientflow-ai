@@ -19,7 +19,6 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
   resolveBusinessForUser,
-  fetchJobsSplitForChat,
   fetchOrdersSplitForChat,
   fetchClientsForChatContext,
   fetchCampaignsListAndStats,
@@ -98,12 +97,8 @@ function conversationMessagesCollection(phoneDocId) {
   return collection(convDoc, "messages");
 }
 
-function categoryKeyFromBusiness(business) {
-  const c = String(business?.data?.businessCategory || business?.data?.category || "")
-    .trim()
-    .toLowerCase();
-  if (c === "construction") return "roofing_construction";
-  return c;
+function categoryKeyFromBusiness(_business) {
+  return "yourcolor";
 }
 
 /** Centro de Control Maya: listeners en tiempo real. */
@@ -1636,15 +1631,12 @@ async function resolveClientDocRefByActionData(businessId, data) {
 }
 
 /**
- * Resuelve un pedido en `jobs` o `orders` por id de documento.
+ * Resuelve un pedido en `orders` por id de documento.
  * @param {string} businessId
  * @param {string} orderId
  */
 async function resolveOrderDocRef(businessId, orderId) {
-  const refJobs = scopedDoc("jobs", orderId);
   const refOrders = scopedDoc("orders", orderId);
-  const sj = await getDoc(refJobs);
-  if (sj.exists) return { ref: refJobs, kind: "jobs" };
   const so = await getDoc(refOrders);
   if (so.exists) return { ref: refOrders, kind: "orders" };
   return null;
@@ -1656,9 +1648,9 @@ async function resolveOrderDocRef(businessId, orderId) {
  */
 async function executeMayaActionFromChat(businessId, payload) {
   const uid = activeScopeUid();
-  const businessId = activeScopeCategory();
-  if (!uid || !businessId) {
-    console.error("[MayaAction] Missing uid/business path, action aborted.", { uid, businessId, action: payload?.action });
+  const scopeBusinessId = activeScopeCategory();
+  if (!uid || !scopeBusinessId) {
+    console.error("[MayaAction] Missing uid/business path, action aborted.", { uid, businessId: scopeBusinessId, action: payload?.action });
     throw new Error("No se pudo guardar: falta contexto YourColor (uid/businessPath).");
   }
   const data = mergeMayaActionData(
@@ -1766,19 +1758,20 @@ async function executeMayaActionFromChat(businessId, payload) {
     const total = Number(data.total);
     const clientName = typeof data.clientName === "string" ? data.clientName.trim() : "";
     const product = typeof data.product === "string" ? data.product.trim() : "";
-    await addDoc(scopedCollection("jobs"), {
-      status: "Pendiente",
-      title: clientName && product ? `${clientName} — ${product}` : "Pedido desde Chat IA",
+    await addDoc(scopedCollection("orders"), {
+      status: "nuevo",
       clientName,
       product,
       quantity: Number.isFinite(qty) ? qty : 0,
       total: Number.isFinite(total) ? total : 0,
       amount: Number.isFinite(total) ? total : 0,
-      estimatedAmount: Number.isFinite(total) ? total : 0,
+      deposit: 0,
+      balance: Number.isFinite(total) ? total : 0,
       source: "chat-maya",
       createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/jobs`);
+    console.log("MAYA WRITE:", uid, scopeBusinessId, `users/${uid}/yourcolor/orders`);
     return "create_order";
   }
 
@@ -1838,9 +1831,9 @@ async function executeMayaActionFromChat(businessId, payload) {
       typeof data.orderId === "string" ? data.orderId.trim() : String(data.orderId ?? "").trim();
     if (!orderId) throw new Error("Falta orderId para eliminar el pedido.");
     const resolved = await resolveOrderDocRef(businessId, orderId);
-    if (!resolved) throw new Error("No se encontró el pedido en órdenes ni en trabajos.");
+    if (!resolved) throw new Error("No se encontró el pedido en órdenes.");
     await deleteDoc(resolved.ref);
-    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, scopeBusinessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "delete_order";
   }
 
@@ -1857,7 +1850,7 @@ async function executeMayaActionFromChat(businessId, payload) {
       ...changes,
       updatedAt: serverTimestamp(),
     });
-    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
+    console.log("MAYA WRITE:", uid, scopeBusinessId, `users/${uid}/yourcolor/${resolved.kind}/${orderId}`);
     return "update_order";
   }
 
@@ -1946,8 +1939,7 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
 
   /** @type {Record<string, unknown>} */
   const payload = {
-    status: "Pendiente",
-    title: quote ? `${quote.productLabel} × ${quote.quantity}` : "Pedido desde Chat IA",
+    status: "nuevo",
     source: "chat-ai",
     notes,
     assistantExcerpt: assistantText.slice(0, 2000),
@@ -1965,16 +1957,17 @@ async function convertConversationToOrder(assistantWrap, assistantText) {
     payload.logoFee = quote.logoFee ?? 0;
     payload.total = quote.total;
     payload.deposit = quote.deposit;
-    payload.estimatedAmount = quote.total;
     payload.amount = quote.total;
+    payload.balance = Math.max(0, Number(quote.total) - Number(quote.deposit || 0));
   } else {
-    payload.estimatedAmount = 0;
     payload.amount = 0;
+    payload.deposit = 0;
+    payload.balance = 0;
   }
 
   try {
-    await addDoc(scopedCollection("jobs"), payload);
-    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/jobs`);
+    await addDoc(scopedCollection("orders"), payload);
+    console.log("MAYA WRITE:", uid, businessId, `users/${uid}/yourcolor/orders`);
     showToast("Orden creada como Pendiente. Revisa el calendario para la fecha de entrega.");
     if (activeBusiness) {
       await loadFirebaseContext(activeBusiness);
@@ -2334,15 +2327,7 @@ async function loadFirebaseContext(business, options = {}) {
       )
     : Promise.resolve(null);
 
-  const [jobSplit, orderSplit, clientsRaw, campAgg, financeMonth, calendarNext, fixedSnapMaybe] = await Promise.all([
-    fetchJobsSplitForChat(
-      db,
-      business.id,
-      bootstrap ? 90 : 150,
-      bootstrap ? 35 : 50,
-      bootstrap ? 8 : 10,
-      scopeUid || null,
-    ),
+  const [orderSplit, clientsRaw, campAgg, financeMonth, calendarNext, fixedSnapMaybe] = await Promise.all([
     fetchOrdersSplitForChat(
       db,
       business.id,
@@ -2420,8 +2405,6 @@ async function loadFirebaseContext(business, options = {}) {
             : flags.campaigns
               ? "Prioridad: campañas y marketing."
               : "Contexto general del negocio.",
-    jobs: serializeForAi(jobSplit.active),
-    jobsRecentDelivered: serializeForAi(jobSplit.recentDelivered),
     orders: serializeForAi(orderSplit.active),
     ordersRecentDelivered: serializeForAi(orderSplit.recentDelivered),
     clients: serializeForAi(clientsRaw),
@@ -2441,8 +2424,6 @@ async function loadFirebaseContext(business, options = {}) {
       ? "YourColor: fixedExpenses es la programación recurrente; el balance de finanzas se refleja cuando cada cobro se aplica automáticamente y se registra en finance."
       : null,
     stats: {
-      jobsActiveCount: jobSplit.active.length,
-      jobsDeliveredListed: jobSplit.recentDelivered.length,
       ordersActiveCount: orderSplit.active.length,
       ordersDeliveredListed: orderSplit.recentDelivered.length,
       clientCount: clientsRaw.length,
@@ -2452,13 +2433,13 @@ async function loadFirebaseContext(business, options = {}) {
     },
     contextNote: bootstrap
       ? "Carga inicial ligera para arranque rápido; al escribir, el contexto se amplía según el tema."
-      : "Datos cargados con foco inteligente: clientes recientes; trabajos/pedidos activos + últimas entregas; finanzas del mes; calendario próximas semanas. Si falta algo, dilo con naturalidad y pide a Marvin lo que necesites.",
+      : "Datos cargados con foco inteligente: clientes recientes; pedidos activos + últimas entregas; finanzas del mes; calendario próximas semanas. Si falta algo, dilo con naturalidad y pide a Marvin lo que necesites.",
     contextBootstrap: bootstrap,
   };
 
   const meta = document.getElementById("yc-chat-context-meta");
   if (meta) {
-    meta.textContent = `${jobSplit.active.length} trabajos activos · ${orderSplit.active.length} pedidos activos · ${clientsRaw.length} clientes recientes`;
+    meta.textContent = `${orderSplit.active.length} pedidos activos · ${clientsRaw.length} clientes recientes`;
   }
 }
 
@@ -3037,12 +3018,10 @@ async function bootWithUser(user) {
     const body = document.body;
     if (body) {
       const businessName = typeof business?.data?.businessName === "string" ? business.data.businessName.trim().toLowerCase() : "";
-      const businessCategory = categoryKeyFromBusiness(business);
       const isYourColorBusiness = businessName === "yourcolor";
-      const isConstructionBusiness = businessCategory === "roofing_construction";
       body.classList.toggle("yourcolor-chat-page", isYourColorBusiness);
       body.classList.toggle("non-yourcolor-chat-page", !isYourColorBusiness);
-      body.classList.toggle("construction-chat-page", isConstructionBusiness);
+      body.classList.remove("construction-chat-page");
       body.classList.toggle("custom-apparel-chat-page", isYourColorBusiness);
       if (isYourColorBusiness) {
         ensureIsolatedMayaChatLayer();

@@ -51,7 +51,7 @@ function setMetaLine(count) {
     el.textContent = "Tu base de clientes convertidos y de largo plazo.";
     return;
   }
-  el.textContent = `${count} ${count === 1 ? "cliente" : "clientes"} · CRM de construcción`;
+  el.textContent = `${count} ${count === 1 ? "cliente" : "clientes"} · CRM YourColor`;
 }
 
 function showLoadError(msg) {
@@ -118,7 +118,7 @@ function renderClientList(root, businessId, list) {
         <th>Teléfono</th>
         <th>Email</th>
         <th>Dirección</th>
-        <th>Trabajos enlazados</th>
+        <th>Pedidos enlazados</th>
         <th>Notas</th>
         <th>Acciones</th>
       </tr>
@@ -259,7 +259,7 @@ async function loadClientesForUser(user) {
   cachedBusinessId = forcedCategoryId;
   cachedUserId = business?.scope?.uid || user.uid;
   try {
-    const jobsSnap = await getDocs(businessCollectionRef(db, cachedUserId, forcedCategoryId, "jobs"));
+    const jobsSnap = await getDocs(businessCollectionRef(db, cachedUserId, forcedCategoryId, "orders"));
     const map = new Map();
     jobsSnap.forEach((d) => {
       const row = d.data() || {};

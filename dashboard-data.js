@@ -528,7 +528,7 @@ export async function fetchLaunchedRecommendationIds(db, businessId, ownerUid = 
 export async function fetchDashboardMetrics(db, businessId, ownerUidForMergedLeads = null) {
   if (!ownerUidForMergedLeads) throw new Error("Ruta bloqueada: falta uid para dashboard metrics.");
   const [jobsSnap, campaignsSnap, recentLeadDocs] = await Promise.all([
-    getDocs(scopedCategoryCollection(db, businessId, ownerUidForMergedLeads, "jobs")),
+    getDocs(scopedCategoryCollection(db, businessId, ownerUidForMergedLeads, "orders")),
     getDocs(scopedCategoryCollection(db, businessId, ownerUidForMergedLeads, "campaigns")),
     fetchLeadsForBusiness(db, businessId, ownerUidForMergedLeads || undefined),
   ]);
@@ -672,7 +672,7 @@ export async function fetchLeadsForBusiness(db, businessId, ownerUidMerge) {
  * Clients in `businesses/{businessId}/clients`, newest `createdAt` first.
  */
 /**
- * Jobs / órdenes en `businesses/{businessId}/jobs`, más recientes primero.
+ * Órdenes en `users/{uid}/yourcolor/orders`, más recientes primero.
  */
 export async function fetchJobsForBusiness(db, businessId) {
   throw new Error("Ruta bloqueada: fetchJobsForBusiness requiere uid y path YourColor.");
@@ -751,7 +751,7 @@ function orderRowSortTime(row) {
 }
 
 /**
- * Trabajos (`jobs`): activos + últimas entregas (para memoria operativa sin cargar todo el histórico).
+ * Compat legacy: devuelve split desde `orders` (no usa colección jobs).
  * @returns {{ active: Record<string, unknown>[], recentDelivered: Record<string, unknown>[] }}
  */
 export async function fetchJobsSplitForChat(
@@ -763,14 +763,14 @@ export async function fetchJobsSplitForChat(
   ownerUid = null,
 ) {
   const qy = query(
-    scopedCategoryCollection(db, businessId, ownerUid, "jobs"),
+    scopedCategoryCollection(db, businessId, ownerUid, "orders"),
     orderBy("createdAt", "desc"),
     limit(maxFetch),
   );
   const snap = await getDocs(qy);
   const rows = [];
   snap.forEach((docSnap) => {
-    rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "jobs" });
+    rows.push({ id: docSnap.id, ...docSnap.data(), _cfCollection: "orders" });
   });
   const active = rows.filter(isChatActiveOrderOrJob).slice(0, maxActive);
   const delivered = rows
@@ -1238,7 +1238,7 @@ export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDoc
  * Operational fields: fullName, roleTitle, staffCategory, phone, email, active, workDays[], hoursFrom, hoursTo.
  */
 export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = null) {
-  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "teamMembers"));
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "team"));
   const rows = [];
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data() });
@@ -1249,7 +1249,7 @@ export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = nul
     return tb - ta;
   });
   console.log(
-    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/yourcolor/teamMembers → ${rows.length} document(s)`,
+    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/yourcolor/team → ${rows.length} document(s)`,
   );
   return rows;
 }

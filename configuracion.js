@@ -72,7 +72,7 @@ function renderHeader(business) {
   const av = document.getElementById("dash-avatar-initials");
 
   if (!business) {
-    if (nameEl) nameEl.textContent = "Configuración";
+    if (nameEl) nameEl.textContent = "YourColor";
     if (metaEl) metaEl.textContent = "Plan Pro · —";
     if (av) av.textContent = "?";
     return;
@@ -80,7 +80,7 @@ function renderHeader(business) {
 
   const { data } = business;
   const displayName =
-    (typeof data.businessName === "string" && data.businessName.trim()) || "Tu negocio";
+    (typeof data.businessName === "string" && data.businessName.trim()) || "YourColor";
   const { metaLine } = formatBusinessMeta(data);
 
   if (nameEl) nameEl.textContent = displayName;
@@ -538,7 +538,7 @@ async function loadPage(user) {
       return;
     }
 
-    businessId = business.id;
+    businessId = "yourcolor";
     scopeUid = business?.scope?.uid || user.uid;
     const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
     setDiagnosticsLoggerContext({ businessId, ownerUid });

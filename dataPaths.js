@@ -36,11 +36,11 @@ export function orderDocRef(db, ctx, id) {
 }
 
 export function jobsColRef(db, ctx) {
-  return collection(db, ...baseSegments(ctx), "jobs");
+  return collection(db, ...baseSegments(ctx), "orders");
 }
 
 export function jobDocRef(db, ctx, id) {
-  return doc(db, ...baseSegments(ctx), "jobs", String(id));
+  return doc(db, ...baseSegments(ctx), "orders", String(id));
 }
 
 export function financesColRef(db, ctx) {
@@ -52,11 +52,11 @@ export function financeDocRef(db, ctx, id) {
 }
 
 export function teamColRef(db, ctx) {
-  return collection(db, ...baseSegments(ctx), "teamMembers");
+  return collection(db, ...baseSegments(ctx), "team");
 }
 
 export function teamDocRef(db, ctx, id) {
-  return doc(db, ...baseSegments(ctx), "teamMembers", String(id));
+  return doc(db, ...baseSegments(ctx), "team", String(id));
 }
 
 export function collectionRef(db, ctx, subcollection) {
