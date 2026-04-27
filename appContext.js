@@ -86,15 +86,14 @@ export function buildActiveFirestoreBasePath(ctx) {
 }
 
 export function isDevOrAdminUser(user) {
-  const email = String(user?.email || "").toLowerCase();
-  const byEmail = email.includes("marvin") || email.includes("admin");
+  void user;
   let byFlag = false;
   try {
     byFlag = localStorage.getItem("clientflow_dev_debug") === "1";
   } catch {
     byFlag = false;
   }
-  return byEmail || byFlag;
+  return byFlag;
 }
 
 export function renderContextDebugBadge({ user, moduleName, ctx, pathSuffix = "" }) {

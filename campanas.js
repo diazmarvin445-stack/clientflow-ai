@@ -20,7 +20,7 @@ import { YOURCOLOR_BUSINESS } from "./yourcolor-config.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
 /** Set false to silence temporary generator wiring logs. */
-const DEBUG_CAMPAIGN_GENERATOR = true;
+const DEBUG_CAMPAIGN_GENERATOR = false;
 
 /** @type {{ business: { id: string, data: Record<string, unknown> } | null, last: { inputs: Record<string, string>, output: Record<string, unknown> } | null, genVariation: number, prefillBusinessId: string | null }} */
 const genState = {
