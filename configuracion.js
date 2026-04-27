@@ -7,11 +7,6 @@ import {
   setDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
-  receiptSettingsDocRef,
-  RECEIPT_SETTINGS_DEFAULTS,
-  loadReceiptSettingsForForm,
-} from "./receipt-settings.js";
-import {
   initialsFromName,
   SERVICE_LABELS,
 } from "./dashboard-data.js";
@@ -32,6 +27,17 @@ let pendingReceiptLogoDataUrl = null;
 let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
 const YOURCOLOR_DEFAULT_NAME = "YourColor";
+const YOURCOLOR_PROFILE_DOC_ID = "main";
+const RECEIPT_SETTINGS_DEFAULTS = {
+  businessName: "",
+  logoUrl: "",
+  phone: "",
+  email: "",
+  address: "",
+  footerMessage: "",
+  primaryColor: "#6366f1",
+  notesTerms: "",
+};
 
 async function saveProfilePatch(patch) {
   const ref = businessProfileRef();
@@ -48,8 +54,22 @@ async function saveProfilePatch(patch) {
 }
 
 function businessProfileRef() {
-  if (!scopeUid) return null;
-  return doc(db, "users", scopeUid, "yourcolor", "main");
+  return doc(db, "businesses", "yourcolor", "profile", YOURCOLOR_PROFILE_DOC_ID);
+}
+
+function readReceiptSettingsFromBusiness(data) {
+  const row = data && typeof data === "object" ? data.receiptSettings : null;
+  const safe = row && typeof row === "object" ? row : {};
+  return {
+    businessName: typeof safe.businessName === "string" ? safe.businessName : RECEIPT_SETTINGS_DEFAULTS.businessName,
+    logoUrl: typeof safe.logoUrl === "string" ? safe.logoUrl : RECEIPT_SETTINGS_DEFAULTS.logoUrl,
+    phone: typeof safe.phone === "string" ? safe.phone : RECEIPT_SETTINGS_DEFAULTS.phone,
+    email: typeof safe.email === "string" ? safe.email : RECEIPT_SETTINGS_DEFAULTS.email,
+    address: typeof safe.address === "string" ? safe.address : RECEIPT_SETTINGS_DEFAULTS.address,
+    footerMessage: typeof safe.footerMessage === "string" ? safe.footerMessage : RECEIPT_SETTINGS_DEFAULTS.footerMessage,
+    primaryColor: typeof safe.primaryColor === "string" ? safe.primaryColor : RECEIPT_SETTINGS_DEFAULTS.primaryColor,
+    notesTerms: typeof safe.notesTerms === "string" ? safe.notesTerms : RECEIPT_SETTINGS_DEFAULTS.notesTerms,
+  };
 }
 
 function mapCategoryToIndustry(value) {
@@ -216,9 +236,8 @@ function applyFormFromBusiness(data) {
 }
 
 async function refreshReceiptSettingsForm() {
-  if (!scopeUid) return;
   pendingReceiptLogoDataUrl = null;
-  const data = await loadReceiptSettingsForForm(db, scopeUid);
+  const data = readReceiptSettingsFromBusiness(businessData || {});
   cachedReceiptLogoUrl = data.logoUrl || "";
   setVal("cfg-receipt-business-name", data.businessName);
   setVal("cfg-receipt-logo-url", cachedReceiptLogoUrl.startsWith("data:") ? "" : cachedReceiptLogoUrl);
@@ -320,9 +339,9 @@ async function saveSection(section) {
     } else if (section === "receipt") {
       const urlTyped = val("cfg-receipt-logo-url").trim();
       const logoUrl = pendingReceiptLogoDataUrl || (urlTyped ? urlTyped : cachedReceiptLogoUrl);
-      await setDoc(
-        receiptSettingsDocRef(db, scopeUid),
-        {
+      await saveProfilePatch({
+        ...base,
+        receiptSettings: {
           businessName: val("cfg-receipt-business-name").trim(),
           logoUrl,
           phone: val("cfg-receipt-phone").trim(),
@@ -331,10 +350,8 @@ async function saveSection(section) {
           footerMessage: val("cfg-receipt-footer").trim(),
           primaryColor: val("cfg-receipt-primary-color").trim() || RECEIPT_SETTINGS_DEFAULTS.primaryColor,
           notesTerms: val("cfg-receipt-notes").trim(),
-          updatedAt: serverTimestamp(),
         },
-        { merge: true },
-      );
+      });
       await refreshReceiptSettingsForm();
       feedback("cfg-feedback-receipt", "Cambios guardados", true);
     }

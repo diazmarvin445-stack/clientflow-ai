@@ -1,5 +1,9 @@
 export function scopedBusinessIdFromContext(firebaseContext) {
   const c = firebaseContext && typeof firebaseContext === "object" ? firebaseContext : {};
+  const businessPath = typeof c.businessPath === "string" ? c.businessPath.trim() : "";
+  if (businessPath && businessPath.startsWith("users/")) {
+    return businessPath;
+  }
   const uid =
     typeof c.ownerUid === "string" && c.ownerUid.trim()
       ? c.ownerUid.trim()

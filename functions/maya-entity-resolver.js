@@ -36,7 +36,7 @@ export async function resolveMayaActionEntities(db, businessId, action, normaliz
     };
   }
   const needsOrder =
-    action === "set_order_expenses" || action === "mark_order_delivered";
+    action === "set_order_expenses" || action === "mark_order_delivered" || action === "update_order";
   const needsClient =
     action === "update_client" || action === "delete_client" || action === "search_client";
   if (needsClient) {

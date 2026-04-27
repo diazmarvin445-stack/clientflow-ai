@@ -18,6 +18,10 @@ export const MAYA_ACTION_SCHEMAS = {
   create_order: {
     required: ["clientName", "product", "quantity", "total"],
   },
+  update_order: {
+    required: [],
+    requiresOneOf: ["orderId", "clientName", "clientPhone"],
+  },
   set_order_expenses: {
     required: ["expenses"],
     requiresOneOf: ["orderId", "clientName", "clientPhone"],
@@ -52,6 +56,7 @@ export const MAYA_ACTION_FIELD_ALIASES = {
   clientName: ["clientName", "customerName", "name"],
   clientPhone: ["clientPhone", "phone", "telefono", "whatsapp"],
   clientId: ["clientId", "id"],
+  orderId: ["orderId", "pedidoId", "id"],
   expenseId: ["expenseId", "fixedExpenseId"],
   fixedExpenseName: ["name", "nombre", "titulo", "description"],
   fechaCobro: ["fechaCobro", "date", "fecha", "fecha_cobro"],

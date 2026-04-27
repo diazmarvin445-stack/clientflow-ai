@@ -50,6 +50,9 @@ export function validateAndNormalizeMayaAction(action, payload) {
   const clientIdRaw = pickAliasedValue(data, "clientId");
   if (clientIdRaw !== undefined) normalized.clientId = asTrimmedString(clientIdRaw);
 
+  const orderIdRaw = pickAliasedValue(data, "orderId");
+  if (orderIdRaw !== undefined) normalized.orderId = asTrimmedString(orderIdRaw);
+
   const expenseIdRaw = pickAliasedValue(data, "expenseId");
   if (expenseIdRaw !== undefined) normalized.expenseId = asTrimmedString(expenseIdRaw);
 
@@ -141,6 +144,26 @@ export function validateAndNormalizeMayaAction(action, payload) {
 
   if (action === "set_order_expenses" && !(Number(normalized.expenses) >= 0)) {
     return { ok: false, error: "Monto de gastos inválido.", normalized: null };
+  }
+  if (action === "update_order") {
+    const editable = [
+      "product",
+      "quantity",
+      "total",
+      "amount",
+      "deposit",
+      "balance",
+      "expenses",
+      "deliveryDate",
+      "notes",
+      "status",
+      "clientName",
+      "clientPhone",
+    ];
+    const hasChange = editable.some((k) => normalized[k] !== undefined && normalized[k] !== null && normalized[k] !== "");
+    if (!hasChange && !(normalized.changes && typeof normalized.changes === "object")) {
+      return { ok: false, error: "No hay cambios validos para actualizar el pedido.", normalized: null };
+    }
   }
   if ((action === "add_income" || action === "add_expense") && !(Number(normalized.amount) > 0)) {
     return { ok: false, error: "Monto inválido para movimiento financiero.", normalized: null };
