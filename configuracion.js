@@ -1,6 +1,7 @@
 import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
+  doc,
   getDoc,
   serverTimestamp,
   setDoc,
@@ -16,7 +17,6 @@ import {
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
-import { profileDocRef } from "./dataPaths.js";
 
 /** @type {string | null} */
 let scopeUid = null;
@@ -49,7 +49,7 @@ async function saveProfilePatch(patch) {
 
 function businessProfileRef() {
   if (!scopeUid) return null;
-  return profileDocRef(db, { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` });
+  return doc(db, "users", scopeUid, "yourcolor", "profile");
 }
 
 function mapCategoryToIndustry(value) {
@@ -524,18 +524,23 @@ async function loadPage(user) {
     }
     applyFormFromBusiness(mergedForForm);
     renderHeader(mergedForForm);
-    await refreshReceiptSettingsForm();
+    try {
+      await refreshReceiptSettingsForm();
+    } catch (error) {
+      // Receipt settings are optional for first-time accounts.
+      console.warn("[Configuracion] receipt settings load skipped:", error);
+    }
     const diagLink = document.getElementById("cfg-diagnostics-link");
     if (diagLink) diagLink.hidden = false;
 
     if (noBiz) noBiz.hidden = true;
     if (main) main.hidden = false;
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error("CONFIG LOAD ERROR:", error);
     await logPlatformIssue(
       "config_load_failed",
       "configuracion",
-      err?.message || String(err),
+      error?.message || String(error),
       "",
       { stage: "loadPage" },
       "high",
@@ -561,7 +566,7 @@ function boot() {
       return;
     }
     loadPage(user).catch((err) => {
-      console.error(err);
+      console.error("CONFIG LOAD ERROR:", err);
       showError("Error al cargar la página.");
     });
   });
