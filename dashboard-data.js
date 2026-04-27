@@ -674,8 +674,11 @@ export async function fetchLeadsForBusiness(db, businessId, ownerUidMerge) {
 /**
  * Órdenes en `users/{uid}/yourcolor/orders`, más recientes primero.
  */
-export async function fetchJobsForBusiness(db, businessId) {
-  throw new Error("Ruta bloqueada: fetchJobsForBusiness requiere uid y path YourColor.");
+export async function fetchJobsForBusiness(db, businessId, ownerUid = null) {
+  if (!ownerUid) {
+    throw new Error("Ruta bloqueada: fetchJobsForBusiness requiere uid y path YourColor.");
+  }
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "orders"));
   const rows = [];
   snap.forEach((docSnap) => {
     rows.push({ id: docSnap.id, ...docSnap.data() });
@@ -1156,8 +1159,11 @@ export function fixedExpenseScheduleUi(row, asOf = new Date()) {
  * @param {string} businessId
  * @returns {Promise<number>}
  */
-export async function fetchAccruedFixedExpenseTotalForCurrentMonth(db, businessId) {
-  throw new Error("Ruta bloqueada: accrued fixed expenses requiere uid y path YourColor.");
+export async function fetchAccruedFixedExpenseTotalForCurrentMonth(db, businessId, ownerUid = null) {
+  if (!ownerUid) {
+    throw new Error("Ruta bloqueada: accrued fixed expenses requiere uid y path YourColor.");
+  }
+  const snap = await getDocs(scopedCategoryCollection(db, businessId, ownerUid, "fixedExpenses"));
   const rows = snap.docs.map((d) => d.data());
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);

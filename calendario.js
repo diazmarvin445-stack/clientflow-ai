@@ -205,7 +205,7 @@ async function loadCalendarioForUser(user) {
   let jobs = [];
   if (business) {
     try {
-      jobs = await fetchJobsForBusiness(db, business.id);
+      jobs = await fetchJobsForBusiness(db, business.id, business?.scope?.uid || user.uid);
     } catch (e) {
       console.warn("[Calendario] jobs", e);
     }

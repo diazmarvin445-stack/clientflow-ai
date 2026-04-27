@@ -177,7 +177,7 @@ async function saveJob(ev) {
   };
 
   if (!id) {
-    const ref = await addDoc(businessCollectionRef(db, userId, businessId, "jobs"), {
+    const ref = await addDoc(businessCollectionRef(db, userId, businessId, "orders"), {
       ...payload,
       createdAt: serverTimestamp(),
     });
@@ -187,7 +187,7 @@ async function saveJob(ev) {
     }
   } else {
     const prev = allJobs.find((j) => j.id === id) || {};
-    await updateDoc(businessDocRef(db, userId, businessId, "jobs", id), payload);
+    await updateDoc(businessDocRef(db, userId, businessId, "orders", id), payload);
     const deltaCost = totalCost - (Number(prev.totalCost) || 0);
     if (deltaCost > 0) await addFinanceExpenseForMaterials(userId, businessId, id, deltaCost, payload.jobType);
     const wasCompleted = prev.status === "completed" || prev.status === "paid";
@@ -202,7 +202,7 @@ async function saveJob(ev) {
 async function removeJob(id) {
   if (!businessId || !id) return;
   if (!window.confirm("¿Eliminar este trabajo?")) return;
-  await deleteDoc(businessDocRef(db, userId, businessId, "jobs", id));
+  await deleteDoc(businessDocRef(db, userId, businessId, "orders", id));
 }
 
 function renderRows(rows) {
@@ -265,7 +265,7 @@ async function loadPage(user) {
   renderHeader(business);
   await loadClients();
   onSnapshot(
-    query(businessCollectionRef(db, userId, businessId, "jobs"), orderBy("createdAt", "desc")),
+    query(businessCollectionRef(db, userId, businessId, "orders"), orderBy("createdAt", "desc")),
     (snap) => {
     allJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     applyFilters();
