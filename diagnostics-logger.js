@@ -100,7 +100,9 @@ export async function logPlatformIssue(type, module, technicalMessage, friendlyM
       ownerUid: diagnosticsOwnerUid || auth.currentUser?.uid || "",
       metadata: safeMetadata(metadata),
     };
-    const ref = await addDoc(collection(db, "businesses", businessId, "diagnostics"), issue);
+    const ownerUid = diagnosticsOwnerUid || auth.currentUser?.uid || "";
+    if (!ownerUid) return null;
+    const ref = await addDoc(collection(db, "users", ownerUid, "yourcolor", "main", "diagnostics"), issue);
     return ref.id;
   } catch (error) {
     console.warn("[Diagnostics] logPlatformIssue failed", error);

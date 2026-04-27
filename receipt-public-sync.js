@@ -72,7 +72,7 @@ export async function ensurePublicReceiptDocument(db, uid, row, biz) {
   const existing =
     typeof row.publicReceiptId === "string" && row.publicReceiptId.trim() ? row.publicReceiptId.trim() : "";
   const receiptId = existing || newReceiptId();
-  const ref = doc(db, "users", uid, "yourcolor", "publicReceipts", receiptId);
+  const ref = doc(db, "users", uid, "yourcolor", "main", "publicReceipts", receiptId);
   const prev = await getDoc(ref);
   const payload = buildPublicReceiptPayload(receiptId, row, biz);
 
@@ -83,7 +83,7 @@ export async function ensurePublicReceiptDocument(db, uid, row, biz) {
   }
 
   if (!existing) {
-    await updateDoc(doc(db, "users", uid, "yourcolor", "orders", orderId), { publicReceiptId: receiptId });
+    await updateDoc(doc(db, "users", uid, "yourcolor", "main", "orders", orderId), { publicReceiptId: receiptId });
   }
 
   return { receiptId };

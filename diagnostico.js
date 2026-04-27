@@ -382,7 +382,7 @@ async function checkProfileHealth(scopeUid, user, incidentInfo) {
   let status = STATUS_OK;
   let explanation = "Perfil YourColor responde correctamente.";
   try {
-    const businessDoc = await getDoc(profileDocRef(db, { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` }));
+    const businessDoc = await getDoc(profileDocRef(db, { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor/main` }));
     details.push(`Auth user activo: ${user?.uid ? "sí" : "no"}`);
     details.push(`Documento profile accesible: ${businessDoc.exists() ? "sí" : "no (formulario vacío permitido)"}`);
     if (!businessDoc.exists()) explanation = "Perfil vacío (permitido). Puedes guardar la configuración inicial.";

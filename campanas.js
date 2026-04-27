@@ -2,7 +2,6 @@ import { auth, db } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 import {
   addDoc,
-  collection,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import {
@@ -16,6 +15,7 @@ import {
   initialsFromName,
 } from "./dashboard-data.js";
 import { initDashShell, openComingSoon } from "./dash-shell.js";
+import { businessCollectionRef } from "./category-context.js";
 import { YOURCOLOR_BUSINESS } from "./yourcolor-config.js";
 
 const LOG_PREFIX = "[ClientFlow Campañas]";
@@ -334,9 +334,7 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
   btn.setAttribute("aria-busy", "true");
 
   const scopeUid = activeScopeUidFromBusiness(genState.business);
-  const campaignsCol = scopeUid
-    ? collection(db, "users", scopeUid, "categories", businessId, "campaigns")
-    : collection(db, "businesses", businessId, "campaigns");
+  const campaignsCol = businessCollectionRef(db, scopeUid, "yourcolor", "campaigns");
   const payload = {
     title: c.name,
     platform: c.platform,
@@ -349,7 +347,7 @@ async function saveCampaignFromRecommendation(businessId, c, btn) {
     recommendationId: c.id,
   };
 
-  console.log("Launching campaign...", { businessId, path: `businesses/${businessId}/campaigns`, payload });
+  console.log("Launching campaign...", { businessId, path: `users/${scopeUid}/yourcolor/main/campaigns`, payload });
 
   try {
     await addDoc(campaignsCol, payload);
@@ -873,9 +871,7 @@ function fillGeneratorOutput(data) {
 async function saveGeneratedCampaign(businessId, pack) {
   const { output: data, inputs } = pack;
   const scopeUid = activeScopeUidFromBusiness(genState.business);
-  const campaignsCol = scopeUid
-    ? collection(db, "users", scopeUid, "categories", businessId, "campaigns")
-    : collection(db, "businesses", businessId, "campaigns");
+  const campaignsCol = businessCollectionRef(db, scopeUid, "yourcolor", "campaigns");
   const audienceLine = [inputs.goal, inputs.audience, inputs.location].filter(Boolean).join(" · ") || "—";
   await addDoc(campaignsCol, {
     title: data.headline.slice(0, 120),

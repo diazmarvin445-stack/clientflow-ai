@@ -1,16 +1,11 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  getDocsFromServer,
-  limit,
-  query,
-  serverTimestamp,
-  setDoc,
-} from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+import { doc, getDoc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { assertAppContext, getUrlContext } from "./appContext.js";
-import { collectionRef as scopedCollectionRef, docRef as scopedDocRef, profileDocRef } from "./dataPaths.js";
+import {
+  categoryRootDocRef,
+  collectionRef as scopedCollectionRef,
+  docRef as scopedDocRef,
+  profileDocRef,
+} from "./dataPaths.js";
 
 const ACTIVE_CATEGORY_SESSION_KEY = "clientflow_active_category_v1";
 
@@ -70,7 +65,7 @@ function buildCtx(uid, categoryId, workspaceId = null) {
   return assertAppContext(
     {
       uid,
-      businessPath: `users/${uid}/yourcolor`,
+      businessPath: `users/${uid}/yourcolor/main`,
     },
     "category-context",
   );
@@ -79,7 +74,7 @@ function buildCtx(uid, categoryId, workspaceId = null) {
 export function categoryDocRef(db, uid, categoryId, workspaceId = null) {
   void categoryId;
   void workspaceId;
-  return doc(db, "users", uid, "yourcolor", "category");
+  return categoryRootDocRef(db, buildCtx(uid, categoryId, workspaceId));
 }
 
 export function categoryCollectionRef(db, uid, categoryId, subcollection, workspaceId = null) {
@@ -105,7 +100,7 @@ export async function listUserCategories(db, uid) {
 
 export async function ensureUserCategory(db, uid, categoryId, payload = {}) {
   const cat = "yourcolor";
-  const ref = doc(db, "users", uid, "yourcolor", "settings");
+  const ref = categoryRootDocRef(db, buildCtx(uid, categoryId));
   const row = {
     categoryId: cat,
     displayName: typeof payload.businessName === "string" ? payload.businessName : cat,
@@ -124,7 +119,7 @@ export async function resolveCategoryContextForUser(db, user) {
   setActiveCategoryId(uid, "yourcolor");
   return {
     uid,
-    businessPath: `users/${uid}/yourcolor`,
+    businessPath: `users/${uid}/yourcolor/main`,
     data: { ownerUid: uid, businessName: "YourColor" },
   };
 }

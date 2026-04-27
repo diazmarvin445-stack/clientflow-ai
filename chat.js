@@ -61,7 +61,7 @@ const YOURCOLOR_BUSINESS_ID = "yourcolor";
 function ensureChatAuthContext(user) {
   const forced = ensureYourColorContext(user);
   const uid = String(forced?.uid || user?.uid || "").trim();
-  return { uid, businessPath: `users/${uid}/yourcolor` };
+  return { uid, businessPath: `users/${uid}/yourcolor/main` };
 }
 
 function activeScopeUid() {
@@ -3002,7 +3002,7 @@ async function bootWithUser(user) {
           scope: {
             ...(business.scope || {}),
             uid: String(business?.scope?.uid || user.uid || ""),
-            businessPath: `users/${String(business?.scope?.uid || user.uid || "")}/yourcolor`,
+            businessPath: `users/${String(business?.scope?.uid || user.uid || "")}/yourcolor/main`,
           },
           data: {
             ...(business.data || {}),

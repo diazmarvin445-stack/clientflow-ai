@@ -27,7 +27,7 @@ function scopedCategoryCollection(db, businessId, ownerUid, subcollection) {
   if (!ownerUid || typeof ownerUid !== "string") {
     throw new Error(`Ruta bloqueada: falta uid para ${subcollection}.`);
   }
-  return collection(db, "users", ownerUid, "yourcolor", subcollection);
+  return collection(db, "users", ownerUid, "yourcolor", "main", subcollection);
 }
 
 /**
@@ -478,7 +478,7 @@ export async function resolveBusinessForUser(db, user) {
         ownerUid: uid,
         businessName: "YourColor",
       }),
-      scope: { uid, businessPath: `users/${uid}/yourcolor` },
+      scope: { uid, businessPath: `users/${uid}/yourcolor/main` },
     };
   })();
 
@@ -695,7 +695,7 @@ export async function fetchClientsForBusiness(db, businessId, ownerUid = null) {
   if (!ownerUid) {
     throw new Error("Ruta bloqueada: falta uid para leer clients.");
   }
-  const path = collection(db, "users", ownerUid, "yourcolor", "clients");
+  const path = collection(db, "users", ownerUid, "yourcolor", "main", "clients");
   const snap = await getDocs(path);
   const rows = [];
   snap.forEach((docSnap) => {
@@ -1227,7 +1227,7 @@ export async function fetchCalendarEventsForChat(
  */
 export async function fetchFinanceTransactionsForBusiness(db, businessId, maxDocs = 200, ownerUid = null) {
   const qy = query(
-    scopedCategoryCollection(db, businessId, ownerUid, "finance"),
+    scopedCategoryCollection(db, businessId, ownerUid, "finances"),
     orderBy("date", "desc"),
     limit(maxDocs),
   );
@@ -1255,7 +1255,7 @@ export async function fetchTeamMembersForBusiness(db, businessId, ownerUid = nul
     return tb - ta;
   });
   console.log(
-    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/yourcolor/team → ${rows.length} document(s)`,
+    `[ClientFlow] fetchTeamMembersForBusiness: users/${ownerUid || "unknown"}/yourcolor/main/team -> ${rows.length} document(s)`,
   );
   return rows;
 }

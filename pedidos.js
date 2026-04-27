@@ -181,7 +181,9 @@ async function shareDigitalReceipt() {
     window.alert("No se pudo preparar el enlace del recibo. Inténtalo de nuevo.");
     return;
   }
-  const url = `${RECEIPT_SHARE_PAGE_BASE_URL}/recibo.html?id=${encodeURIComponent(receiptId)}`;
+  const url =
+    `${RECEIPT_SHARE_PAGE_BASE_URL}/recibo.html?uid=${encodeURIComponent(activeScopeUid)}` +
+    `&id=${encodeURIComponent(receiptId)}`;
   const title = "Recibo YourColor";
   const text = "Aquí está tu recibo digital de YourColor Corporation.";
   if (navigator.share) {

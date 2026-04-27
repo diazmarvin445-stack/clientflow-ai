@@ -18,7 +18,7 @@ export const RECEIPT_SETTINGS_DEFAULTS = Object.freeze({
  * @param {string} uid
  */
 export function receiptSettingsDocRef(db, uid) {
-  return doc(db, "users", uid, "yourcolor", "settings", "receipt");
+  return doc(db, "users", uid, "yourcolor", "main", "settings", "receipt");
 }
 
 /**

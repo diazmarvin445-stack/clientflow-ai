@@ -927,7 +927,7 @@ async function bootUser(user) {
   renderContextDebugBadge({
     user,
     moduleName: "finanzas",
-    ctx: ycCtx || { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` },
+    ctx: ycCtx || { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor/main` },
     pathSuffix: "finances",
   });
   subscribeFinance(forcedBusinessId);

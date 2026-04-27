@@ -49,7 +49,7 @@ async function saveProfilePatch(patch) {
 
 function businessProfileRef() {
   if (!scopeUid) return null;
-  return doc(db, "users", scopeUid, "yourcolor", "profile");
+  return doc(db, "users", scopeUid, "yourcolor", "main");
 }
 
 function mapCategoryToIndustry(value) {

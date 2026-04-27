@@ -1,11 +1,7 @@
 import { db } from "./firebase.js";
 import {
-  collectionGroup,
-  documentId,
-  getDocs,
-  limit,
-  query,
-  where,
+  doc,
+  getDoc,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { generateOrderReceiptPdf } from "./receipt-pdf.js";
 import { receiptStatusLabel, RECEIPT_BUSINESS } from "./receipt-config.js";
@@ -188,7 +184,13 @@ function renderReceipt(d) {
 async function boot() {
   const statusEl = document.getElementById("recibo-status");
   const params = new URLSearchParams(window.location.search);
+  const uid = (params.get("uid") || "").trim();
   const receiptId = (params.get("id") || "").trim();
+
+  if (!uid) {
+    if (statusEl) statusEl.textContent = "Falta el identificador del comercio en el enlace (uid).";
+    return;
+  }
 
   if (!receiptId) {
     if (statusEl) statusEl.textContent = "Falta el identificador del recibo en el enlace (id).";
@@ -198,16 +200,15 @@ async function boot() {
   if (statusEl) statusEl.textContent = "Cargando recibo…";
 
   try {
-    const q = query(collectionGroup(db, "publicReceipts"), where(documentId(), "==", receiptId), limit(1));
-    const snap = await getDocs(q);
-    if (snap.empty) {
+    const ref = doc(db, "users", uid, "yourcolor", "main", "publicReceipts", receiptId);
+    const docSnap = await getDoc(ref);
+    if (!docSnap.exists()) {
       if (statusEl) {
         statusEl.textContent =
           "Este recibo no está disponible. Pide al comercio que abra el recibo en el panel o pulse Compartir.";
       }
       return;
     }
-    const docSnap = snap.docs[0];
     const d = docSnap.data() || {};
     if (typeof d.receiptId === "string" && d.receiptId.trim() && d.receiptId.trim() !== receiptId) {
       if (statusEl) statusEl.textContent = "Recibo no válido.";

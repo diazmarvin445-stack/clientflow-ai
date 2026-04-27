@@ -162,6 +162,12 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
 
+      match /yourcolor/main/publicReceipts/{receiptId} {
+        allow get: if true;
+        allow list: if false;
+        allow create, update, delete: if request.auth != null && request.auth.uid == uid;
+      }
+
       match /yourcolor/{document=**} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }

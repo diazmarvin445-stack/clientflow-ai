@@ -19,7 +19,7 @@ function getSessionScoped(uid) {
     if (!raw) return "";
     const row = JSON.parse(raw);
     if (!row || row.uid !== uid) return "";
-    return "users/" + uid + "/yourcolor";
+    return "users/" + uid + "/yourcolor/main";
   } catch {
     return "";
   }
@@ -28,7 +28,7 @@ function getSessionScoped(uid) {
 function setSessionScoped(uid) {
   if (!uid) return;
   try {
-    sessionStorage.setItem(YOURCOLOR_CONTEXT_KEY, JSON.stringify({ uid, businessPath: `users/${uid}/yourcolor` }));
+    sessionStorage.setItem(YOURCOLOR_CONTEXT_KEY, JSON.stringify({ uid, businessPath: `users/${uid}/yourcolor/main` }));
   } catch {
     /* ignore */
   }
@@ -42,7 +42,7 @@ export function resolveAppContext(user) {
   const uid = String(user?.uid || "").trim();
   if (!uid) return null;
   setSessionScoped(uid);
-  return { uid, businessPath: `users/${uid}/yourcolor` };
+  return { uid, businessPath: `users/${uid}/yourcolor/main` };
 }
 
 export function assertAppContext(ctx, moduleName = "modulo") {
@@ -75,7 +75,7 @@ export function onAuthWithAppContext(auth, cb) {
 export function ensureYourColorContext(user) {
   const uid = String(user?.uid || "").trim();
   if (!uid) return null;
-  const ctx = { uid, businessPath: `users/${uid}/yourcolor` };
+  const ctx = { uid, businessPath: `users/${uid}/yourcolor/main` };
   setSessionScoped(uid);
   return ctx;
 }

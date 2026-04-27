@@ -3,14 +3,9 @@ import { setSessionPrimaryBusinessId } from "./dashboard-data.js";
 import { categoryDocRef, ensureUserCategory, setActiveCategoryId } from "./category-context.js";
 import { profileDocRef } from "./dataPaths.js";
 import {
-  collection,
   setDoc,
-  getDocs,
-  limit,
-  query,
   getDocFromServer,
   serverTimestamp,
-  where,
 } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 import { signOut } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
@@ -80,15 +75,13 @@ function wireNavigationActions() {
 
 async function checkExistingBusinessConfigured(user) {
   if (!user || user.isAnonymous) return false;
-  const q = query(collection(db, "users", user.uid, "categories"), limit(1));
-  const snap = await getDocs(q);
-  if (snap.empty) return false;
-  const businessDoc = snap.docs[0];
-  const data = businessDoc.data() || {};
+  const snap = await getDocFromServer(categoryDocRef(db, user.uid, "yourcolor"));
+  if (!snap.exists()) return false;
+  const data = snap.data() || {};
   if (typeof data.businessName === "string" && data.businessName.trim()) return true;
   if (typeof data.businessCategory === "string" && data.businessCategory.trim()) return true;
   try {
-    const profile = await getDocFromServer(businessProfileRef(user.uid, businessDoc.id));
+    const profile = await getDocFromServer(businessProfileRef(user.uid, "yourcolor"));
     return profile.exists();
   } catch (_) {
     return true;
@@ -118,18 +111,13 @@ function stripUndefined(obj) {
 }
 
 function normalizeBusinessCategory(raw) {
-  const v = String(raw || "")
-    .trim()
-    .toLowerCase();
-  if (v === "construction_roofing") return "roofing_construction";
-  if (v === "roofing_construction") return "roofing_construction";
-  if (v === "construction") return "construction";
+  void raw;
   return "custom_apparel";
 }
 
 function businessProfileRef(uid, category) {
   void category;
-  return profileDocRef(db, { uid, businessPath: `users/${uid}/yourcolor` });
+  return profileDocRef(db, { uid, businessPath: `users/${uid}/yourcolor/main` });
 }
 
 let fileBuffer = [];
@@ -374,14 +362,14 @@ if (form && successEl) {
         createdAt: "[serverTimestamp]",
         updatedAt: "[serverTimestamp]",
       };
-      console.log("[ClientFlow onboarding] target write: users/{uid}/categories/{category}");
+      console.log("[ClientFlow onboarding] target write: users/{uid}/yourcolor/main");
       console.log("[ClientFlow onboarding] payload (serializable):", payloadForLog);
 
       const categoryRef = await ensureUserCategory(db, uid, normalizedCategory, {
         ...docData,
         createdAt: serverTimestamp(),
       });
-      const path = `users/${uid}/categories/${normalizedCategory}`;
+      const path = `users/${uid}/yourcolor/main`;
       console.log("[ClientFlow onboarding] setDoc success:", { path, id: categoryRef.id });
 
       await setDoc(
@@ -459,7 +447,7 @@ if (form && successEl) {
         stack: err && err.stack,
       });
       const friendly =
-        "No se pudo guardar el negocio. Comprueba la conexión y que las reglas de Firestore permitan crear en «businesses» con tu usuario. Detalle en consola (F12).";
+        "No se pudo guardar el negocio. Comprueba la conexión y que las reglas de Firestore permitan guardar YourColor con tu usuario. Detalle en consola (F12).";
       showSaveError(friendly);
       if (submitBtn) {
         submitBtn.disabled = false;
