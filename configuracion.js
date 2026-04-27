@@ -11,18 +11,13 @@ import {
   loadReceiptSettingsForForm,
 } from "./receipt-settings.js";
 import {
-  resolveBusinessForUser,
-  formatBusinessMeta,
   initialsFromName,
   SERVICE_LABELS,
 } from "./dashboard-data.js";
 import { initDashShell } from "./dash-shell.js";
 import { logPlatformIssue, setDiagnosticsLoggerContext, wireGlobalDiagnosticsListeners } from "./diagnostics-logger.js";
-import { ensureYourColorContext, renderContextDebugBadge } from "./appContext.js";
 import { profileDocRef } from "./dataPaths.js";
 
-/** @type {string | null} */
-let businessId = null;
 /** @type {string | null} */
 let scopeUid = null;
 /** @type {Record<string, unknown> | null} */
@@ -36,6 +31,7 @@ let pendingReceiptLogoDataUrl = null;
 /** @type {string} */
 let cachedReceiptLogoUrl = "";
 const CUSTOM_APPAREL_VALUE = "custom-apparel";
+const YOURCOLOR_DEFAULT_NAME = "YourColor";
 
 async function saveProfilePatch(patch) {
   const ref = businessProfileRef();
@@ -44,8 +40,6 @@ async function saveProfilePatch(patch) {
     ref,
     {
       ownerUid: auth.currentUser.uid,
-      category: businessId,
-      businessCategory: businessId,
       updatedAt: serverTimestamp(),
       ...patch,
     },
@@ -54,7 +48,7 @@ async function saveProfilePatch(patch) {
 }
 
 function businessProfileRef() {
-  if (!businessId || !scopeUid) return null;
+  if (!scopeUid) return null;
   return profileDocRef(db, { uid: scopeUid, businessPath: `users/${scopeUid}/yourcolor` });
 }
 
@@ -66,25 +60,17 @@ function mapCategoryToIndustry(value) {
   return "custom-apparel";
 }
 
-function renderHeader(business) {
+function renderHeader(profileData) {
   const nameEl = document.getElementById("dash-business-name");
   const metaEl = document.getElementById("dash-business-meta");
   const av = document.getElementById("dash-avatar-initials");
 
-  if (!business) {
-    if (nameEl) nameEl.textContent = "YourColor";
-    if (metaEl) metaEl.textContent = "Plan Pro · —";
-    if (av) av.textContent = "?";
-    return;
-  }
-
-  const { data } = business;
   const displayName =
-    (typeof data.businessName === "string" && data.businessName.trim()) || "YourColor";
-  const { metaLine } = formatBusinessMeta(data);
+    (typeof profileData?.businessName === "string" && profileData.businessName.trim()) ||
+    YOURCOLOR_DEFAULT_NAME;
 
   if (nameEl) nameEl.textContent = displayName;
-  if (metaEl) metaEl.textContent = metaLine;
+  if (metaEl) metaEl.textContent = "YourColor CRM";
   if (av) av.textContent = initialsFromName(displayName);
 }
 
@@ -258,7 +244,8 @@ async function refreshReceiptSettingsForm() {
 }
 
 async function saveSection(section) {
-  if (!businessId || !businessData) return;
+  if (!scopeUid) return;
+  if (!businessData) businessData = {};
 
   const base = { updatedAt: serverTimestamp(), ownerUid: auth.currentUser.uid };
 
@@ -274,8 +261,6 @@ async function saveSection(section) {
         profileRef,
         {
           ...base,
-          category: businessId,
-          businessCategory: businessId,
           businessName: val("cfg-business-name").trim(),
           industry: val("cfg-industry").trim(),
           customProducts: val("cfg-custom-products").trim(),
@@ -293,7 +278,6 @@ async function saveSection(section) {
       await saveProfilePatch({
         ...base,
         businessName: val("cfg-business-name").trim(),
-        businessCategory: businessId,
       });
       feedback("cfg-feedback-business", "Cambios guardados", true);
     } else if (section === "brand") {
@@ -355,22 +339,7 @@ async function saveSection(section) {
       feedback("cfg-feedback-receipt", "Cambios guardados", true);
     }
 
-    const business = await resolveBusinessForUser(db, auth.currentUser);
-    if (business) {
-      businessId = business.id;
-      const profileRef = businessProfileRef();
-      let profileData = {};
-      let profileExists = false;
-      if (profileRef) {
-        const profileSnap = await getDoc(profileRef);
-        profileExists = profileSnap.exists();
-        profileData = profileExists ? profileSnap.data() || {} : {};
-      }
-      hasBusinessProfile = profileExists;
-      const mergedData = { ...business.data, ...profileData };
-      businessData = mergedData;
-      applyFormFromBusiness(mergedData);
-    }
+    await loadPage(auth.currentUser);
   } catch (err) {
     console.error(err);
     await logPlatformIssue(
@@ -396,7 +365,7 @@ async function saveSection(section) {
 }
 
 async function toggleIntegration(key) {
-  if (!businessId || !businessData) return;
+  if (!scopeUid || !businessData) return;
   const next = !integrationConnected(businessData, key);
   const foot = document.getElementById("cfg-feedback-integrations");
   try {
@@ -521,27 +490,20 @@ function wireIntegrations() {
 
 async function loadPage(user) {
   showError("");
-  businessId = null;
   businessData = null;
   hasBusinessProfile = false;
+  scopeUid = String(user?.uid || "").trim();
 
   const noBiz = document.getElementById("cfg-no-business");
   const main = document.getElementById("cfg-main");
 
   try {
-    const business = await resolveBusinessForUser(db, user);
-    renderHeader(business);
-
-    if (!business) {
-      if (noBiz) noBiz.hidden = false;
-      if (main) main.hidden = true;
+    if (!scopeUid) {
+      showError("No hay sesión activa.");
       return;
     }
 
-    businessId = "yourcolor";
-    scopeUid = business?.scope?.uid || user.uid;
-    const ownerUid = typeof business.data.ownerUid === "string" ? business.data.ownerUid.trim() : "";
-    setDiagnosticsLoggerContext({ businessId, ownerUid });
+    setDiagnosticsLoggerContext({ businessId: "yourcolor", ownerUid: scopeUid });
     const profileRef = businessProfileRef();
     let profileData = {};
     let profileExists = false;
@@ -551,7 +513,7 @@ async function loadPage(user) {
       profileData = profileExists ? profileSnap.data() || {} : {};
     }
     hasBusinessProfile = profileExists;
-    const mergedForForm = { ...business.data, ...profileData };
+    const mergedForForm = { ...profileData };
     if (!profileExists) {
       mergedForForm.businessName = "";
       mergedForForm.industry = "";
@@ -561,9 +523,10 @@ async function loadPage(user) {
       mergedForForm.serviceArea = "";
     }
     applyFormFromBusiness(mergedForForm);
+    renderHeader(mergedForForm);
     await refreshReceiptSettingsForm();
     const diagLink = document.getElementById("cfg-diagnostics-link");
-    if (diagLink) diagLink.hidden = !(ownerUid && ownerUid === user.uid);
+    if (diagLink) diagLink.hidden = false;
 
     if (noBiz) noBiz.hidden = true;
     if (main) main.hidden = false;
@@ -596,17 +559,6 @@ function boot() {
     if (!user) {
       window.location.replace("login.html");
       return;
-    }
-    const ycCtx = ensureYourColorContext(user);
-    if (ycCtx) {
-      scopeUid = ycCtx.uid;
-      businessId = "yourcolor";
-      renderContextDebugBadge({
-        user,
-        moduleName: "configuracion",
-        ctx: ycCtx,
-        pathSuffix: "profile",
-      });
     }
     loadPage(user).catch((err) => {
       console.error(err);
